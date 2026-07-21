@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
 import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate } from "@/lib/labels"
 import { type Lead, type Origem } from "@/lib/mock-data"
+import { cn } from "@/lib/utils"
 
 const ORIGEM_ICON: Record<Origem, any> = {
   Instagram: Camera,
@@ -37,10 +38,13 @@ export function LeadCard({
   const [menu, setMenu] = useState(false)
   const stop = (e: React.SyntheticEvent) => e.stopPropagation()
   return (
-    <div className={overdue ? "rounded-lg border border-destructive bg-card p-3 shadow-sm" : "rounded-lg border border-border bg-card p-3 shadow-sm"}>
-      {overdue && <div className="mb-2 flex items-center gap-1.5 rounded-md bg-destructive/10 px-2 py-1.5 text-xs font-semibold text-destructive"><AlertTriangle className="size-3.5" /> Justificativa obrigatória</div>}
+    <div className={cn(
+      "group relative rounded-xl border bg-card p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
+      overdue ? "border-destructive/50 ring-1 ring-destructive/20" : "border-border hover:border-primary/30",
+    )}>
+      {overdue && <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2 py-1.5 text-xs font-semibold text-destructive"><AlertTriangle className="size-3.5" /> Follow-up pendente</div>}
       <div className="flex items-start justify-between gap-2">
-        <button type="button" onClick={() => onOpen?.(lead)} className="text-left font-display text-sm font-semibold leading-tight text-foreground hover:text-primary">
+        <button type="button" onClick={() => onOpen?.(lead)} className="text-left font-display text-[0.95rem] font-semibold leading-tight text-foreground transition-colors hover:text-primary">
           {lead.nome}
         </button>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -106,9 +110,9 @@ export function LeadCard({
         </Badge>
       </div>
       {lead.valorNegociacao != null && (
-        <p className="mt-2 font-display text-sm font-bold text-primary">{brl(lead.valorNegociacao)}</p>
+        <p className="mt-2.5 font-display text-base font-bold text-primary">{brl(lead.valorNegociacao)}</p>
       )}
-      <div className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground">
+      <div className="mt-2.5 flex items-center gap-1 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
         <Clock className="size-3" />
         Atualizado em {fmtDate(lead.atualizadoEm)}
       </div>

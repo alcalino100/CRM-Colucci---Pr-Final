@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { Search, SearchX, X } from "lucide-react"
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
 import { Button } from "@/components/ui/button"
 import { Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
@@ -9,7 +10,7 @@ import { LeadCard } from "@/components/lead-card"
 import { LeadForm, type LeadFormValues } from "@/components/lead-form"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
-import { LEAD_STATUSES, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, refsTexto } from "@/lib/labels"
+import { FOLLOWUP_PRAZO_MS, FOLLOWUP_STATUSES, LEAD_STATUSES, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, followupReasons, normalizePhone, refsTexto } from "@/lib/labels"
 import { type Lead, type LeadStatus, type Temperatura } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
@@ -37,6 +38,7 @@ export function KanbanBoard({
   const [delLead, setDelLead] = useState<Lead | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [tempFilter, setTempFilter] = useState<Temperatura | "todas">("todas")
+  const [query, setQuery] = useState("")
   const [justificationLead, setJustificationLead] = useState<Lead | null>(null)
   const [justificationReason, setJustificationReason] = useState("")
   const [justificationNote, setJustificationNote] = useState("")
@@ -45,7 +47,7 @@ export function KanbanBoard({
   const usuarioNome = user ? userName(user.id) : "Sistema"
   const canManage = (lead: Lead) => isGestor || lead.corretorId === currentCorretorId
   const isOverdue = (lead: Lead) => {
-    if (!["novo", "escolhendo opcoes", "visita agendada", "negociando"].includes(lead.status) || !canManage(lead)) return false
+    if (!FOLLOWUP_STATUSES.includes(lead.status) || !canManage(lead)) return false
     let base = new Date(lead.atualizadoEm || lead.criadoEm).getTime()
     if (lead.status === "visita agendada") {
       const latestVisit = visits.filter((visit) => visit.leadId === lead.id).sort((a, b) => `${b.data}T${b.hora}`.localeCompare(`${a.data}T${a.hora}`))[0]
@@ -53,7 +55,7 @@ export function KanbanBoard({
     }
     const latestJustification = justifications.find((item) => item.leadId === lead.id)
     if (latestJustification) base = Math.max(base, new Date(latestJustification.criadoEm).getTime())
-    return Date.now() > base + 4 * 60 * 60 * 1000
+    return Date.now() > base + FOLLOWUP_PRAZO_MS
   }
   const requireJustification = (lead: Lead, action: () => void) => {
     if (!isOverdue(lead)) return action()
@@ -102,12 +104,13 @@ export function KanbanBoard({
     if (refsBefore !== refsAfter) {
       logAudit({ leadId: editLead.id, leadNome: editLead.nome, usuarioNome, tipo: "edicao", descricao: "Referências atualizadas", referencias: refsAfter })
     }
-    setTimeout(() => {
-      updateLead(editLead.id, v)
+    void (async () => {
+      const result = await updateLead(editLead.id, v)
       setSubmitting(false)
+      if (!result.ok) return toast(result.error ?? "Não foi possível atualizar o lead.", "error")
       setEditLead(null)
       toast("Lead atualizado com sucesso")
-    }, 500)
+    })()
   }
 
   function handleDeleteConfirm() {
@@ -225,8 +228,21 @@ export function KanbanBoard({
     setCloseLead(null)
   }
 
-  const filtered = tempFilter === "todas" ? leads : leads.filter((l) => l.temperatura === tempFilter)
+  const q = query.trim().toLowerCase()
+  const qDigits = normalizePhone(query)
+  const matchesQuery = (l: Lead) => {
+    if (!q) return true
+    const refs = (l.referencias?.map((r) => r.ref).join(" ") ?? "") + " " + (l.imovelRef ?? "")
+    if (qDigits && normalizePhone(l.telefone).includes(qDigits)) return true
+    return (
+      l.nome.toLowerCase().includes(q) ||
+      refs.toLowerCase().includes(q) ||
+      (l.observacoes ?? "").toLowerCase().includes(q)
+    )
+  }
+  const filtered = leads.filter((l) => (tempFilter === "todas" || l.temperatura === tempFilter) && matchesQuery(l))
   const byStatus = (s: LeadStatus) => filtered.filter((l) => l.status === s)
+  const noResults = !!q && filtered.length === 0
 
   const chip = (active: boolean, color?: string) =>
     cn(
@@ -236,23 +252,55 @@ export function KanbanBoard({
 
   return (
     <>
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">Temperatura:</span>
-        <button type="button" onClick={() => setTempFilter("todas")} className={chip(tempFilter === "todas")}>Todas</button>
-        {TEMPERATURAS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTempFilter(t)}
-            className={chip(
-              tempFilter === t,
-              t === "quente" ? "border-red-600 bg-red-600 text-white" : t === "morno" ? "border-amber-500 bg-amber-500 text-white" : "border-slate-500 bg-slate-500 text-white",
-            )}
-          >
-            {TEMP_LABEL[t]}
-          </button>
-        ))}
+      <div className="mb-3 flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Pesquisar por nome, telefone ou ref"
+            aria-label="Pesquisar leads"
+            className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-9 text-sm outline-none transition focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Limpar pesquisa"
+              className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Temperatura:</span>
+          <button type="button" onClick={() => setTempFilter("todas")} className={chip(tempFilter === "todas")}>Todas</button>
+          {TEMPERATURAS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTempFilter(t)}
+              className={chip(
+                tempFilter === t,
+                t === "quente" ? "border-red-600 bg-red-600 text-white" : t === "morno" ? "border-amber-500 bg-amber-500 text-white" : "border-slate-500 bg-slate-500 text-white",
+              )}
+            >
+              {TEMP_LABEL[t]}
+            </button>
+          ))}
+        </div>
       </div>
+      {noResults ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/60 py-16 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <SearchX className="size-6" />
+          </div>
+          <p className="text-sm font-medium text-foreground">Nenhum lead encontrado para esta pesquisa</p>
+          <button type="button" onClick={() => setQuery("")} className="text-xs font-medium text-primary hover:underline">Limpar pesquisa</button>
+        </div>
+      ) : (
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="kanban-scroll w-full flex-1 overflow-x-auto overflow-y-hidden pb-3">
           <div className={`flex w-max flex-nowrap gap-4 ${heightClass}`}>
@@ -262,14 +310,17 @@ export function KanbanBoard({
               <Droppable droppableId={status} key={status}>
                 {(provided, snapshot) => (
                   <div className="flex w-72 flex-shrink-0 flex-col">
-                    <div className="mb-2 flex shrink-0 items-center justify-between rounded-t-lg border-t-4 bg-card px-3 py-2 shadow-sm" style={{ borderTopColor: STATUS_ACCENT[status] }}>
-                      <span className="font-display text-sm font-semibold">{STATUS_LABEL[status]}</span>
-                      <span className="flex size-5 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">{col.length}</span>
+                    <div className="mb-2 flex shrink-0 items-center justify-between rounded-t-xl border border-b-0 border-border bg-card px-3 py-2.5 shadow-sm" style={{ borderTopColor: STATUS_ACCENT[status], borderTopWidth: 3 }}>
+                      <span className="flex items-center gap-2 font-display text-sm font-semibold">
+                        <span className="size-2 rounded-full" style={{ backgroundColor: STATUS_ACCENT[status] }} aria-hidden />
+                        {STATUS_LABEL[status]}
+                      </span>
+                      <span className="flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs font-semibold text-muted-foreground">{col.length}</span>
                     </div>
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`flex min-h-32 flex-1 flex-col gap-2 overflow-y-auto rounded-lg p-2 transition-colors ${snapshot.isDraggingOver ? "bg-primary/10" : "bg-muted/40"}`}
+                      className={`-mt-2 flex min-h-32 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl border border-t-0 border-border p-2 transition-colors ${snapshot.isDraggingOver ? "bg-primary/5 ring-2 ring-inset ring-primary/30" : "bg-muted/40"}`}
                     >
                       {col.length === 0 && !snapshot.isDraggingOver && (
                         <p className="px-2 py-6 text-center text-xs text-muted-foreground">Nenhum lead nesta etapa</p>
@@ -307,19 +358,18 @@ export function KanbanBoard({
           </div>
         </div>
       </DragDropContext>
+      )}
 
       <Dialog open={!!justificationLead} onClose={() => {}} title="Justificativa obrigatória">
         <form onSubmit={confirmJustification} className="flex flex-col gap-4">
-          <p className="text-sm leading-relaxed text-muted-foreground">O lead <span className="font-semibold text-foreground">{justificationLead?.nome}</span> está há mais de 4 horas sem atualização. Registre o motivo para continuar.</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">O lead <span className="font-semibold text-foreground">{justificationLead?.nome}</span> está há mais de 2 dias sem movimentação na etapa <span className="font-semibold text-foreground">{justificationLead ? STATUS_LABEL[justificationLead.status] : ""}</span>. Registre o follow-up para continuar.</p>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="justification-reason">Motivo *</Label>
             <Select id="justification-reason" value={justificationReason} onChange={(event) => setJustificationReason(event.target.value)} required>
               <option value="">Selecione</option>
-              <option value="Aguardando retorno do cliente">Aguardando retorno do cliente</option>
-              <option value="Cliente indisponível">Cliente indisponível</option>
-              <option value="Buscando imóveis compatíveis">Buscando imóveis compatíveis</option>
-              <option value="Dependência externa">Dependência externa</option>
-              <option value="Outro">Outro</option>
+              {(justificationLead ? followupReasons(justificationLead.status) : []).map((reason) => (
+                <option key={reason} value={reason}>{reason}</option>
+              ))}
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">

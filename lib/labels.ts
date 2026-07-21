@@ -44,6 +44,7 @@ export function refsTexto(l: Pick<Lead, "referencias" | "imovelRef">) {
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   novo: "Novo Lead",
   "escolhendo opcoes": "Separando Opções",
+  "imovel necessidade": "Imóvel - Necessidade",
   "visita agendada": "Visita Agendada",
   negociando: "Negociando",
   fechado: "Fechado",
@@ -52,6 +53,7 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
 export const STATUS_VARIANT: Record<LeadStatus, string> = {
   novo: "blue",
   "escolhendo opcoes": "slate",
+  "imovel necessidade": "teal",
   "visita agendada": "amber",
   negociando: "accent",
   fechado: "green",
@@ -61,6 +63,7 @@ export const STATUS_VARIANT: Record<LeadStatus, string> = {
 export const STATUS_ACCENT: Record<LeadStatus, string> = {
   novo: "#0ea5e9",
   "escolhendo opcoes": "#54595f",
+  "imovel necessidade": "#0d9488",
   "visita agendada": "#f59e0b",
   negociando: "#b22222",
   fechado: "#16a34a",
@@ -69,6 +72,7 @@ export const STATUS_ACCENT: Record<LeadStatus, string> = {
 export const LEAD_STATUSES: LeadStatus[] = [
   "novo",
   "escolhendo opcoes",
+  "imovel necessidade",
   "visita agendada",
   "negociando",
   "fechado",
@@ -79,6 +83,46 @@ export function normalizeStatus(s: string): LeadStatus {
   if (s === "em atendimento") return "escolhendo opcoes"
   if (s === "proposta enviada") return "negociando"
   return (LEAD_STATUSES as string[]).includes(s) ? (s as LeadStatus) : "novo"
+}
+
+// Normaliza telefone para comparação (só dígitos)
+export function normalizePhone(phone: string) {
+  return (phone || "").replace(/\D/g, "")
+}
+
+// ---- Follow-up obrigatório por etapa ----
+// Prazo para exigir justificativa por falta de movimentação: 2 dias completos.
+export const FOLLOWUP_PRAZO_MS = 2 * 24 * 60 * 60 * 1000
+// Etapas que exigem follow-up (Fechado e Perdido não exigem).
+export const FOLLOWUP_STATUSES: LeadStatus[] = [
+  "novo",
+  "escolhendo opcoes",
+  "imovel necessidade",
+  "visita agendada",
+  "negociando",
+]
+const FOLLOWUP_REASONS_BASE = [
+  "Aguardando retorno do cliente",
+  "Cliente pediu contato posterior",
+  "Aguardando documentos",
+  "Aguardando definição de imóvel",
+  "Não temos imóvel em carteira para o perfil buscado",
+  "Aguardando captação",
+  "Aguardando análise financeira",
+  "Aguardando retorno da gestão",
+  "Sem resposta do lead",
+]
+const FOLLOWUP_REASONS_NECESSIDADE = [
+  "Não temos imóvel compatível em carteira",
+  "Aguardando nova captação",
+  "Aguardando retorno sobre preferência do cliente",
+  "Aguardando análise financeira",
+  "Sem resposta do lead",
+]
+// Motivos coerentes por etapa (com "Outro" sempre ao final).
+export function followupReasons(status: LeadStatus): string[] {
+  const list = status === "imovel necessidade" ? FOLLOWUP_REASONS_NECESSIDADE : FOLLOWUP_REASONS_BASE
+  return [...list, "Outro"]
 }
 
 export const PROP_LABEL: Record<PropertyStatus, string> = { disponivel: "Disponível", vendido: "Vendido", alugado: "Alugado" }

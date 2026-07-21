@@ -25,8 +25,12 @@ export default function PainelCorretorPage() {
   const isGestor = user.role === "gestor"
   const myLeads = isGestor ? leads : leads.filter((l) => l.corretorId === user.id)
 
-  function onCreate(v: LeadFormValues) {
-    addLead(v)
+  const [creating, setCreating] = useState(false)
+  async function onCreate(v: LeadFormValues) {
+    setCreating(true)
+    const result = await addLead(v)
+    setCreating(false)
+    if (!result.ok) return toast(result.error ?? "Não foi possível criar o lead.", "error")
     setNovo(false)
     toast("Lead criado com sucesso.")
   }
@@ -60,6 +64,7 @@ export default function PainelCorretorPage() {
           defaultCorretorId={user.id}
           showCorretor={isGestor}
           showStatus={false}
+          submitting={creating}
           onSubmit={onCreate}
           onCancel={() => setNovo(false)}
         />

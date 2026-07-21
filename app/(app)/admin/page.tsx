@@ -37,8 +37,9 @@ export default function AdminPage() {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role } : u)))
     toast("Permissões atualizadas.")
   }
-  function corrigirLead(v: LeadFormValues) {
-    updateLead(editingLead!.id, v)
+  async function corrigirLead(v: LeadFormValues) {
+    const result = await updateLead(editingLead!.id, v)
+    if (!result.ok) return toast(result.error ?? "Não foi possível corrigir o lead.", "error")
     setEditingLead(null)
     toast("Lead corrigido com sucesso.")
   }

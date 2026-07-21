@@ -2,6 +2,7 @@ export type Role = "corretor" | "gestor"
 export type LeadStatus =
   | "novo"
   | "escolhendo opcoes"
+  | "imovel necessidade"
   | "visita agendada"
   | "negociando"
   | "fechado"
