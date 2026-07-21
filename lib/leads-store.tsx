@@ -60,8 +60,7 @@ interface Store {
   getLead: (id: string) => Lead | undefined
   addVisit: (v: Omit<Visit, "id">) => void
   notify: (texto: string, opts?: NotifyOpts) => void
-  sendAdminNotification: (input: { titulo: string; mensagem: string; prioridade: "informativo" | "aviso" | "urgente"; paraRole?: Role | null; paraUsuarioId?: string | null }) => Promise<{ ok: boolean; error?: string }>
-  scheduleAdminNotification: (input: { titulo: string; mensagem: string; prioridade: "informativo" | "aviso" | "urgente"; paraRole?: Role | null; paraUsuarioId?: string | null; agendadaPara: string }) => Promise<{ ok: boolean; error?: string }>
+  sendAdminNotification: (input: { mensagem: string; paraRole?: Role | null; paraUsuarioId?: string | null }) => Promise<{ ok: boolean; error?: string }>
   markNotificationsRead: () => void
   logChange: (e: Omit<ChangeLog, "id" | "dataHora">) => void
   logAudit: (e: AuditInput) => void
@@ -150,36 +149,20 @@ function rowToUser(r: any): User {
 
 function rowToNotification(r: any, userId: string): Notification {
   const lidaPor: string[] = Array.isArray(r.lida_por) ? r.lida_por : []
+  // Colunas reais da tabela: mensagem, tipo, usuario_id, criado_por, para_role, para_usuario_id, lead_id, lida_por, lida, timestamp
   return {
     id: r.id,
-    texto: r.texto,
-    titulo: r.titulo ?? null,
-    prioridade: r.prioridade ?? null,
-    criadoPor: r.criado_por ?? null,
-    criadoPorNome: r.criado_por_nome ?? null,
-    timestamp: r.criado_em,
-    read: lidaPor.includes(userId),
+    texto: r.mensagem ?? "",
+    titulo: null,
+    prioridade: null,
+    criadoPor: r.usuario_id ?? null,
+    criadoPorNome: null,
+    timestamp: r.timestamp,
+    read: lidaPor.includes(userId) || r.lida === true,
     tipo: r.tipo ?? "geral",
     paraRole: r.para_role ?? null,
     paraUsuarioId: r.para_usuario_id ?? null,
     leadId: r.lead_id ?? null,
-  }
-}
-
-function rowToScheduled(r: any): ScheduledNotification {
-  return {
-    id: r.id,
-    titulo: r.titulo,
-    mensagem: r.mensagem,
-    prioridade: r.prioridade ?? "informativo",
-    paraRole: r.para_role ?? null,
-    paraUsuarioId: r.para_usuario_id ?? null,
-    agendadaPara: r.agendada_para,
-    status: r.status,
-    criadoPor: r.criado_por ?? null,
-    criadoPorNome: r.criado_por_nome ?? "Não informado",
-    criadoEm: r.criado_em,
-    enviadaEm: r.enviada_em ?? null,
   }
 }
 
@@ -245,7 +228,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   const loadNotifications = useCallback(async () => {
     if (!userId) return
     // Segmentação por papel: corretor vê as próprias/operacionais; gestor vê gerenciais e de equipe
-    let q = supabase.from("notificacoes").select("*").order("criado_em", { ascending: false }).limit(100)
+    let q = supabase.from("notificacoes").select("*").order("timestamp", { ascending: false }).limit(100)
     if (userRole === "gestor") {
       q = q.or(`para_role.eq.gestor,para_role.is.null,para_usuario_id.eq.${userId}`)
     } else {
@@ -260,12 +243,16 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       setScheduledNotifications([])
       return
     }
-    const [{ data: sent }, { data: scheduled }] = await Promise.all([
-      supabase.from("notificacoes").select("*").eq("origem", "gestao").order("criado_em", { ascending: false }).limit(100),
-      supabase.from("notificacoes_agendadas").select("*").order("agendada_para", { ascending: false }).limit(100),
-    ])
+    // Histórico de comunicados enviados pela gestão (identificados pelo tipo).
+    // Agendamento foi desativado: a tabela notificacoes_agendadas não existe no banco.
+    const { data: sent } = await supabase
+      .from("notificacoes")
+      .select("*")
+      .eq("tipo", "comunicado_gestao")
+      .order("timestamp", { ascending: false })
+      .limit(100)
+    setScheduledNotifications([])
     if (sent) setSentNotifications(sent.map((r) => rowToNotification(r, userId)))
-    if (scheduled) setScheduledNotifications(scheduled.map(rowToScheduled))
   }, [userId, userRole])
   const loadJustifications = useCallback(async () => {
     if (!userId) return
@@ -283,36 +270,11 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (data) setAudit(data.map(rowToAudit))
   }, [userRole])
 
-  const processScheduledNotifications = useCallback(async () => {
-    if (userRole !== "gestor") return
-    const now = new Date().toISOString()
-    const { data: due } = await supabase
-      .from("notificacoes_agendadas")
-      .select("*")
-      .eq("status", "pendente")
-      .lte("agendada_para", now)
-    if (!due?.length) return
-    for (const item of due) {
-      const { error } = await supabase.from("notificacoes").insert({
-        titulo: item.titulo,
-        texto: item.mensagem,
-        tipo: "comunicado_gestao",
-        prioridade: item.prioridade,
-        origem: "gestao",
-        criado_por: item.criado_por ?? null,
-        criado_por_nome: item.criado_por_nome ?? null,
-        para_role: item.para_role,
-        para_usuario_id: item.para_usuario_id,
-      })
-      if (!error) {
-        await supabase.from("notificacoes_agendadas").update({ status: "enviada", enviada_em: now }).eq("id", item.id).eq("status", "pendente")
-      }
-    }
-    await Promise.all([loadNotifications(), loadAdminNotifications()])
-  }, [loadAdminNotifications, loadNotifications, userRole])
+  // Agendamento de notificações desativado: o banco não possui a tabela notificacoes_agendadas.
+  const processScheduledNotifications = useCallback(async () => {}, [])
 
   useEffect(() => {
-    loadLeads(); loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadJustifications(); loadQuality(); loadAudit(); processScheduledNotifications()
+    loadLeads(); loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadJustifications(); loadQuality(); loadAudit()
 
     const canal = supabase
       .channel("crm-realtime")
@@ -321,15 +283,12 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "usuarios" }, loadUsers)
       .on("postgres_changes", { event: "*", schema: "public", table: "notificacoes" }, () => { loadNotifications(); loadAdminNotifications() })
       .on("broadcast", { event: "refresh" }, () => { loadNotifications(); loadAdminNotifications() })
-      .on("postgres_changes", { event: "*", schema: "public", table: "notificacoes_agendadas" }, () => { loadAdminNotifications(); processScheduledNotifications() })
       .on("postgres_changes", { event: "*", schema: "public", table: "justificativas_operacionais" }, loadJustifications)
       .on("postgres_changes", { event: "*", schema: "public", table: "observacoes_qualidade" }, loadQuality)
       .on("postgres_changes", { event: "*", schema: "public", table: "auditoria" }, loadAudit)
       .subscribe()
-    const timer = userRole === "gestor" ? window.setInterval(processScheduledNotifications, 30_000) : undefined
 
     return () => {
-      if (timer) window.clearInterval(timer)
       supabase.removeChannel(canal)
     }
   }, [loadLeads, loadVisits, loadUsers, loadNotifications, loadAdminNotifications, loadJustifications, loadQuality, loadAudit, processScheduledNotifications, userRole])
@@ -366,15 +325,16 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   // ---------- Notificações (persistidas, segmentadas por papel) ----------
   const notify: Store["notify"] = useCallback((texto, opts) => {
     void supabase.from("notificacoes").insert({
-      texto,
+      mensagem: texto,
       tipo: opts?.tipo ?? "geral",
+      usuario_id: userId ?? null,
       para_role: opts?.paraRole ?? null,
       para_usuario_id: opts?.paraUsuarioId ?? null,
       lead_id: opts?.leadId ?? null,
     }).then(() => loadNotifications())
-  }, [loadNotifications])
+  }, [loadNotifications, userId])
 
-  async function postAdminNotification(input: Parameters<Store["sendAdminNotification"]>[0] & { agendadaPara?: string }) {
+  const sendAdminNotification: Store["sendAdminNotification"] = async (input) => {
     if (userRole !== "gestor" || !userId) return { ok: false, error: "Acesso restrito a gestores." }
     try {
       const response = await fetch("/api/admin/notifications", {
@@ -391,9 +351,6 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, error: "Falha de conexão ao processar a notificação." }
     }
   }
-
-  const sendAdminNotification: Store["sendAdminNotification"] = postAdminNotification
-  const scheduleAdminNotification: Store["scheduleAdminNotification"] = postAdminNotification
 
   const markNotificationsRead = useCallback(() => {
     if (!userId) return
@@ -593,7 +550,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       value={{
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, corretores, userName,
         checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead,
-        addVisit, notify, sendAdminNotification, scheduleAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification,
+        addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification,
         addUser, updateUser, updateProfile,
       }}
     >
