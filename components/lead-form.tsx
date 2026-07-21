@@ -2,10 +2,11 @@
 
 import { useState } from "react"
 import { z } from "zod"
-import { Plus, Star, X } from "lucide-react"
+import { AlertTriangle, Plus, Star, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input, Label, Select, Textarea } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
+import { useAuth } from "@/lib/auth-context"
 import { LEAD_STATUSES, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL } from "@/lib/labels"
 import { ORIGENS, type Lead, type LeadRef, type LeadStatus, type Origem, type Temperatura } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
@@ -71,11 +72,20 @@ export function LeadForm({
   })
   const [refInput, setRefInput] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const { corretores } = useLeads()
+  const { corretores, checkPhoneDuplicate, userName } = useLeads()
+  const { user } = useAuth()
+  const isGestor = user?.role === "gestor"
+  const [phoneDup, setPhoneDup] = useState<{ nome: string; corretorId: string; status: LeadStatus } | null>(null)
   const showValor = ["negociando", "fechado"].includes(v.status)
 
   function set<K extends keyof LeadFormValues>(k: K, val: LeadFormValues[K]) {
     setV((s) => ({ ...s, [k]: val }))
+  }
+
+  function validatePhone(phone: string) {
+    const dup = checkPhoneDuplicate(phone, initial?.id)
+    setPhoneDup(dup)
+    return dup
   }
 
   function addRef() {
@@ -108,8 +118,9 @@ export function LeadForm({
     if (!result.success) {
       for (const issue of result.error.issues) errs[issue.path[0] as string] = issue.message
     }
-    if (v.referencias.length === 0) errs.referencias = "Adicione ao menos uma referência de imóvel."
     if (showValor && (!v.valorNegociacao || v.valorNegociacao <= 0)) errs.valorNegociacao = "Informe o valor da negociação."
+    const dup = validatePhone(v.telefone)
+    if (dup) errs.telefone = "Este telefone já está cadastrado em outro lead."
     setErrors(errs)
     if (Object.values(errs).some(Boolean)) return
     const principal = v.referencias.find((r) => r.principal)?.ref ?? v.referencias[0]?.ref ?? ""
@@ -126,10 +137,33 @@ export function LeadForm({
           <Input id="nome" value={v.nome} onChange={(e) => set("nome", e.target.value)} aria-label="Nome do lead" />
           {err("nome")}
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 sm:col-span-2">
           <Label htmlFor="tel">Telefone *</Label>
-          <Input id="tel" value={v.telefone} onChange={(e) => set("telefone", e.target.value)} aria-label="Telefone" placeholder="(11) 90000-0000" />
-          {err("telefone")}
+          <Input
+            id="tel"
+            value={v.telefone}
+            onChange={(e) => { set("telefone", e.target.value); if (phoneDup) setPhoneDup(null) }}
+            onBlur={(e) => validatePhone(e.target.value)}
+            aria-invalid={!!phoneDup}
+            className={cn(phoneDup && "border-destructive focus-visible:ring-destructive")}
+            aria-label="Telefone"
+            placeholder="(11) 90000-0000"
+          />
+          {phoneDup ? (
+            <div className="mt-1 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div className="flex flex-col gap-0.5">
+                <span className="font-semibold">Este telefone já está cadastrado em outro lead.</span>
+                {isGestor && (
+                  <span className="text-destructive/80">
+                    {phoneDup.nome} · {userName(phoneDup.corretorId)} · {STATUS_LABEL[phoneDup.status]}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            err("telefone")
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="temperatura">Temperatura *</Label>
@@ -175,7 +209,7 @@ export function LeadForm({
 
       {/* Referências múltiplas */}
       <div className="flex flex-col gap-1">
-        <Label htmlFor="refinput">Referências do imóvel * <span className="font-normal text-muted-foreground">(clique na estrela para definir a principal)</span></Label>
+        <Label htmlFor="refinput">Referências do imóvel <span className="font-normal text-muted-foreground">(opcional — clique na estrela para definir a principal)</span></Label>
         <div className="flex gap-2">
           <Input
             id="refinput"

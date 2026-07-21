@@ -8,6 +8,7 @@ import {
   type Interaction,
   type Lead,
   type LeadRef,
+  type LeadStatus,
   type Notification,
   type OperationalJustification,
   type Origem,
@@ -20,7 +21,7 @@ import {
 } from "./mock-data"
 import { supabase } from "./supabase/client"
 import { useAuth } from "./auth-context"
-import { normalizeStatus } from "./labels"
+import { normalizePhone, normalizeStatus } from "./labels"
 
 interface NotifyOpts {
   tipo?: string
@@ -51,8 +52,9 @@ interface Store {
   audit: AuditEntry[]
   corretores: User[]
   userName: (id: string) => string
-  addLead: (l: Omit<Lead, "id" | "criadoEm" | "atualizadoEm" | "interacoes">) => void
-  updateLead: (id: string, patch: Partial<Lead>) => void
+  checkPhoneDuplicate: (phone: string, excludeId?: string) => { nome: string; corretorId: string; status: LeadStatus } | null
+  addLead: (l: Omit<Lead, "id" | "criadoEm" | "atualizadoEm" | "interacoes">) => Promise<{ ok: boolean; error?: string }>
+  updateLead: (id: string, patch: Partial<Lead>) => Promise<{ ok: boolean; error?: string }>
   deleteLead: (id: string) => void
   addInteraction: (leadId: string, i: Omit<Interaction, "id" | "timestamp">) => void
   getLead: (id: string) => Lead | undefined
@@ -410,9 +412,23 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   }, [notifications, userId])
 
   // ---------- Ações de LEAD ----------
+  // Verifica telefone duplicado em toda a base carregada (todos os corretores/gestores).
+  const checkPhoneDuplicate: Store["checkPhoneDuplicate"] = (phone, excludeId) => {
+    const alvo = normalizePhone(phone)
+    if (!alvo) return null
+    const found = leads.find((l) => l.id !== excludeId && normalizePhone(l.telefone) === alvo)
+    return found ? { nome: found.nome, corretorId: found.corretorId, status: found.status } : null
+  }
+
+  // Erro de índice único do banco (telefone duplicado)
+  const isPhoneUniqueViolation = (error: any) =>
+    error && (error.code === "23505" || /telefone_normalizado/i.test(error.message ?? ""))
+
   const addLead: Store["addLead"] = async (l) => {
     const autor = user?.nome ?? "Sistema"
-    const { data } = await supabase.from("leads").insert({
+    const dup = checkPhoneDuplicate(l.telefone)
+    if (dup) return { ok: false, error: "Este telefone já está cadastrado em outro lead." }
+    const { data, error } = await supabase.from("leads").insert({
       nome: l.nome,
       telefone: l.telefone,
       email: l.email,
@@ -425,6 +441,10 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       valor_proposta: l.valorNegociacao ?? null,
       corretor_id: l.corretorId || null,
     }).select("id").maybeSingle()
+    if (error) {
+      if (isPhoneUniqueViolation(error)) return { ok: false, error: "Este telefone já está cadastrado em outro lead." }
+      return { ok: false, error: "Não foi possível cadastrar o lead. Tente novamente." }
+    }
     const leadId = data?.id ?? null
     logAudit({ leadId, leadNome: l.nome, usuarioNome: autor, tipo: "criacao", descricao: `Lead cadastrado (origem: ${l.origem}, temperatura: ${l.temperatura})`, referencias: (l.referencias ?? []).map((r) => r.ref).join(", ") || l.imovelRef })
     notify(`Novo lead cadastrado: ${l.nome} (${autor})`, { tipo: "lead_novo", paraRole: "gestor", leadId })
@@ -432,14 +452,24 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       notify(`Novo lead atribuído a você: ${l.nome}`, { tipo: "lead_novo", paraUsuarioId: l.corretorId, leadId })
     }
     await loadLeads()
+    return { ok: true }
   }
 
   const updateLead: Store["updateLead"] = async (id, patch) => {
-    await supabase
+    if (patch.telefone !== undefined) {
+      const dup = checkPhoneDuplicate(patch.telefone, id)
+      if (dup) return { ok: false, error: "Este telefone já está cadastrado em outro lead." }
+    }
+    const { error } = await supabase
       .from("leads")
       .update({ ...leadPatchToRow(patch), atualizado_em: new Date().toISOString() })
       .eq("id", id)
+    if (error) {
+      if (isPhoneUniqueViolation(error)) return { ok: false, error: "Este telefone já está cadastrado em outro lead." }
+      return { ok: false, error: "Não foi possível salvar as alterações. Tente novamente." }
+    }
     await loadLeads()
+    return { ok: true }
   }
 
   const deleteLead: Store["deleteLead"] = async (id) => {
@@ -562,7 +592,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     <Ctx.Provider
       value={{
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, corretores, userName,
-        addLead, updateLead, deleteLead, addInteraction, getLead,
+        checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead,
         addVisit, notify, sendAdminNotification, scheduleAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification,
         addUser, updateUser, updateProfile,
       }}
