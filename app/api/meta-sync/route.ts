@@ -40,7 +40,9 @@ export async function GET(req: Request) {
   if (!autorizado) return NextResponse.json({ erro: "não autorizado" }, { status: 401 })
 
   try {
-    const token = process.env.META_ACCESS_TOKEN!
+    const rawToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN
+    const token = rawToken?.trim().replace(/^['"]+|['"]+$/g, "")
+    if (!token) return NextResponse.json({ ok: false, erro: "Token da Meta não configurado." }, { status: 400 })
     const versao = process.env.META_API_VERSION || "v25.0"
     let conta = url.searchParams.get("account_id") || process.env.META_AD_ACCOUNT_ID!
     if (!conta.startsWith("act_")) conta = `act_${conta}`
