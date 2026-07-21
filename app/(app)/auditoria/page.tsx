@@ -14,6 +14,29 @@ import { ORIGENS, type Lead } from "@/lib/mock-data"
 
 const DIAS_PARADO = 7
 
+// Cor do marcador da linha do tempo por tipo de evento (histórico escrito)
+function auditDot(tipo: string) {
+  switch (tipo) {
+    case "criacao":
+    case "fechamento":
+      return "bg-emerald-500"
+    case "exclusao":
+    case "justificativa":
+      return "bg-destructive"
+    case "etapa":
+    case "temperatura":
+    case "visita":
+      return "bg-amber-500"
+    case "proposta":
+      return "bg-primary"
+    case "qualidade":
+    case "responsavel":
+      return "bg-slate-400"
+    default:
+      return "bg-sky-500"
+  }
+}
+
 export default function AuditoriaPage() {
   const { user } = useAuth()
   const { leads, visits, audit, qualityNotes, corretores, userName } = useLeads()
@@ -152,7 +175,7 @@ export default function AuditoriaPage() {
                           <ol className="relative flex flex-col gap-3 border-l border-border pl-4">
                             {timeline.map((a) => (
                               <li key={a.id} className="relative">
-                                <span className="absolute -left-[21px] top-1.5 size-2.5 rounded-full bg-primary ring-4 ring-card" />
+                                <span className={`absolute -left-[21px] top-1.5 size-2.5 rounded-full ring-4 ring-card ${auditDot(a.tipo)}`} />
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge variant={AUDIT_TIPO_VARIANT[a.tipo]}>{AUDIT_TIPO_LABEL[a.tipo]}</Badge>
                                   <span className="text-xs text-muted-foreground">{fmtDateTime(a.criadoEm)} · {a.usuarioNome}</span>

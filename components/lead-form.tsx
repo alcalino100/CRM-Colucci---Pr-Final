@@ -152,11 +152,17 @@ export function LeadForm({
           {phoneDup ? (
             <div className="mt-1 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-              <div className="flex flex-col gap-0.5">
-                <span className="font-semibold">Este telefone já está cadastrado em outro lead.</span>
-                {isGestor && (
-                  <span className="text-destructive/80">
-                    {phoneDup.nome} · {userName(phoneDup.corretorId)} · {STATUS_LABEL[phoneDup.status]}
+              <div className="flex flex-col gap-1">
+                <span className="font-semibold">Este telefone já está cadastrado no sistema.</span>
+                {isGestor ? (
+                  <span className="flex flex-col gap-0.5 text-destructive/90">
+                    <span>Lead: <span className="font-medium">{phoneDup.nome}</span></span>
+                    <span>Corretor responsável: <span className="font-medium">{userName(phoneDup.corretorId)}</span></span>
+                    <span>Status atual: <span className="font-medium">{STATUS_LABEL[phoneDup.status]}</span></span>
+                  </span>
+                ) : (
+                  <span className="text-destructive/90">
+                    Corretor responsável: <span className="font-medium">{userName(phoneDup.corretorId)}</span>
                   </span>
                 )}
               </div>

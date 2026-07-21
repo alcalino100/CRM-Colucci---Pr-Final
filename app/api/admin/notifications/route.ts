@@ -26,11 +26,9 @@ export async function POST(request: Request) {
     return fail(400, "VALIDATION_ERROR", "Dados inválidos.")
   }
 
-  const titulo = body.titulo?.trim() ?? ""
   const mensagem = body.mensagem?.trim() ?? ""
-  if (!body.senderId || !titulo || !mensagem) return fail(400, "VALIDATION_ERROR", "Preencha título e mensagem.")
-  if (titulo.length > 120 || mensagem.length > 2000) return fail(400, "VALIDATION_ERROR", "O título ou a mensagem excede o limite permitido.")
-  if (!body.prioridade || !["informativo", "aviso", "urgente"].includes(body.prioridade)) return fail(400, "VALIDATION_ERROR", "Selecione um tipo válido.")
+  if (!body.senderId || !mensagem) return fail(400, "VALIDATION_ERROR", "Preencha a mensagem.")
+  if (mensagem.length > 2000) return fail(400, "VALIDATION_ERROR", "A mensagem excede o limite permitido.")
   if (body.paraRole && !["gestor", "corretor"].includes(body.paraRole)) return fail(400, "VALIDATION_ERROR", "Público inválido.")
 
   const { data: sender, error: senderError } = await supabase
@@ -47,31 +45,13 @@ export async function POST(request: Request) {
     if (!recipient || recipient.status !== "ativo") return fail(400, "VALIDATION_ERROR", "O usuário selecionado não está ativo.")
   }
 
-  if (body.agendadaPara) {
-    const scheduledAt = new Date(body.agendadaPara)
-    if (Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) return fail(400, "SCHEDULING_ERROR", "Escolha uma data e hora futuras.")
-    const { data, error } = await supabase.from("notificacoes_agendadas").insert({
-      titulo,
-      mensagem,
-      prioridade: body.prioridade,
-      para_role: body.paraRole ?? null,
-      para_usuario_id: body.paraUsuarioId ?? null,
-      agendada_para: scheduledAt.toISOString(),
-      criado_por: sender.id,
-      criado_por_nome: sender.nome,
-    }).select("*").single()
-    if (error) return fail(500, "DATABASE_ERROR", "Não foi possível agendar a notificação.", error.message)
-    return NextResponse.json({ ok: true, data })
-  }
+  // Agendamento desativado: o banco não possui a tabela notificacoes_agendadas.
+  if (body.agendadaPara) return fail(400, "SCHEDULING_ERROR", "O agendamento de notificações não está disponível.")
 
   const { data, error } = await supabase.from("notificacoes").insert({
-    titulo,
-    texto: mensagem,
+    mensagem,
     tipo: "comunicado_gestao",
-    prioridade: body.prioridade,
-    origem: "gestao",
-    criado_por: sender.id,
-    criado_por_nome: sender.nome,
+    usuario_id: sender.id,
     para_role: body.paraRole ?? null,
     para_usuario_id: body.paraUsuarioId ?? null,
   }).select("*").single()
