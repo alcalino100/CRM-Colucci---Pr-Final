@@ -21,6 +21,17 @@ create table if not exists public.notificacoes_agendadas (
   enviada_em timestamptz
 );
 create index if not exists notif_agendadas_status_idx on public.notificacoes_agendadas (status, agendada_para);
+create index if not exists notificacoes_destino_idx on public.notificacoes (para_role, para_usuario_id, criado_em desc);
+
+do $$ begin
+  alter table public.notificacoes add constraint notificacoes_prioridade_check check (prioridade in ('informativo', 'aviso', 'urgente'));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table public.notificacoes_agendadas add constraint notif_agendadas_prioridade_check check (prioridade in ('informativo', 'aviso', 'urgente'));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table public.notificacoes_agendadas add constraint notif_agendadas_status_check check (status in ('pendente', 'enviada', 'cancelada'));
+exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter publication supabase_realtime add table public.notificacoes_agendadas;

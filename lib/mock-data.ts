@@ -19,6 +19,7 @@ export type AuditTipo =
   | "responsavel"
   | "temperatura"
   | "qualidade"
+  | "justificativa"
 export type PropertyStatus = "disponivel" | "vendido" | "alugado"
 export type ActionType = "criacao" | "edicao" | "exclusao"
 export type AccessAction = "login" | "logout" | "tentativa falha" | "visualizacao lead sensivel"
@@ -114,6 +115,17 @@ export interface ScheduledNotification {
   criadoPorNome: string
   criadoEm: string
   enviadaEm?: string | null
+}
+
+export interface OperationalJustification {
+  id: string
+  leadId: string
+  motivo: string
+  observacao?: string
+  etapa: LeadStatus
+  autorId: string
+  autorNome: string
+  criadoEm: string
 }
 
 export interface QualityNote {

@@ -1,8 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
-import { Camera, Users, Megaphone, Circle, Phone, Clock, Building, MoreVertical, Pencil, Trash2 } from "lucide-react"
+import { AlertTriangle, Camera, Users, Megaphone, Circle, Phone, Clock, Building, MoreVertical, Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
 import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate, refPrincipal } from "@/lib/labels"
@@ -19,12 +18,16 @@ export function LeadCard({
   lead,
   showCorretor = false,
   canManage = false,
+  overdue = false,
+  onOpen,
   onEdit,
   onDelete,
 }: {
   lead: Lead
   showCorretor?: boolean
   canManage?: boolean
+  overdue?: boolean
+  onOpen?: (lead: Lead) => void
   onEdit?: (lead: Lead) => void
   onDelete?: (lead: Lead) => void
 }) {
@@ -34,11 +37,12 @@ export function LeadCard({
   const [menu, setMenu] = useState(false)
   const stop = (e: React.SyntheticEvent) => e.stopPropagation()
   return (
-    <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div className={overdue ? "rounded-lg border border-destructive bg-card p-3 shadow-sm" : "rounded-lg border border-border bg-card p-3 shadow-sm"}>
+      {overdue && <div className="mb-2 flex items-center gap-1.5 rounded-md bg-destructive/10 px-2 py-1.5 text-xs font-semibold text-destructive"><AlertTriangle className="size-3.5" /> Justificativa obrigatória</div>}
       <div className="flex items-start justify-between gap-2">
-        <Link href={`/painel-corretor/${lead.id}`} className="font-display text-sm font-semibold leading-tight text-foreground hover:text-primary">
+        <button type="button" onClick={() => onOpen?.(lead)} className="text-left font-display text-sm font-semibold leading-tight text-foreground hover:text-primary">
           {lead.nome}
-        </Link>
+        </button>
         <div className="flex shrink-0 items-center gap-1.5">
           {showCorretor && (
             <span title={userName(lead.corretorId)} className="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground">

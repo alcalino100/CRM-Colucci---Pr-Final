@@ -15,7 +15,7 @@ import { brl, fmtDateTime, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIAN
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { user } = useAuth()
-  const { getLead, addInteraction, qualityNotes, addQualityNote } = useLeads()
+  const { getLead, addInteraction, qualityNotes, justifications, addQualityNote } = useLeads()
   const toast = useToast()
   const [nota, setNota] = useState("")
   const [qualiTexto, setQualiTexto] = useState("")
@@ -39,7 +39,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     toast("Anotação registrada.")
   }
 
-  const timeline = [...lead.interacoes].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))
+  const justificationHistory = justifications.filter((item) => item.leadId === id).map((item) => ({
+    id: `justification-${item.id}`,
+    corretor: item.autorNome,
+    texto: `Justificativa (${STATUS_LABEL[item.etapa]}): ${item.motivo}${item.observacao ? ` — ${item.observacao}` : ""}`,
+    timestamp: item.criadoEm,
+  }))
+  const timeline = [...lead.interacoes, ...justificationHistory].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))
 
   return (
     <div className="flex flex-col gap-6">

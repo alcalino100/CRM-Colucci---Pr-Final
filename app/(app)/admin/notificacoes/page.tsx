@@ -31,6 +31,7 @@ export default function NotificationDispatcherPage() {
   const [time, setTime] = useState("")
   const [preview, setPreview] = useState(false)
   const [sending, setSending] = useState(false)
+  const [submitError, setSubmitError] = useState("")
 
   useEffect(() => {
     if (user && user.role !== "gestor") router.replace("/painel-corretor")
@@ -56,15 +57,21 @@ export default function NotificationDispatcherPage() {
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     const error = validate()
-    if (error) return toast(error, "error")
+    if (error) { setSubmitError(error); return toast(error, "error") }
+    setSubmitError("")
     setSending(true)
     const base = { titulo: title.trim(), mensagem: message.trim(), prioridade: priority, ...target() }
     const result = mode === "agora"
       ? await sendAdminNotification(base)
       : await scheduleAdminNotification({ ...base, agendadaPara: new Date(`${date}T${time}`).toISOString() })
     setSending(false)
-    if (!result.ok) return toast(result.error ?? "Não foi possível concluir.", "error")
-    toast(mode === "agora" ? "Notificação enviada." : "Notificação agendada.")
+    if (!result.ok) {
+      const detail = result.error ?? "Não foi possível concluir."
+      setSubmitError(detail)
+      return toast(detail, "error")
+    }
+    setSubmitError("")
+    toast(mode === "agora" ? "Notificação enviada e confirmada." : "Notificação agendada e confirmada.")
     setTitle(""); setMessage(""); setSelectedUser(""); setDate(""); setTime("")
   }
 
@@ -90,6 +97,7 @@ export default function NotificationDispatcherPage() {
             </div>
             <fieldset className="flex flex-wrap gap-4"><legend className="mb-2 text-sm font-medium">Envio</legend><label className="flex items-center gap-2 text-sm"><input type="radio" name="mode" checked={mode === "agora"} onChange={() => setMode("agora")} /> Enviar agora</label><label className="flex items-center gap-2 text-sm"><input type="radio" name="mode" checked={mode === "agendar"} onChange={() => setMode("agendar")} /> Agendar envio</label></fieldset>
             {mode === "agendar" && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div className="flex flex-col gap-1.5"><Label htmlFor="send-date">Data</Label><Input id="send-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div><div className="flex flex-col gap-1.5"><Label htmlFor="send-time">Hora</Label><Input id="send-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} /></div></div>}
+            {submitError && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{submitError}</p>}
             <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" onClick={() => { const error = validate(); error ? toast(error, "error") : setPreview(true) }}><Eye className="size-4" /> Pré-visualizar</Button><Button type="submit" disabled={sending}><Send className="size-4" /> {mode === "agora" ? "Enviar" : "Agendar"}</Button></div>
           </form>
         </CardContent>

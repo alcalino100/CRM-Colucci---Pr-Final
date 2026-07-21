@@ -9,6 +9,7 @@ import {
   type Lead,
   type LeadRef,
   type Notification,
+  type OperationalJustification,
   type Origem,
   type QualityNote,
   type Role,
@@ -46,6 +47,7 @@ interface Store {
   users: User[]
   changeLogs: ChangeLog[]
   qualityNotes: QualityNote[]
+  justifications: OperationalJustification[]
   audit: AuditEntry[]
   corretores: User[]
   userName: (id: string) => string
@@ -62,6 +64,7 @@ interface Store {
   logChange: (e: Omit<ChangeLog, "id" | "dataHora">) => void
   logAudit: (e: AuditInput) => void
   addQualityNote: (leadId: string, texto: string) => void
+  addJustification: (leadId: string, motivo: string, observacao?: string) => Promise<{ ok: boolean; error?: string }>
   addUser: (u: Omit<User, "id" | "criadoEm">) => { ok: boolean; error?: string }
   updateUser: (id: string, patch: Partial<User>) => { ok: boolean; error?: string }
   updateProfile: (patch: { avatar?: string; senha?: string }) => Promise<{ ok: boolean; error?: string }>
@@ -175,6 +178,19 @@ function rowToScheduled(r: any): ScheduledNotification {
   }
 }
 
+function rowToJustification(r: any): OperationalJustification {
+  return {
+    id: r.id,
+    leadId: r.lead_id,
+    motivo: r.motivo,
+    observacao: r.observacao ?? undefined,
+    etapa: normalizeStatus(r.etapa),
+    autorId: r.autor_id,
+    autorNome: r.autor_nome,
+    criadoEm: r.criado_em,
+  }
+}
+
 function rowToQuality(r: any): QualityNote {
   return { id: r.id, leadId: r.lead_id, autorId: r.autor_id ?? undefined, autorNome: r.autor_nome, texto: r.texto, criadoEm: r.criado_em }
 }
@@ -201,6 +217,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   const [sentNotifications, setSentNotifications] = useState<Notification[]>([])
   const [scheduledNotifications, setScheduledNotifications] = useState<ScheduledNotification[]>([])
   const [qualityNotes, setQualityNotes] = useState<QualityNote[]>([])
+  const [justifications, setJustifications] = useState<OperationalJustification[]>([])
   const [audit, setAudit] = useState<AuditEntry[]>([])
   const [changeLogs, setChangeLogs] = useState<ChangeLog[]>([])
 
@@ -245,6 +262,11 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (sent) setSentNotifications(sent.map((r) => rowToNotification(r, userId)))
     if (scheduled) setScheduledNotifications(scheduled.map(rowToScheduled))
   }, [userId, userRole])
+  const loadJustifications = useCallback(async () => {
+    if (!userId) return
+    const { data } = await supabase.from("justificativas_operacionais").select("*").order("criado_em", { ascending: false })
+    if (data) setJustifications(data.map(rowToJustification))
+  }, [userId])
   const loadQuality = useCallback(async () => {
     if (userRole !== "gestor") return setQualityNotes([]) // corretores nunca carregam esse dado
     const { data } = await supabase.from("observacoes_qualidade").select("*").order("criado_em", { ascending: false })
@@ -284,7 +306,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   }, [loadAdminNotifications, loadNotifications, userRole])
 
   useEffect(() => {
-    loadLeads(); loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadQuality(); loadAudit(); processScheduledNotifications()
+    loadLeads(); loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadJustifications(); loadQuality(); loadAudit(); processScheduledNotifications()
 
     const canal = supabase
       .channel("crm-realtime")
@@ -292,7 +314,9 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "visitas" }, loadVisits)
       .on("postgres_changes", { event: "*", schema: "public", table: "usuarios" }, loadUsers)
       .on("postgres_changes", { event: "*", schema: "public", table: "notificacoes" }, () => { loadNotifications(); loadAdminNotifications() })
+      .on("broadcast", { event: "refresh" }, () => { loadNotifications(); loadAdminNotifications() })
       .on("postgres_changes", { event: "*", schema: "public", table: "notificacoes_agendadas" }, () => { loadAdminNotifications(); processScheduledNotifications() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "justificativas_operacionais" }, loadJustifications)
       .on("postgres_changes", { event: "*", schema: "public", table: "observacoes_qualidade" }, loadQuality)
       .on("postgres_changes", { event: "*", schema: "public", table: "auditoria" }, loadAudit)
       .subscribe()
@@ -302,7 +326,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       if (timer) window.clearInterval(timer)
       supabase.removeChannel(canal)
     }
-  }, [loadLeads, loadVisits, loadUsers, loadNotifications, loadAdminNotifications, loadQuality, loadAudit, processScheduledNotifications, userRole])
+  }, [loadLeads, loadVisits, loadUsers, loadNotifications, loadAdminNotifications, loadJustifications, loadQuality, loadAudit, processScheduledNotifications, userRole])
 
   const userName = (id: string) => users.find((u) => u.id === id)?.nome ?? "—"
 
@@ -344,39 +368,26 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     }).then(() => loadNotifications())
   }, [loadNotifications])
 
-  const sendAdminNotification: Store["sendAdminNotification"] = async (input) => {
-    if (userRole !== "gestor") return { ok: false, error: "Acesso restrito a gestores." }
-    const { error } = await supabase.from("notificacoes").insert({
-      titulo: input.titulo.trim(),
-      texto: input.mensagem.trim(),
-      tipo: "comunicado_gestao",
-      prioridade: input.prioridade,
-      origem: "gestao",
-      criado_por_nome: user?.nome ?? "Gestor",
-      para_role: input.paraRole ?? null,
-      para_usuario_id: input.paraUsuarioId ?? null,
-    })
-    if (error) return { ok: false, error: "Não foi possível enviar a notificação." }
-    await Promise.all([loadNotifications(), loadAdminNotifications()])
-    return { ok: true }
+  async function postAdminNotification(input: Parameters<Store["sendAdminNotification"]>[0] & { agendadaPara?: string }) {
+    if (userRole !== "gestor" || !userId) return { ok: false, error: "Acesso restrito a gestores." }
+    try {
+      const response = await fetch("/api/admin/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...input, senderId: userId }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.ok) return { ok: false, error: result.details ? `${result.error} (${result.details})` : result.error }
+      await Promise.all([loadNotifications(), loadAdminNotifications()])
+      await supabase.channel("crm-realtime").send({ type: "broadcast", event: "refresh", payload: {} })
+      return { ok: true }
+    } catch {
+      return { ok: false, error: "Falha de conexão ao processar a notificação." }
+    }
   }
 
-  const scheduleAdminNotification: Store["scheduleAdminNotification"] = async (input) => {
-    if (userRole !== "gestor") return { ok: false, error: "Acesso restrito a gestores." }
-    if (new Date(input.agendadaPara).getTime() <= Date.now()) return { ok: false, error: "Escolha uma data e hora futuras." }
-    const { error } = await supabase.from("notificacoes_agendadas").insert({
-      titulo: input.titulo.trim(),
-      mensagem: input.mensagem.trim(),
-      prioridade: input.prioridade,
-      para_role: input.paraRole ?? null,
-      para_usuario_id: input.paraUsuarioId ?? null,
-      agendada_para: input.agendadaPara,
-      criado_por_nome: user?.nome ?? "Gestor",
-    })
-    if (error) return { ok: false, error: "Não foi possível agendar a notificação." }
-    await loadAdminNotifications()
-    return { ok: true }
-  }
+  const sendAdminNotification: Store["sendAdminNotification"] = postAdminNotification
+  const scheduleAdminNotification: Store["scheduleAdminNotification"] = postAdminNotification
 
   const markNotificationsRead = useCallback(() => {
     if (!userId) return
@@ -469,6 +480,30 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     await loadVisits()
   }
 
+  const addJustification: Store["addJustification"] = async (leadId, motivo, observacao) => {
+    const lead = leads.find((item) => item.id === leadId)
+    if (!lead || !user || (user.role !== "gestor" && lead.corretorId !== user.id)) return { ok: false, error: "Você não tem permissão para justificar este lead." }
+    const cleanReason = motivo.trim()
+    const cleanNote = observacao?.trim() ?? ""
+    if (!cleanReason || (cleanReason === "Outro" && !cleanNote)) return { ok: false, error: "Informe o motivo e detalhe a opção Outro." }
+    const now = new Date().toISOString()
+    const { data, error } = await supabase.from("justificativas_operacionais").insert({
+      lead_id: leadId,
+      motivo: cleanReason,
+      observacao: cleanNote || null,
+      etapa: lead.status,
+      autor_id: user.id,
+      autor_nome: user.nome,
+    }).select("*").single()
+    if (error || !data) return { ok: false, error: error?.message ?? "Não foi possível confirmar a justificativa." }
+    const { error: updateError } = await supabase.from("leads").update({ atualizado_em: now }).eq("id", leadId)
+    if (updateError) return { ok: false, error: updateError.message }
+    logAudit({ leadId, leadNome: lead.nome, usuarioNome: user.nome, tipo: "justificativa", descricao: `Lead parado: ${cleanReason}${cleanNote ? ` — ${cleanNote}` : ""}` })
+    setJustifications((current) => [rowToJustification(data), ...current.filter((item) => item.id !== data.id)])
+    await loadLeads()
+    return { ok: true }
+  }
+
   // ---------- Observações internas de qualidade (somente gestores) ----------
   const addQualityNote: Store["addQualityNote"] = (leadId, texto) => {
     if (userRole !== "gestor" || !texto.trim()) return
@@ -522,9 +557,9 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   return (
     <Ctx.Provider
       value={{
-        leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, audit, corretores, userName,
+        leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, corretores, userName,
         addLead, updateLead, deleteLead, addInteraction, getLead,
-        addVisit, notify, sendAdminNotification, scheduleAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote,
+        addVisit, notify, sendAdminNotification, scheduleAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification,
         addUser, updateUser, updateProfile,
       }}
     >
