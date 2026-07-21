@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, Camera, Users, Megaphone, Circle, Phone, Clock, Building, MoreVertical, Pencil, Trash2 } from "lucide-react"
+import { AlertTriangle, Camera, Users, Megaphone, Circle, Phone, Clock, MessageSquare, MoreVertical, Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
-import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate, refPrincipal } from "@/lib/labels"
+import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate } from "@/lib/labels"
 import { type Lead, type Origem } from "@/lib/mock-data"
 
 const ORIGEM_ICON: Record<Origem, any> = {
@@ -89,8 +89,10 @@ export function LeadCard({
         {lead.telefone && (
           <span className="flex items-center gap-1.5"><Phone className="size-3.5" />{lead.telefone}</span>
         )}
-        {refPrincipal(lead) && (
-          <span className="flex items-center gap-1.5"><Building className="size-3.5" />{refPrincipal(lead)}</span>
+        {lead.observacoes?.trim() ? (
+          <span className="flex items-start gap-1.5"><MessageSquare className="mt-0.5 size-3.5 shrink-0" /><span className="line-clamp-2">{lead.observacoes.trim()}</span></span>
+        ) : (
+          <span className="flex items-center gap-1.5 italic opacity-70"><MessageSquare className="size-3.5" />Sem observação</span>
         )}
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">

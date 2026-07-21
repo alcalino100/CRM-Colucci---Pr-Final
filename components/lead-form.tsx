@@ -108,7 +108,6 @@ export function LeadForm({
     if (!result.success) {
       for (const issue of result.error.issues) errs[issue.path[0] as string] = issue.message
     }
-    if (v.referencias.length === 0) errs.referencias = "Adicione ao menos uma referência de imóvel."
     if (showValor && (!v.valorNegociacao || v.valorNegociacao <= 0)) errs.valorNegociacao = "Informe o valor da negociação."
     setErrors(errs)
     if (Object.values(errs).some(Boolean)) return
@@ -175,7 +174,7 @@ export function LeadForm({
 
       {/* Referências múltiplas */}
       <div className="flex flex-col gap-1">
-        <Label htmlFor="refinput">Referências do imóvel * <span className="font-normal text-muted-foreground">(clique na estrela para definir a principal)</span></Label>
+        <Label htmlFor="refinput">Referências do imóvel <span className="font-normal text-muted-foreground">(opcional — clique na estrela para definir a principal)</span></Label>
         <div className="flex gap-2">
           <Input
             id="refinput"
