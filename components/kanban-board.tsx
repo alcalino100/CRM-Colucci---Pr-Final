@@ -1,0 +1,359 @@
+"use client"
+
+import { useState } from "react"
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
+import { Button } from "@/components/ui/button"
+import { Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
+import { LeadCard } from "@/components/lead-card"
+import { LeadForm, type LeadFormValues } from "@/components/lead-form"
+import { useLeads } from "@/lib/leads-store"
+import { useAuth } from "@/lib/auth-context"
+import { LEAD_STATUSES, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, refsTexto } from "@/lib/labels"
+import { type Lead, type LeadStatus, type Temperatura } from "@/lib/mock-data"
+import { cn } from "@/lib/utils"
+
+export function KanbanBoard({
+  leads,
+  showCorretor = false,
+  currentCorretorId,
+  isGestor = false,
+  heightClass = "h-[calc(100vh-13rem)]",
+}: {
+  leads: Lead[]
+  showCorretor?: boolean
+  currentCorretorId: string
+  isGestor?: boolean
+  heightClass?: string
+}) {
+  const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, corretores, userName } = useLeads()
+  const { user } = useAuth()
+  const toast = useToast()
+  const [visitLead, setVisitLead] = useState<Lead | null>(null)
+  const [propLead, setPropLead] = useState<Lead | null>(null)
+  const [closeLead, setCloseLead] = useState<Lead | null>(null)
+  const [editLead, setEditLead] = useState<Lead | null>(null)
+  const [delLead, setDelLead] = useState<Lead | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [tempFilter, setTempFilter] = useState<Temperatura | "todas">("todas")
+
+  const usuarioNome = user ? userName(user.id) : "Sistema"
+  const canManage = (lead: Lead) => isGestor || lead.corretorId === currentCorretorId
+
+  function handleEditSubmit(v: LeadFormValues) {
+    if (!editLead) return
+    setSubmitting(true)
+    const fields: (keyof LeadFormValues)[] = ["nome", "telefone", "email", "imovelRef", "origem", "observacoes", "status", "valorNegociacao", "corretorId", "temperatura"]
+    for (const f of fields) {
+      const before = (editLead as any)[f]
+      const after = (v as any)[f]
+      if (String(before ?? "") !== String(after ?? "")) {
+        logChange({ usuario: usuarioNome, acao: "edicao", entidade: "lead", campo: f, valorAnterior: String(before ?? "-"), valorNovo: String(after ?? "-") })
+        if (f === "temperatura") {
+          logAudit({ leadId: editLead.id, leadNome: editLead.nome, usuarioNome, tipo: "temperatura", descricao: `Temperatura alterada: ${String(before)} → ${String(after)}` })
+        }
+        if (f === "corretorId") {
+          logAudit({ leadId: editLead.id, leadNome: editLead.nome, usuarioNome, tipo: "responsavel", descricao: `Responsável alterado: ${userName(String(before))} → ${userName(String(after))}` })
+          notify(`Responsável do lead ${editLead.nome} alterado para ${userName(String(after))}`, { tipo: "responsavel", paraRole: "gestor", leadId: editLead.id })
+          notify(`Você agora é responsável pelo lead ${editLead.nome}`, { tipo: "responsavel", paraUsuarioId: String(after), leadId: editLead.id })
+        }
+      }
+    }
+    const refsBefore = refsTexto(editLead)
+    const refsAfter = v.referencias.map((r) => r.ref).join(", ")
+    if (refsBefore !== refsAfter) {
+      logAudit({ leadId: editLead.id, leadNome: editLead.nome, usuarioNome, tipo: "edicao", descricao: "Referências atualizadas", referencias: refsAfter })
+    }
+    setTimeout(() => {
+      updateLead(editLead.id, v)
+      setSubmitting(false)
+      setEditLead(null)
+      toast("Lead atualizado com sucesso")
+    }, 500)
+  }
+
+  function handleDeleteConfirm() {
+    if (!delLead) return
+    logChange({ usuario: usuarioNome, acao: "exclusao", entidade: "lead", campo: "lead", valorAnterior: `${delLead.nome} — ${delLead.imovelRef || "sem imóvel"}`, valorNovo: "-" })
+    deleteLead(delLead.id)
+    setDelLead(null)
+    toast("Lead excluído com sucesso")
+  }
+
+  // visit form
+  const [vData, setVData] = useState("")
+  const [vHora, setVHora] = useState("10:00")
+  const [vCorretor, setVCorretor] = useState("")
+  const [vRefs, setVRefs] = useState("")
+  const [vObs, setVObs] = useState("")
+  // proposal form
+  const [pValor, setPValor] = useState("")
+  const [pRefs, setPRefs] = useState("")
+  const [pObs, setPObs] = useState("")
+  // fechamento form
+  const [fRefs, setFRefs] = useState("")
+
+  function onDragEnd(result: DropResult) {
+    const { source, destination, draggableId } = result
+    if (!destination || destination.droppableId === source.droppableId) return
+    const newStatus = destination.droppableId as LeadStatus
+    const lead = leads.find((l) => l.id === draggableId)
+    if (!lead) return
+
+    if (newStatus === "fechado") {
+      // status só é gravado após confirmar a referência do fechamento
+      setFRefs(refsTexto(lead))
+      setCloseLead(lead)
+      return
+    }
+
+    updateLead(lead.id, { status: newStatus })
+    logAudit({ leadId: lead.id, leadNome: lead.nome, usuarioNome, tipo: "etapa", descricao: `Etapa alterada: ${STATUS_LABEL[lead.status]} → ${STATUS_LABEL[newStatus]}` })
+    notify(`${lead.nome} movido para "${STATUS_LABEL[newStatus]}" por ${usuarioNome}`, { tipo: "pipeline", paraRole: "gestor", leadId: lead.id })
+    if (lead.corretorId && lead.corretorId !== user?.id) {
+      notify(`Seu lead ${lead.nome} foi movido para "${STATUS_LABEL[newStatus]}"`, { tipo: "pipeline", paraUsuarioId: lead.corretorId, leadId: lead.id })
+    }
+
+    if (newStatus === "visita agendada") {
+      setVData(new Date().toISOString().slice(0, 10))
+      setVHora("10:00")
+      setVCorretor(lead.corretorId || currentCorretorId)
+      setVRefs(refsTexto(lead))
+      setVObs("")
+      setVisitLead(lead)
+    } else if (newStatus === "negociando") {
+      setPValor(lead.valorNegociacao ? String(lead.valorNegociacao) : "")
+      setPRefs(lead.refProposta || refsTexto(lead))
+      setPObs("")
+      setPropLead(lead)
+    } else {
+      toast(`${lead.nome} movido para "${STATUS_LABEL[newStatus]}"`)
+    }
+  }
+
+  function confirmVisit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!visitLead || !vData) return
+    if (!vRefs.trim()) {
+      toast("Informe a(s) referência(s) do imóvel da visita.", "error")
+      return
+    }
+    addVisit({ leadId: visitLead.id, data: vData, hora: vHora, corretorId: vCorretor, imovelRef: vRefs.trim(), referencias: vRefs.trim(), observacoes: vObs })
+    addInteraction(visitLead.id, { corretor: userName(vCorretor), texto: `Visita agendada para ${vData.split("-").reverse().join("/")} às ${vHora} — Ref: ${vRefs.trim()}.` })
+    toast("Visita agendada e enviada para a agenda.")
+    setVisitLead(null)
+  }
+
+  function confirmProposal(e: React.FormEvent) {
+    e.preventDefault()
+    if (!propLead) return
+    const valor = Number(pValor)
+    if (!valor || valor <= 0) {
+      toast("Informe um valor válido.", "error")
+      return
+    }
+    if (!pRefs.trim()) {
+      toast("Informe a(s) referência(s) da proposta.", "error")
+      return
+    }
+    updateLead(propLead.id, { valorNegociacao: valor, refProposta: pRefs.trim() })
+    if (pObs) addInteraction(propLead.id, { corretor: userName(propLead.corretorId), texto: pObs })
+    logAudit({ leadId: propLead.id, leadNome: propLead.nome, usuarioNome, tipo: "proposta", descricao: `Proposta registrada: ${brl(valor)} por ${userName(propLead.corretorId)}`, referencias: pRefs.trim() })
+    notify(`Nova proposta: ${propLead.nome} — Ref: ${pRefs.trim()} — ${brl(valor)} por ${userName(propLead.corretorId)}`, { tipo: "proposta", paraRole: "gestor", leadId: propLead.id })
+    if (propLead.corretorId) {
+      notify(`Proposta registrada no seu lead ${propLead.nome}: ${brl(valor)}`, { tipo: "proposta", paraUsuarioId: propLead.corretorId, leadId: propLead.id })
+    }
+    toast("Proposta registrada. Gestores notificados.")
+    setPropLead(null)
+  }
+
+  function confirmClose(e: React.FormEvent) {
+    e.preventDefault()
+    if (!closeLead) return
+    if (!fRefs.trim()) {
+      toast("Informe a(s) referência(s) do fechamento.", "error")
+      return
+    }
+    updateLead(closeLead.id, { status: "fechado", refFechamento: fRefs.trim() })
+    logAudit({ leadId: closeLead.id, leadNome: closeLead.nome, usuarioNome, tipo: "fechamento", descricao: `Fechamento realizado por ${userName(closeLead.corretorId)} — ${brl(closeLead.valorNegociacao)}`, referencias: fRefs.trim() })
+    notify(`Fechamento realizado: ${closeLead.nome} — Ref: ${fRefs.trim()} — ${brl(closeLead.valorNegociacao)} por ${userName(closeLead.corretorId)}`, { tipo: "fechamento", paraRole: "gestor", leadId: closeLead.id })
+    if (closeLead.corretorId) {
+      notify(`Parabéns! Fechamento registrado no lead ${closeLead.nome}`, { tipo: "fechamento", paraUsuarioId: closeLead.corretorId, leadId: closeLead.id })
+    }
+    toast("Fechamento registrado.")
+    setCloseLead(null)
+  }
+
+  const filtered = tempFilter === "todas" ? leads : leads.filter((l) => l.temperatura === tempFilter)
+  const byStatus = (s: LeadStatus) => filtered.filter((l) => l.status === s)
+
+  const chip = (active: boolean, color?: string) =>
+    cn(
+      "rounded-full border px-3 py-1 text-xs font-medium transition",
+      active ? (color ?? "border-primary bg-primary text-primary-foreground") : "border-border bg-card text-muted-foreground hover:text-foreground",
+    )
+
+  return (
+    <>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">Temperatura:</span>
+        <button type="button" onClick={() => setTempFilter("todas")} className={chip(tempFilter === "todas")}>Todas</button>
+        {TEMPERATURAS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTempFilter(t)}
+            className={chip(
+              tempFilter === t,
+              t === "quente" ? "border-red-600 bg-red-600 text-white" : t === "morno" ? "border-amber-500 bg-amber-500 text-white" : "border-slate-500 bg-slate-500 text-white",
+            )}
+          >
+            {TEMP_LABEL[t]}
+          </button>
+        ))}
+      </div>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="kanban-scroll w-full flex-1 overflow-x-auto overflow-y-hidden pb-3">
+          <div className={`flex w-max flex-nowrap gap-4 ${heightClass}`}>
+          {LEAD_STATUSES.map((status) => {
+            const col = byStatus(status)
+            return (
+              <Droppable droppableId={status} key={status}>
+                {(provided, snapshot) => (
+                  <div className="flex w-72 flex-shrink-0 flex-col">
+                    <div className="mb-2 flex shrink-0 items-center justify-between rounded-t-lg border-t-4 bg-card px-3 py-2 shadow-sm" style={{ borderTopColor: STATUS_ACCENT[status] }}>
+                      <span className="font-display text-sm font-semibold">{STATUS_LABEL[status]}</span>
+                      <span className="flex size-5 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">{col.length}</span>
+                    </div>
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={`flex min-h-32 flex-1 flex-col gap-2 overflow-y-auto rounded-lg p-2 transition-colors ${snapshot.isDraggingOver ? "bg-primary/10" : "bg-muted/40"}`}
+                    >
+                      {col.length === 0 && !snapshot.isDraggingOver && (
+                        <p className="px-2 py-6 text-center text-xs text-muted-foreground">Nenhum lead nesta etapa</p>
+                      )}
+                      {col.map((lead, i) => (
+                        <Draggable draggableId={lead.id} index={i} key={lead.id}>
+                          {(dp, ds) => (
+                            <div
+                              ref={dp.innerRef}
+                              {...dp.draggableProps}
+                              {...dp.dragHandleProps}
+                              style={dp.draggableProps.style}
+                              className={ds.isDragging ? "opacity-60" : ""}
+                            >
+                              <LeadCard lead={lead} showCorretor={showCorretor} canManage={canManage(lead)} onEdit={setEditLead} onDelete={setDelLead} />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  </div>
+                )}
+              </Droppable>
+            )
+          })}
+          </div>
+        </div>
+      </DragDropContext>
+
+      <Dialog open={!!visitLead} onClose={() => setVisitLead(null)} title="Agendar Visita">
+        <form onSubmit={confirmVisit} className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">Lead: <span className="font-medium text-foreground">{visitLead?.nome}</span> — {visitLead?.imovelRef || "sem imóvel"}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="vd">Data *</Label>
+              <Input id="vd" type="date" value={vData} onChange={(e) => setVData(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="vh">Horário *</Label>
+              <Input id="vh" type="time" value={vHora} onChange={(e) => setVHora(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="vr">Referência(s) do imóvel *</Label>
+            <Input id="vr" value={vRefs} onChange={(e) => setVRefs(e.target.value)} placeholder="Ex: AP-1006, CA-2005" required />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="vc">Corretor responsável</Label>
+            <Select id="vc" value={vCorretor} onChange={(e) => setVCorretor(e.target.value)}>
+              {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="vo">Observações</Label>
+            <Textarea id="vo" value={vObs} onChange={(e) => setVObs(e.target.value)} />
+          </div>
+          <div className="mt-1 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setVisitLead(null)}>Cancelar</Button>
+            <Button type="submit">Agendar visita</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={!!propLead} onClose={() => setPropLead(null)} title="Valor da Proposta">
+        <form onSubmit={confirmProposal} className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">Lead: <span className="font-medium text-foreground">{propLead?.nome}</span> — {propLead?.imovelRef || "sem imóvel"}</p>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="pv">Valor (R$) *</Label>
+            <Input id="pv" type="number" value={pValor} onChange={(e) => setPValor(e.target.value)} placeholder="450000" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="pr">Referência(s) da proposta *</Label>
+            <Input id="pr" value={pRefs} onChange={(e) => setPRefs(e.target.value)} placeholder="Ex: AP-1006" required />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="po">Observações</Label>
+            <Textarea id="po" value={pObs} onChange={(e) => setPObs(e.target.value)} />
+          </div>
+          <div className="mt-1 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPropLead(null)}>Cancelar</Button>
+            <Button type="submit">Registrar proposta</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={!!closeLead} onClose={() => setCloseLead(null)} title="Registrar Fechamento">
+        <form onSubmit={confirmClose} className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">Lead: <span className="font-medium text-foreground">{closeLead?.nome}</span> — {closeLead ? brl(closeLead.valorNegociacao) : ""}</p>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="fr">Referência(s) do fechamento *</Label>
+            <Input id="fr" value={fRefs} onChange={(e) => setFRefs(e.target.value)} placeholder="Ex: AP-1006" required />
+          </div>
+          <div className="mt-1 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setCloseLead(null)}>Cancelar</Button>
+            <Button type="submit">Confirmar fechamento</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={!!editLead} onClose={() => setEditLead(null)} title="Editar Lead">
+        {editLead && (
+          <LeadForm
+            initial={editLead}
+            defaultCorretorId={editLead.corretorId}
+            showCorretor={isGestor}
+            showStatus
+            submitting={submitting}
+            onSubmit={handleEditSubmit}
+            onCancel={() => setEditLead(null)}
+          />
+        )}
+      </Dialog>
+
+      <Dialog open={!!delLead} onClose={() => setDelLead(null)} title="Excluir Lead">
+        <p className="text-sm text-muted-foreground">
+          Tem certeza que deseja excluir este lead? Esta ação não pode ser desfeita.
+        </p>
+        {delLead && (
+          <p className="mt-2 text-sm font-medium text-foreground">{delLead.nome} — {delLead.imovelRef || "sem imóvel"}</p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={() => setDelLead(null)}>Cancelar</Button>
+          <Button type="button" className="bg-destructive text-white hover:bg-destructive/90" onClick={handleDeleteConfirm}>Excluir</Button>
+        </div>
+      </Dialog>
+    </>
+  )
+}
