@@ -43,7 +43,7 @@ export function refsTexto(l: Pick<Lead, "referencias" | "imovelRef">) {
 
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   novo: "Novo Lead",
-  "escolhendo opcoes": "Escolhendo Opções",
+  "escolhendo opcoes": "Separando Opções",
   "visita agendada": "Visita Agendada",
   negociando: "Negociando",
   fechado: "Fechado",
