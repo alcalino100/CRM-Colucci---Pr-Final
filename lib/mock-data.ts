@@ -95,6 +95,8 @@ export interface Notification {
   texto: string
   titulo?: string | null
   prioridade?: string | null
+  criadoPor?: string | null
+  criadoPorNome?: string | null
   timestamp: string
   read: boolean
   tipo?: string
@@ -112,6 +114,7 @@ export interface ScheduledNotification {
   paraUsuarioId?: string | null
   agendadaPara: string
   status: "pendente" | "enviada" | "cancelada"
+  criadoPor?: string | null
   criadoPorNome: string
   criadoEm: string
   enviadaEm?: string | null

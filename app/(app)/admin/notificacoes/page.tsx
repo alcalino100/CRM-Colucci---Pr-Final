@@ -110,7 +110,7 @@ export default function NotificationDispatcherPage() {
 
       <Card>
         <CardHeader><CardTitle>Histórico de notificações enviadas</CardTitle></CardHeader>
-        {sentNotifications.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma notificação enviada.</div> : <Table><THead><TR><TH>Título</TH><TH>Mensagem</TH><TH>Tipo</TH><TH>Enviada em</TH></TR></THead><tbody>{sentNotifications.map((item) => <TR key={item.id}><TD className="font-medium">{item.titulo || "Sem título"}</TD><TD className="max-w-md text-muted-foreground">{item.texto}</TD><TD><Badge variant={priorityVariant[(item.prioridade as Priority) || "informativo"]}>{priorityLabel[(item.prioridade as Priority) || "informativo"]}</Badge></TD><TD>{fmtDateTime(item.timestamp)}</TD></TR>)}</tbody></Table>}
+        {sentNotifications.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground">Nenhuma notificação enviada.</div> : <Table><THead><TR><TH>Título</TH><TH>Mensagem</TH><TH>Tipo</TH><TH>Criada por</TH><TH>Enviada em</TH></TR></THead><tbody>{sentNotifications.map((item) => <TR key={item.id}><TD className="font-medium">{item.titulo || "Sem título"}</TD><TD className="max-w-md text-muted-foreground">{item.texto}</TD><TD><Badge variant={priorityVariant[(item.prioridade as Priority) || "informativo"]}>{priorityLabel[(item.prioridade as Priority) || "informativo"]}</Badge></TD><TD>{item.criadoPorNome || "Não informado"}</TD><TD>{fmtDateTime(item.timestamp)}</TD></TR>)}</tbody></Table>}
       </Card>
 
       <Dialog open={preview} onClose={() => setPreview(false)} title="Pré-visualização">

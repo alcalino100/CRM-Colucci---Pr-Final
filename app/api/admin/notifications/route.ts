@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       para_role: body.paraRole ?? null,
       para_usuario_id: body.paraUsuarioId ?? null,
       agendada_para: scheduledAt.toISOString(),
+      criado_por: sender.id,
       criado_por_nome: sender.nome,
     }).select("*").single()
     if (error) return fail(500, "DATABASE_ERROR", "Não foi possível agendar a notificação.", error.message)
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
     tipo: "comunicado_gestao",
     prioridade: body.prioridade,
     origem: "gestao",
+    criado_por: sender.id,
     criado_por_nome: sender.nome,
     para_role: body.paraRole ?? null,
     para_usuario_id: body.paraUsuarioId ?? null,

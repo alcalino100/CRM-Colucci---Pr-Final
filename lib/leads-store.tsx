@@ -153,6 +153,8 @@ function rowToNotification(r: any, userId: string): Notification {
     texto: r.texto,
     titulo: r.titulo ?? null,
     prioridade: r.prioridade ?? null,
+    criadoPor: r.criado_por ?? null,
+    criadoPorNome: r.criado_por_nome ?? null,
     timestamp: r.criado_em,
     read: lidaPor.includes(userId),
     tipo: r.tipo ?? "geral",
@@ -172,7 +174,8 @@ function rowToScheduled(r: any): ScheduledNotification {
     paraUsuarioId: r.para_usuario_id ?? null,
     agendadaPara: r.agendada_para,
     status: r.status,
-    criadoPorNome: r.criado_por_nome,
+    criadoPor: r.criado_por ?? null,
+    criadoPorNome: r.criado_por_nome ?? "Não informado",
     criadoEm: r.criado_em,
     enviadaEm: r.enviada_em ?? null,
   }
@@ -294,7 +297,8 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
         tipo: "comunicado_gestao",
         prioridade: item.prioridade,
         origem: "gestao",
-        criado_por_nome: item.criado_por_nome,
+        criado_por: item.criado_por ?? null,
+        criado_por_nome: item.criado_por_nome ?? null,
         para_role: item.para_role,
         para_usuario_id: item.para_usuario_id,
       })
