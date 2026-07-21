@@ -10,12 +10,13 @@ import { Button } from "@/components/ui/button"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Select, Textarea, useToast } from "@/components/ui/primitives"
 
 const metaFetcher = (u: string) => fetch(u).then((r) => r.json())
-import { brl, fmtDateTime, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/labels"
+import { AUDIT_TIPO_LABEL, AUDIT_TIPO_VARIANT, brl, fmtDateTime, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/labels"
+import type { AuditTipo } from "@/lib/mock-data"
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { user } = useAuth()
-  const { getLead, addInteraction, qualityNotes, justifications, addQualityNote } = useLeads()
+  const { getLead, addInteraction, qualityNotes, justifications, audit, addQualityNote } = useLeads()
   const toast = useToast()
   const [nota, setNota] = useState("")
   const [qualiTexto, setQualiTexto] = useState("")
@@ -39,13 +40,51 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     toast("Anotação registrada.")
   }
 
-  const justificationHistory = justifications.filter((item) => item.leadId === id).map((item) => ({
-    id: `justification-${item.id}`,
-    corretor: item.autorNome,
-    texto: `Justificativa (${STATUS_LABEL[item.etapa]}): ${item.motivo}${item.observacao ? ` — ${item.observacao}` : ""}`,
-    timestamp: item.criadoEm,
+  type TimelineItem = { id: string; corretor: string; texto: string; timestamp: string; tipo: AuditTipo | "nota" }
+  // Eventos automáticos do sistema (cadastro, movimentação, visita, proposta, fechamento, perda, etc.)
+  const auditEvents: TimelineItem[] = audit
+    .filter((a) => a.leadId === id)
+    .map((a) => ({
+      id: `audit-${a.id}`,
+      corretor: a.usuarioNome,
+      texto: a.referencias ? `${a.descricao} · Ref: ${a.referencias}` : a.descricao,
+      timestamp: a.criadoEm,
+      tipo: a.tipo,
+    }))
+  // Anotações manuais de atendimento
+  const notaEvents: TimelineItem[] = lead.interacoes.map((it) => ({
+    id: it.id,
+    corretor: it.corretor,
+    texto: it.texto,
+    timestamp: it.timestamp,
+    tipo: "nota",
   }))
-  const timeline = [...lead.interacoes, ...justificationHistory].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))
+  const timeline: TimelineItem[] = [...auditEvents, ...notaEvents].sort(
+    (a, b) => +new Date(b.timestamp) - +new Date(a.timestamp),
+  )
+  const tipoLabel = (t: TimelineItem["tipo"]) => (t === "nota" ? "Anotação" : AUDIT_TIPO_LABEL[t])
+  const tipoVariant = (t: TimelineItem["tipo"]) => (t === "nota" ? "slate" : AUDIT_TIPO_VARIANT[t])
+  // Cor do marcador da linha do tempo por tipo de evento
+  const dotColor = (t: TimelineItem["tipo"]) => {
+    switch (t) {
+      case "criacao":
+      case "fechamento":
+        return "bg-emerald-500"
+      case "exclusao":
+      case "justificativa":
+        return "bg-destructive"
+      case "etapa":
+      case "temperatura":
+      case "visita":
+        return "bg-amber-500"
+      case "proposta":
+        return "bg-primary"
+      case "nota":
+        return "bg-slate-400"
+      default:
+        return "bg-sky-500"
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,7 +132,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         </Card>
 
         <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Histórico de interações</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Histórico do Lead</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Textarea value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Adicionar nova anotação de atendimento..." aria-label="Nova anotação" />
@@ -103,18 +142,23 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             </div>
 
             {timeline.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma interação registrada ainda.</p>
+              <div className="flex flex-col items-center gap-2 py-10 text-center">
+                <div className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground"><Clock className="size-5" /></div>
+                <p className="text-sm font-medium text-foreground">Este lead ainda não tem histórico</p>
+                <p className="text-xs text-muted-foreground">Os acontecimentos aparecerão aqui automaticamente conforme o lead avança no funil.</p>
+              </div>
             ) : (
               <ol className="relative flex flex-col gap-4 border-l border-border pl-5">
                 {timeline.map((it) => (
                   <li key={it.id} className="relative">
-                    <span className="absolute -left-[26px] top-1 flex size-3 items-center justify-center rounded-full bg-primary ring-4 ring-card" />
-                    <div className="flex flex-col gap-1 rounded-lg border border-border p-3">
-                      <p className="text-sm">{it.texto}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">{it.corretor}</span>
-                        <Clock className="size-3" />{fmtDateTime(it.timestamp)}
+                    <span className={`absolute -left-[26px] top-1.5 size-3 rounded-full ring-4 ring-card ${dotColor(it.tipo)}`} />
+                    <div className="flex flex-col gap-1.5 rounded-lg border border-border p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={tipoVariant(it.tipo)}>{tipoLabel(it.tipo)}</Badge>
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="size-3" />{fmtDateTime(it.timestamp)}</span>
                       </div>
+                      <p className="text-sm leading-relaxed text-foreground">{it.texto}</p>
+                      <p className="text-xs text-muted-foreground">por <span className="font-medium text-foreground">{it.corretor}</span></p>
                     </div>
                   </li>
                 ))}
@@ -144,7 +188,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   }}
                   disabled={!qualiTexto.trim()}
                 >
-                  Registrar observação
+                  Registrar observa��ão
                 </Button>
               </div>
             </div>
