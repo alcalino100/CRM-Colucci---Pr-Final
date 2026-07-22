@@ -142,8 +142,9 @@ export const ACCESS_LABEL: Record<AccessAction, string> = {
 
 export const ORIGEM_VARIANT: Record<Origem, string> = {
   Instagram: "accent",
-  Indicação: "green",
+  Indicação: "teal",
   "Tráfego Pago": "blue",
+  WhatsApp: "green",
   Outro: "gray",
 }
 

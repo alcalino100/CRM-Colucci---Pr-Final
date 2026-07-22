@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, useToast } from "@/components/ui/primitives"
+import { WhatsappConnectionCard } from "@/components/whatsapp-connection-card"
 
 const MAX_AVATAR_BYTES = 300 * 1024 // limite p/ armazenar como data URL na tabela
 
@@ -114,6 +115,8 @@ export default function PerfilPage() {
           </div>
         </CardContent>
       </Card>
+
+      <WhatsappConnectionCard corretorId={user.id} corretorNome={user.nome} compact />
 
       <Card>
         <CardHeader className="flex-row items-center gap-2">
