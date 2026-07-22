@@ -25,7 +25,7 @@ export async function GET() {
 
 // Garante a instância do corretor (upsert por corretor_id)
 export async function POST(request: Request) {
-  let body: { corretorId?: string }
+  let body: { corretorId?: string; corretorNome?: string }
   try {
     body = await request.json()
   } catch {
@@ -33,7 +33,14 @@ export async function POST(request: Request) {
   }
   if (!body.corretorId) return NextResponse.json({ error: "Corretor não informado." }, { status: 400 })
 
-  const instanceName = instanceNameFor(body.corretorId)
+  // Resolve o nome pelo banco quando não vier no corpo, para nomear a instância
+  let nome = body.corretorNome
+  if (!nome) {
+    const { data: u } = await wsupabase.from("usuarios").select("nome").eq("id", body.corretorId).maybeSingle()
+    nome = u?.nome ?? undefined
+  }
+
+  const instanceName = instanceNameFor(body.corretorId, nome)
   const { data, error } = await wsupabase
     .from("whatsapp_instancias")
     .upsert({ corretor_id: body.corretorId, instance_name: instanceName }, { onConflict: "corretor_id" })

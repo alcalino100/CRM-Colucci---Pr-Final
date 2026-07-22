@@ -11,8 +11,22 @@ export function evolutionConfig() {
   return { url, key, ok: Boolean(url && key) }
 }
 
-export function instanceNameFor(corretorId: string) {
-  return `corretor-${corretorId.slice(0, 8)}`
+// Transforma o nome do corretor em um slug seguro para nome de instância
+export function slugify(v: string) {
+  return (v || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+}
+
+// Nome da instância baseado no nome do corretor + sufixo do id (garante unicidade)
+export function instanceNameFor(corretorId: string, nome?: string) {
+  const base = nome ? slugify(nome) : ""
+  const suffix = corretorId.slice(0, 8)
+  return base ? `${base}-${suffix}` : `corretor-${suffix}`
 }
 
 // Só dígitos, para comparar telefones de forma consistente
