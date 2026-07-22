@@ -37,6 +37,12 @@ alter table whatsapp_mensagens add column if not exists veio_de_anuncio boolean 
 alter table whatsapp_mensagens add column if not exists anuncio_id text;
 alter table whatsapp_mensagens add column if not exists anuncio_titulo text;
 
+-- RLS: o app usa a chave publishable (anon), como nas demais tabelas do projeto.
+-- Sem policies, o Supabase bloqueia as escritas (erro 42501). Desabilitamos o RLS
+-- para manter o mesmo comportamento das outras tabelas (leads, notificacoes, etc.).
+alter table whatsapp_instancias disable row level security;
+alter table whatsapp_mensagens disable row level security;
+
 -- Realtime
 do $$
 begin
