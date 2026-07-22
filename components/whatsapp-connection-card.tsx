@@ -1,8 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { CheckCircle2, Loader2, MessageCircle, QrCode, XCircle } from "lucide-react"
-import { Badge, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@/components/ui/primitives"
+import { CheckCircle2, Loader2, MessageCircle, QrCode, RefreshCw, XCircle } from "lucide-react"
+import { Badge, Card, CardContent, CardHeader, CardTitle, Dialog, Skeleton, useToast } from "@/components/ui/primitives"
 import { Button } from "@/components/ui/button"
 
 type Estado = "idle" | "gerando_qr" | "aguardando_leitura" | "conectado" | "erro"
@@ -22,7 +22,12 @@ export function WhatsappConnectionCard({
   const [erro, setErro] = useState<string | null>(null)
   const [carregandoStatus, setCarregandoStatus] = useState(true)
   const [instanceName, setInstanceName] = useState<string | null>(null)
+  const [atualizando, setAtualizando] = useState(false)
+  const [desconectando, setDesconectando] = useState(false)
+  const [confirmar, setConfirmar] = useState(false)
+  const [stale, setStale] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const toast = useToast()
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -132,6 +137,63 @@ export function WhatsappConnectionCard({
     }
   }
 
+  // Atualização manual: consulta o estado real na Evolution e sincroniza a UI
+  async function atualizar() {
+    if (!instanceName || atualizando) return
+    setAtualizando(true)
+    setStale(false)
+    try {
+      const res = await fetch(`/api/whatsapp/refresh?instanceName=${encodeURIComponent(instanceName)}`)
+      const json = await res.json()
+      setStale(Boolean(json.stale))
+      if (json.status === "conectado") {
+        stopPolling()
+        setEstado("conectado")
+        setNumero(json.numero ?? null)
+        setQrCode(null)
+      } else if (json.status === "conectando") {
+        setEstado("aguardando_leitura")
+      } else {
+        setEstado("idle")
+        setNumero(null)
+        setQrCode(null)
+      }
+    } catch {
+      setStale(true)
+    } finally {
+      setAtualizando(false)
+    }
+  }
+
+  // Desconexão (logout) — mantém a instância na Evolution para reconexão rápida
+  async function desconectar() {
+    if (!instanceName || desconectando) return
+    setDesconectando(true)
+    try {
+      const res = await fetch("/api/whatsapp/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instanceName }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast(json.error ?? "Não foi possível desconectar.", "error")
+        return
+      }
+      stopPolling()
+      setEstado("idle")
+      setNumero(null)
+      setQrCode(null)
+      setStale(false)
+      toast(json.aviso ?? "WhatsApp desconectado.", json.aviso ? "error" : "success")
+    } catch {
+      toast("Falha de conexão ao desconectar.", "error")
+    } finally {
+      setDesconectando(false)
+      setConfirmar(false)
+    }
+  }
+
   return (
     <Card className={compact ? "" : "h-full"}>
       <CardHeader className={compact ? "p-4" : undefined}>
@@ -140,13 +202,35 @@ export function WhatsappConnectionCard({
             <MessageCircle className="size-4 text-emerald-600" />
             {compact ? "Meu WhatsApp" : corretorNome}
           </CardTitle>
-          {estado === "conectado" ? (
-            <Badge variant="green" className="gap-1"><CheckCircle2 className="size-3" /> Conectado</Badge>
-          ) : estado === "aguardando_leitura" ? (
-            <Badge variant="amber">Aguardando leitura</Badge>
-          ) : (
-            <Badge variant="gray">Desconectado</Badge>
-          )}
+          <div className="flex items-center gap-1.5">
+            {estado === "conectado" ? (
+              <Badge variant="green" className="gap-1"><CheckCircle2 className="size-3" /> Conectado</Badge>
+            ) : estado === "aguardando_leitura" ? (
+              <Badge variant="amber">Aguardando leitura</Badge>
+            ) : (
+              <Badge variant="gray">Desconectado</Badge>
+            )}
+            {stale && (
+              <span
+                title="Não foi possível confirmar com o WhatsApp agora, mostrando o último dado salvo."
+                className="text-xs text-amber-600"
+              >
+                desatualizado
+              </span>
+            )}
+            {!carregandoStatus && instanceName && (
+              <button
+                type="button"
+                onClick={atualizar}
+                disabled={atualizando}
+                aria-label="Atualizar status"
+                title="Atualizar status"
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted disabled:opacity-50"
+              >
+                <RefreshCw className={`size-4 ${atualizando ? "animate-spin" : ""}`} />
+              </button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className={`flex flex-col items-center gap-3 ${compact ? "p-4 pt-0" : "pt-0"}`}>
@@ -186,7 +270,25 @@ export function WhatsappConnectionCard({
             {estado === "aguardando_leitura" ? "Gerar novo QR Code" : estado === "erro" ? "Tentar novamente" : "Conectar WhatsApp"}
           </Button>
         )}
+
+        {estado === "conectado" && !carregandoStatus && (
+          <Button variant="outline" onClick={() => setConfirmar(true)} disabled={desconectando} className="w-full">
+            {desconectando ? <Loader2 className="size-4 animate-spin" /> : "Desconectar"}
+          </Button>
+        )}
       </CardContent>
+
+      <Dialog open={confirmar} onClose={() => (!desconectando ? setConfirmar(false) : undefined)} title="Desconectar WhatsApp">
+        <p className="text-sm text-muted-foreground">
+          Tem certeza que deseja desconectar o WhatsApp de {corretorNome}? Será necessário ler o QR Code novamente para reconectar.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setConfirmar(false)} disabled={desconectando}>Cancelar</Button>
+          <Button variant="destructive" onClick={desconectar} disabled={desconectando}>
+            {desconectando ? <Loader2 className="size-4 animate-spin" /> : "Desconectar"}
+          </Button>
+        </div>
+      </Dialog>
     </Card>
   )
 }
