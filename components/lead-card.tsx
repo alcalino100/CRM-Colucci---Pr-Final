@@ -20,6 +20,7 @@ export function LeadCard({
   lead,
   showCorretor = false,
   canManage = false,
+  podeExcluir = false,
   overdue = false,
   onOpen,
   onEdit,
@@ -28,6 +29,7 @@ export function LeadCard({
   lead: Lead
   showCorretor?: boolean
   canManage?: boolean
+  podeExcluir?: boolean
   overdue?: boolean
   onOpen?: (lead: Lead) => void
   onEdit?: (lead: Lead) => void
@@ -78,8 +80,10 @@ export function LeadCard({
                     </button>
                     <button
                       type="button"
-                      onClick={(e) => { stop(e); setMenu(false); onDelete?.(lead) }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+                      disabled={!podeExcluir}
+                      title={podeExcluir ? undefined : "Apenas gestores podem excluir leads"}
+                      onClick={(e) => { stop(e); if (!podeExcluir) return; setMenu(false); onDelete?.(lead) }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent"
                     >
                       <Trash2 className="size-3.5" /> Excluir
                     </button>

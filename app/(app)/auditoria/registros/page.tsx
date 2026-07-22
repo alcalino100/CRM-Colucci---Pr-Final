@@ -1,0 +1,158 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import { ScrollText, SearchX } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { useLeads } from "@/lib/leads-store"
+import { Badge, Card, CardContent, CardHeader, CardTitle, Input, Select, Skeleton } from "@/components/ui/primitives"
+import { AUDIT_TIPO_LABEL, AUDIT_TIPO_VARIANT, fmtDateTime } from "@/lib/labels"
+import type { AuditTipo } from "@/lib/mock-data"
+
+const PAGINA = 50
+
+export default function RegistrosAuditoriaPage() {
+  const { user } = useAuth()
+  const { audit } = useLeads()
+  const [loading, setLoading] = useState(true)
+  const [fTipo, setFTipo] = useState<AuditTipo | "todos">("todos")
+  const [query, setQuery] = useState("")
+  const [limite, setLimite] = useState(PAGINA)
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 400)
+    return () => clearTimeout(t)
+  }, [])
+
+  const isGestor = user?.role === "gestor"
+
+  // Ordena do mais recente para o mais antigo e aplica filtros de tipo e busca
+  const filtrados = useMemo(() => {
+    const termo = query.trim().toLowerCase()
+    return [...audit]
+      .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime())
+      .filter((e) => (fTipo === "todos" ? true : e.tipo === fTipo))
+      .filter((e) => {
+        if (!termo) return true
+        return [e.leadNome, e.usuarioNome, e.descricao, e.motivo, e.motivoDetalhe, e.referencias]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(termo))
+      })
+  }, [audit, fTipo, query])
+
+  const visiveis = filtrados.slice(0, limite)
+
+  // Reseta a paginação ao mudar filtros
+  useEffect(() => {
+    setLimite(PAGINA)
+  }, [fTipo, query])
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-9 w-64" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    )
+  }
+
+  if (!isGestor) {
+    return <p className="py-16 text-center text-muted-foreground">Acesso restrito aos gestores.</p>
+  }
+
+  const tipos = Object.keys(AUDIT_TIPO_LABEL) as AuditTipo[]
+
+  return (
+    <div className="space-y-5">
+      <header className="flex items-center gap-2">
+        <ScrollText className="size-5 text-primary" />
+        <div>
+          <h1 className="font-display text-xl font-bold text-foreground">Registros de Auditoria</h1>
+          <p className="text-sm text-muted-foreground">Histórico completo de ações do sistema (somente leitura).</p>
+        </div>
+      </header>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Filtros</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <label htmlFor="f-tipo" className="text-xs font-medium text-muted-foreground">Tipo de ação</label>
+            <Select id="f-tipo" value={fTipo} onChange={(e) => setFTipo(e.target.value as AuditTipo | "todos")}>
+              <option value="todos">Todos os tipos</option>
+              {tipos.map((t) => (
+                <option key={t} value={t}>{AUDIT_TIPO_LABEL[t]}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <label htmlFor="f-busca" className="text-xs font-medium text-muted-foreground">Busca</label>
+            <Input
+              id="f-busca"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Lead, usuário, descrição ou motivo…"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="text-base">
+            {filtrados.length} {filtrados.length === 1 ? "registro" : "registros"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {visiveis.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+              <SearchX className="size-8" />
+              <p className="text-sm">Nenhum registro encontrado para os filtros selecionados.</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {visiveis.map((e) => (
+                <li key={e.id} className="flex flex-col gap-1.5 py-3 sm:flex-row sm:items-start sm:gap-4">
+                  <div className="flex shrink-0 items-center gap-2 sm:w-44">
+                    <Badge variant={AUDIT_TIPO_VARIANT[e.tipo]}>{AUDIT_TIPO_LABEL[e.tipo]}</Badge>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-foreground">
+                      {e.descricao}
+                      {e.leadNome ? <span className="text-muted-foreground"> — {e.leadNome}</span> : null}
+                    </p>
+                    {(e.motivo || e.motivoDetalhe) && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {e.motivo ? <span className="font-medium text-foreground">{e.motivo}</span> : null}
+                        {e.motivo && e.motivoDetalhe ? ": " : null}
+                        {e.motivoDetalhe}
+                      </p>
+                    )}
+                    {e.referencias ? <p className="mt-0.5 text-xs text-muted-foreground">Ref.: {e.referencias}</p> : null}
+                  </div>
+                  <div className="shrink-0 text-xs text-muted-foreground sm:text-right">
+                    <p>{e.usuarioNome}</p>
+                    <p>{fmtDateTime(e.criadoEm)}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {limite < filtrados.length && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setLimite((n) => n + PAGINA)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              >
+                Carregar mais ({filtrados.length - limite} restantes)
+              </button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

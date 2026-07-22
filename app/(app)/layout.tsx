@@ -28,6 +28,7 @@ const NAV: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["corretor", "gestor"] },
   { href: "/dashboard-gestao", label: "Dashboard", icon: LayoutDashboard, roles: ["gestor"] },
   { href: "/auditoria", label: "Auditoria de Leads", icon: ClipboardCheck, roles: ["gestor"] },
+  { href: "/auditoria/registros", label: "Registros de Auditoria", icon: ScrollText, roles: ["gestor"] },
   { href: "/meta-ads", label: "Meta Ads", icon: BarChart3, roles: ["gestor"] },
   { href: "/configuracoes/whatsapp", label: "Conexões WhatsApp", icon: MessageCircle, roles: ["gestor"] },
   { href: "/perfil", label: "Meu Perfil", icon: UserCircle, roles: ["corretor", "gestor"] },
@@ -68,8 +69,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3">
         {items.map((item) => {
-          const active = item.href === "/admin"
-            ? pathname === "/admin"
+          const active = item.href === "/admin" || item.href === "/auditoria"
+            ? pathname === item.href
             : pathname === item.href || pathname.startsWith(item.href + "/")
           return (
             <Link key={item.href} href={item.href}

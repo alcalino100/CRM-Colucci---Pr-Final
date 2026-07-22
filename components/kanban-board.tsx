@@ -10,7 +10,7 @@ import { LeadCard } from "@/components/lead-card"
 import { LeadForm, type LeadFormValues } from "@/components/lead-form"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
-import { FOLLOWUP_PRAZO_MS, FOLLOWUP_STATUSES, LEAD_STATUSES, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, followupReasons, normalizePhone, refsTexto } from "@/lib/labels"
+import { FOLLOWUP_PRAZO_MS, FOLLOWUP_STATUSES, LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, followupReasons, normalizePhone, refsTexto } from "@/lib/labels"
 import { type Lead, type LeadStatus, type Temperatura } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
@@ -36,6 +36,8 @@ export function KanbanBoard({
   const [closeLead, setCloseLead] = useState<Lead | null>(null)
   const [editLead, setEditLead] = useState<Lead | null>(null)
   const [delLead, setDelLead] = useState<Lead | null>(null)
+  const [delMotivo, setDelMotivo] = useState("")
+  const [delDetalhe, setDelDetalhe] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [tempFilter, setTempFilter] = useState<Temperatura | "todas">("todas")
   const [query, setQuery] = useState("")
@@ -113,11 +115,26 @@ export function KanbanBoard({
     })()
   }
 
-  function handleDeleteConfirm() {
-    if (!delLead) return
-    logChange({ usuario: usuarioNome, acao: "exclusao", entidade: "lead", campo: "lead", valorAnterior: `${delLead.nome} — ${delLead.imovelRef || "sem imóvel"}`, valorNovo: "-" })
-    deleteLead(delLead.id)
+  function closeDelete() {
     setDelLead(null)
+    setDelMotivo("")
+    setDelDetalhe("")
+  }
+
+  async function handleDeleteConfirm() {
+    if (!delLead || submitting) return
+    if (!delMotivo) return toast("Selecione o motivo da exclusão.", "error")
+    if (!delDetalhe.trim()) return toast("Descreva o motivo da exclusão.", "error")
+    setSubmitting(true)
+    const alvo = delLead
+    const res = await deleteLead(alvo.id, delMotivo, delDetalhe.trim())
+    setSubmitting(false)
+    if (!res.ok) {
+      toast(res.error ?? "Não foi possível excluir o lead.", "error")
+      return
+    }
+    logChange({ usuario: usuarioNome, acao: "exclusao", entidade: "lead", campo: "lead", valorAnterior: `${alvo.nome} — ${alvo.imovelRef || "sem imóvel"} (motivo: ${delMotivo})`, valorNovo: "-" })
+    closeDelete()
     toast("Lead excluído com sucesso")
   }
 
@@ -336,10 +353,11 @@ export function KanbanBoard({
                               className={ds.isDragging ? "opacity-60" : ""}
                             >
                               <LeadCard
-                                lead={lead}
-                                showCorretor={showCorretor}
-                                canManage={canManage(lead)}
-                                overdue={isOverdue(lead)}
+                              lead={lead}
+                              showCorretor={showCorretor}
+                              canManage={canManage(lead)}
+                              podeExcluir={isGestor}
+                              overdue={isOverdue(lead)}
                                 onOpen={(item) => requireJustification(item, () => router.push(`/painel-corretor/${item.id}`))}
                                 onEdit={(item) => requireJustification(item, () => setEditLead(item))}
                                 onDelete={(item) => requireJustification(item, () => setDelLead(item))}
@@ -464,16 +482,39 @@ export function KanbanBoard({
         )}
       </Dialog>
 
-      <Dialog open={!!delLead} onClose={() => setDelLead(null)} title="Excluir Lead">
+      <Dialog open={!!delLead} onClose={() => (!submitting ? closeDelete() : undefined)} title="Excluir Lead">
         <p className="text-sm text-muted-foreground">
-          Tem certeza que deseja excluir este lead? Esta ação não pode ser desfeita.
+          Tem certeza que deseja excluir este lead? Esta ação não pode ser desfeita e será registrada na auditoria.
         </p>
         {delLead && (
           <p className="mt-2 text-sm font-medium text-foreground">{delLead.nome} — {delLead.imovelRef || "sem imóvel"}</p>
         )}
+        <div className="mt-4 grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="del-motivo">Motivo da exclusão</Label>
+            <Select id="del-motivo" value={delMotivo} onChange={(e) => setDelMotivo(e.target.value)}>
+              <option value="">Selecione…</option>
+              {MOTIVOS_EXCLUSAO.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="del-detalhe">Detalhe (obrigatório)</Label>
+            <Textarea
+              id="del-detalhe"
+              rows={3}
+              value={delDetalhe}
+              onChange={(e) => setDelDetalhe(e.target.value)}
+              placeholder="Explique o motivo desta exclusão para o registro de auditoria."
+            />
+          </div>
+        </div>
         <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => setDelLead(null)}>Cancelar</Button>
-          <Button type="button" className="bg-destructive text-white hover:bg-destructive/90" onClick={handleDeleteConfirm}>Excluir</Button>
+          <Button type="button" variant="outline" onClick={closeDelete} disabled={submitting}>Cancelar</Button>
+          <Button type="button" className="bg-destructive text-white hover:bg-destructive/90" onClick={handleDeleteConfirm} disabled={submitting}>
+            {submitting ? "Excluindo…" : "Excluir"}
+          </Button>
         </div>
       </Dialog>
     </>

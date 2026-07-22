@@ -149,6 +149,8 @@ export interface AuditEntry {
   tipo: AuditTipo
   descricao: string
   referencias?: string | null
+  motivo?: string | null
+  motivoDetalhe?: string | null
   criadoEm: string
 }
 
