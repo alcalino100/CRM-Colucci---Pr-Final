@@ -23,11 +23,19 @@ create table if not exists whatsapp_mensagens (
   nome_contato text,
   corpo text,
   lead_id uuid,
+  veio_de_anuncio boolean not null default false,
+  anuncio_id text,
+  anuncio_titulo text,
   criado_em timestamptz not null default now()
 );
 
 create index if not exists whatsapp_mensagens_telefone_idx
   on whatsapp_mensagens (telefone);
+
+-- Colunas de contexto de anúncio (idempotente para bases que já criaram a tabela)
+alter table whatsapp_mensagens add column if not exists veio_de_anuncio boolean not null default false;
+alter table whatsapp_mensagens add column if not exists anuncio_id text;
+alter table whatsapp_mensagens add column if not exists anuncio_titulo text;
 
 -- Realtime
 do $$

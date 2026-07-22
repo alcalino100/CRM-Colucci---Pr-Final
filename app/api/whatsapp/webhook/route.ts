@@ -26,6 +26,35 @@ async function handleConnectionUpdate(payload: any) {
   await wsupabase.from("whatsapp_instancias").update(patch).eq("instance_name", instanceName)
 }
 
+// Detecta se a mensagem nasceu de um clique em anúncio (Click-to-WhatsApp).
+// A Meta injeta esse contexto na 1ª mensagem; a Evolution repassa em campos que
+// variam por versão, então tentamos todos, em ordem de prioridade.
+function detectAd(msg: any): { veioDeAnuncio: boolean; anuncioId: string | null; anuncioTitulo: string | null } {
+  const ctx = msg?.contextInfo ?? msg?.message?.contextInfo ?? msg?.message?.extendedTextMessage?.contextInfo
+  const externalAd = ctx?.externalAdReplyInfo
+  const referral = msg?.message?.referral ?? msg?.referral
+
+  let anuncioId: string | null = null
+  let anuncioTitulo: string | null = null
+  let veioDeAnuncio = false
+
+  if (ctx?.conversionSource) {
+    veioDeAnuncio = true
+  }
+  if (externalAd && (externalAd.sourceId || externalAd.sourceUrl || externalAd.title || externalAd.body)) {
+    veioDeAnuncio = true
+    anuncioId = externalAd.sourceId ?? anuncioId
+    anuncioTitulo = externalAd.title ?? externalAd.body ?? anuncioTitulo
+  }
+  if (referral && (referral.source_id || referral.source_type === "ad" || referral.headline || referral.body)) {
+    veioDeAnuncio = true
+    anuncioId = referral.source_id ?? anuncioId
+    anuncioTitulo = referral.headline ?? referral.body ?? anuncioTitulo
+  }
+
+  return { veioDeAnuncio, anuncioId, anuncioTitulo }
+}
+
 async function handleMessageUpsert(payload: any) {
   const instanceName = getInstanceName(payload)
   if (!instanceName) return
@@ -52,14 +81,34 @@ async function handleMessageUpsert(payload: any) {
   const corretorId = inst?.corretor_id
   if (!corretorId) return
 
-  // Procura lead existente por telefone (compara só dígitos)
-  const { data: candidatos } = await wsupabase.from("leads").select("id, telefone, corretor_id, nome")
+  const { veioDeAnuncio, anuncioId, anuncioTitulo } = detectAd(msg)
+
+  // Mensagem orgânica: só registra para referência, não cria lead nem notifica.
+  if (!veioDeAnuncio) {
+    await wsupabase.from("whatsapp_mensagens").insert({
+      instance_name: instanceName,
+      telefone,
+      nome_contato: nome,
+      corpo,
+      lead_id: null,
+      veio_de_anuncio: false,
+    })
+    return
+  }
+
+  // A partir daqui: mensagem confirmadamente vinda de anúncio (Click-to-WhatsApp).
+  const { data: candidatos } = await wsupabase.from("leads").select("id, telefone, corretor_id, status")
   const existente = (candidatos ?? []).find((l) => onlyDigits(l.telefone) === telefone)
 
   let leadId: string | null = existente?.id ?? null
 
+  // Nome do corretor da instância (para as notificações)
+  const { data: corretor } = await wsupabase.from("usuarios").select("nome").eq("id", corretorId).maybeSingle()
+  const corretorNome = corretor?.nome ?? "corretor"
+
   if (!existente) {
-    // Caso A: novo lead
+    // Caso A: novo lead via tráfego pago
+    const obs = `Lead criado automaticamente via WhatsApp (Click-to-WhatsApp Ad${anuncioTitulo ? ": " + anuncioTitulo : ""})`
     const { data: novo, error } = await wsupabase
       .from("leads")
       .insert({
@@ -69,21 +118,31 @@ async function handleMessageUpsert(payload: any) {
         referencia_imovel: "",
         referencias: [],
         temperatura: "morno",
-        origem: "WhatsApp",
-        observacoes: "Lead recebido automaticamente via WhatsApp.",
+        origem: "Tráfego Pago",
+        observacoes: obs,
         status: "novo",
         corretor_id: corretorId,
       })
       .select("id")
       .maybeSingle()
     if (error) {
-      // Corrida: telefone já inserido em paralelo — trata como existente
-      const { data: again } = await wsupabase.from("leads").select("id").eq("telefone", telefone).maybeSingle()
+      // Corrida (unique 23505): telefone inserido em paralelo — trata como existente
+      const { data: candidatos2 } = await wsupabase.from("leads").select("id, telefone, corretor_id, status")
+      const again = (candidatos2 ?? []).find((l) => onlyDigits(l.telefone) === telefone)
       leadId = again?.id ?? null
+      if (again && again.corretor_id && again.corretor_id !== corretorId) {
+        await wsupabase.from("notificacoes").insert({
+          mensagem: `Possível lead duplicado: ${telefone} clicou em anúncio e escreveu para o WhatsApp de ${corretorNome}, mas já é lead de outro corretor (status: ${again.status}).`,
+          tipo: "possivel_duplicado",
+          usuario_id: corretorId,
+          para_role: "gestor",
+          lead_id: again.id,
+        })
+      }
     } else {
       leadId = novo?.id ?? null
       await wsupabase.from("notificacoes").insert({
-        mensagem: `Novo lead via WhatsApp: ${nome}`,
+        mensagem: `Novo lead via tráfego pago (WhatsApp): ${nome} (via ${corretorNome})`,
         tipo: "lead_novo",
         usuario_id: corretorId,
         para_role: "gestor",
@@ -92,8 +151,9 @@ async function handleMessageUpsert(payload: any) {
     }
   } else if (existente.corretor_id && existente.corretor_id !== corretorId) {
     // Caso B: telefone já pertence a outro corretor
+    const { data: dono } = await wsupabase.from("usuarios").select("nome").eq("id", existente.corretor_id).maybeSingle()
     await wsupabase.from("notificacoes").insert({
-      mensagem: `Possível lead duplicado no WhatsApp: ${nome} já está com outro corretor.`,
+      mensagem: `Possível lead duplicado: ${telefone} clicou em anúncio e escreveu para o WhatsApp de ${corretorNome}, mas já é lead de ${dono?.nome ?? "outro corretor"} (status: ${existente.status}).`,
       tipo: "possivel_duplicado",
       usuario_id: corretorId,
       para_role: "gestor",
@@ -101,13 +161,16 @@ async function handleMessageUpsert(payload: any) {
     })
   }
 
-  // Registra a mensagem recebida
+  // Registra a mensagem recebida (com contexto do anúncio)
   await wsupabase.from("whatsapp_mensagens").insert({
     instance_name: instanceName,
     telefone,
     nome_contato: nome,
     corpo,
     lead_id: leadId,
+    veio_de_anuncio: true,
+    anuncio_id: anuncioId,
+    anuncio_titulo: anuncioTitulo,
   })
 }
 
