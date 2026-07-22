@@ -46,6 +46,10 @@ export async function POST(request: Request) {
     .upsert({ corretor_id: body.corretorId, instance_name: instanceName }, { onConflict: "corretor_id" })
     .select("*")
     .single()
-  if (error) return NextResponse.json({ error: "Não foi possível criar a instância." }, { status: 500 })
+  if (error) {
+    console.log("[v0] whatsapp instancia upsert error:", error.code, error.message)
+    const detalhe = error.code === "42501" ? " Rode o script 007 no Supabase para desabilitar o RLS." : ""
+    return NextResponse.json({ error: `Não foi possível criar a instância.${detalhe}` }, { status: 500 })
+  }
   return NextResponse.json({ data })
 }
