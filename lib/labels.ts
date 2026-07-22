@@ -125,6 +125,16 @@ export function followupReasons(status: LeadStatus): string[] {
   return [...list, "Outro"]
 }
 
+// Motivos de exclusão de lead (com "Outro" ao final para detalhe livre)
+export const MOTIVOS_EXCLUSAO = [
+  "Lead duplicado",
+  "Dados incorretos / inválidos",
+  "Cadastro de teste",
+  "Solicitação do cliente (LGPD)",
+  "Spam / não é lead",
+  "Outro",
+] as const
+
 export const PROP_LABEL: Record<PropertyStatus, string> = { disponivel: "Disponível", vendido: "Vendido", alugado: "Alugado" }
 export const PROP_VARIANT: Record<PropertyStatus, string> = { disponivel: "green", vendido: "gray", alugado: "blue" }
 

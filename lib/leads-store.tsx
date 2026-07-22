@@ -37,6 +37,8 @@ interface AuditInput {
   tipo: AuditTipo
   descricao: string
   referencias?: string | null
+  motivo?: string | null
+  motivoDetalhe?: string | null
 }
 
 interface Store {
@@ -55,7 +57,7 @@ interface Store {
   checkPhoneDuplicate: (phone: string, excludeId?: string) => { nome: string; corretorId: string; status: LeadStatus } | null
   addLead: (l: Omit<Lead, "id" | "criadoEm" | "atualizadoEm" | "interacoes">) => Promise<{ ok: boolean; error?: string }>
   updateLead: (id: string, patch: Partial<Lead>) => Promise<{ ok: boolean; error?: string }>
-  deleteLead: (id: string) => void
+  deleteLead: (id: string, motivo: string, motivoDetalhe?: string) => Promise<{ ok: boolean; error?: string }>
   addInteraction: (leadId: string, i: Omit<Interaction, "id" | "timestamp">) => void
   getLead: (id: string) => Lead | undefined
   addVisit: (v: Omit<Visit, "id">) => void
@@ -192,6 +194,8 @@ function rowToAudit(r: any): AuditEntry {
     tipo: r.tipo as AuditTipo,
     descricao: r.descricao,
     referencias: r.referencias,
+    motivo: r.motivo ?? null,
+    motivoDetalhe: r.motivo_detalhe ?? null,
     criadoEm: r.criado_em,
   }
 }
@@ -304,6 +308,8 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       tipo: e.tipo,
       descricao: e.descricao,
       referencias: e.referencias ?? null,
+      motivo: e.motivo ?? null,
+      motivo_detalhe: e.motivoDetalhe ?? null,
     }).then(() => loadAudit())
   }
 
@@ -429,15 +435,37 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     return { ok: true }
   }
 
-  const deleteLead: Store["deleteLead"] = async (id) => {
+  const deleteLead: Store["deleteLead"] = async (id, motivo, motivoDetalhe) => {
+    // Somente gestores podem excluir leads
+    if (user?.role !== "gestor") return { ok: false, error: "Apenas gestores podem excluir leads." }
+    const motivoTrim = (motivo ?? "").trim()
+    const detalheTrim = (motivoDetalhe ?? "").trim()
+    if (!motivoTrim) return { ok: false, error: "Selecione o motivo da exclusão." }
+    if (!detalheTrim) return { ok: false, error: "Descreva o motivo da exclusão." }
+
     const lead = leads.find((l) => l.id === id)
-    await supabase.from("leads").delete().eq("id", id)
+    const autor = user?.nome ?? "Sistema"
+
+    // Registra a auditoria ANTES de excluir, garantindo o rastro mesmo que a exclusão siga
+    const { error: auditErr } = await supabase.from("auditoria").insert({
+      lead_id: id,
+      lead_nome: lead?.nome ?? null,
+      usuario_nome: autor,
+      tipo: "exclusao",
+      descricao: `Lead excluído por ${autor}`,
+      motivo: motivoTrim,
+      motivo_detalhe: detalheTrim,
+    })
+    if (auditErr) return { ok: false, error: "Não foi possível registrar a auditoria da exclusão." }
+
+    const { error: delErr } = await supabase.from("leads").delete().eq("id", id)
+    if (delErr) return { ok: false, error: "Não foi possível excluir o lead." }
+
     if (lead) {
-      const autor = user?.nome ?? "Sistema"
-      logAudit({ leadId: id, leadNome: lead.nome, usuarioNome: autor, tipo: "exclusao", descricao: `Lead excluído por ${autor}` })
-      notify(`Lead excluído: ${lead.nome} (por ${autor})`, { tipo: "exclusao", paraRole: "gestor", leadId: id })
+      notify(`Lead excluído: ${lead.nome} (por ${autor}) — motivo: ${motivoTrim}`, { tipo: "exclusao", paraRole: "gestor", leadId: id })
     }
-    await loadLeads()
+    await Promise.all([loadLeads(), loadAudit()])
+    return { ok: true }
   }
 
   const addInteraction: Store["addInteraction"] = (leadId, i) => {
