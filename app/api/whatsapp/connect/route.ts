@@ -68,10 +68,29 @@ export async function POST(request: Request) {
     // Loga a causa real no servidor (sem expor URL/chave ao client)
     const cause = (err as any)?.cause?.code || (err as any)?.name || ""
     console.log("[v0] whatsapp connect error:", err instanceof Error ? err.message : String(err), cause)
-    const inacessivel = cause === "ECONNRESET" || cause === "ECONNREFUSED" || cause === "ETIMEDOUT" || cause === "AbortError" || cause === "ENOTFOUND"
-    const error = inacessivel
-      ? "Não foi possível alcançar o servidor da Evolution API. Verifique se ele está online e acessível pela internet. (No preview do v0 o acesso a servidores HTTP internos é bloqueado; funciona no site publicado.)"
-      : "Falha ao conectar com a Evolution API."
-    return NextResponse.json({ error }, { status: 502 })
+    const host = safeHost(cfg.url)
+    // Mensagens específicas por causa para o usuário saber o que corrigir no servidor
+    const diagnosticos: Record<string, string> = {
+      ETIMEDOUT: `Tempo esgotado ao conectar em ${host}. O firewall do servidor provavelmente está bloqueando os IPs da Vercel. Libere a porta para acesso externo ou use uma allowlist.`,
+      ECONNRESET: `A conexão com ${host} foi encerrada pelo servidor. Verifique o firewall/proxy do VPS e se o serviço aceita conexões externas na porta usada.`,
+      ECONNREFUSED: `Conexão recusada por ${host}. O serviço da Evolution API não está ouvindo nessa porta ou está parado.`,
+      ENOTFOUND: `Endereço ${host} não encontrado (DNS). Confira a variável EVOLUTION_API_URL.`,
+      AbortError: `O servidor ${host} não respondeu a tempo. Confira se está online e acessível pela internet.`,
+      EPROTO: `Erro de protocolo com ${host}. Verifique se a URL usa http/https corretamente.`,
+    }
+    const error =
+      diagnosticos[cause] ??
+      `Falha ao conectar com a Evolution API (${cause || "erro desconhecido"}) em ${host}.`
+    return NextResponse.json({ error, code: cause || "UNKNOWN" }, { status: 502 })
+  }
+}
+
+// Extrai apenas host:porta da URL para exibir no diagnóstico sem vazar caminhos/chaves
+function safeHost(url: string): string {
+  try {
+    const u = new URL(url)
+    return u.port ? `${u.hostname}:${u.port}` : u.hostname
+  } catch {
+    return "o servidor configurado"
   }
 }

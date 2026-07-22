@@ -21,7 +21,7 @@ export function WhatsappConnectionCard({
   const [numero, setNumero] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [carregandoStatus, setCarregandoStatus] = useState(true)
-  const instanceNameRef = useRef<string | null>(null)
+  const [instanceName, setInstanceName] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const stopPolling = useCallback(() => {
@@ -31,15 +31,24 @@ export function WhatsappConnectionCard({
     }
   }, [])
 
-  const instanceName = `corretor-${corretorId.slice(0, 8)}`
-
-  // Carrega o status atual ao montar
+  // Ao montar: garante a instância (nomeada com o corretor) e carrega o status atual
   useEffect(() => {
-    instanceNameRef.current = instanceName
     let ativo = true
     ;(async () => {
       try {
-        const res = await fetch(`/api/whatsapp/status?instanceName=${encodeURIComponent(instanceName)}`)
+        const ensure = await fetch("/api/whatsapp/instancias", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ corretorId, corretorNome }),
+        })
+        const ej = await ensure.json()
+        const name: string | undefined = ej?.data?.instance_name
+        if (!ativo || !name) {
+          if (ativo) setCarregandoStatus(false)
+          return
+        }
+        setInstanceName(name)
+        const res = await fetch(`/api/whatsapp/status?instanceName=${encodeURIComponent(name)}`)
         const json = await res.json()
         if (!ativo) return
         if (json.status === "conectado") {
@@ -56,46 +65,57 @@ export function WhatsappConnectionCard({
       ativo = false
       stopPolling()
     }
-  }, [instanceName, stopPolling])
+  }, [corretorId, corretorNome, stopPolling])
 
-  const iniciarPolling = useCallback(() => {
-    stopPolling()
-    const inicio = Date.now()
-    pollRef.current = setInterval(async () => {
-      if (Date.now() - inicio > 60_000) {
-        stopPolling()
-        return
-      }
-      try {
-        const res = await fetch(`/api/whatsapp/status?instanceName=${encodeURIComponent(instanceName)}`)
-        const json = await res.json()
-        if (json.status === "conectado") {
-          setEstado("conectado")
-          setNumero(json.numero ?? null)
-          setQrCode(null)
+  const iniciarPolling = useCallback(
+    (name: string) => {
+      stopPolling()
+      const inicio = Date.now()
+      pollRef.current = setInterval(async () => {
+        if (Date.now() - inicio > 120_000) {
           stopPolling()
+          return
         }
-      } catch {
-        /* continua tentando */
-      }
-    }, 4000)
-  }, [instanceName, stopPolling])
+        try {
+          const res = await fetch(`/api/whatsapp/status?instanceName=${encodeURIComponent(name)}`)
+          const json = await res.json()
+          if (json.status === "conectado") {
+            setEstado("conectado")
+            setNumero(json.numero ?? null)
+            setQrCode(null)
+            stopPolling()
+          }
+        } catch {
+          /* continua tentando */
+        }
+      }, 4000)
+    },
+    [stopPolling],
+  )
 
   async function conectar() {
     setEstado("gerando_qr")
     setErro(null)
     try {
-      // Garante a instância no banco
-      await fetch("/api/whatsapp/instancias", {
+      // Garante a instância no banco (nomeada com o corretor) e obtém o nome oficial
+      const ensure = await fetch("/api/whatsapp/instancias", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ corretorId }),
+        body: JSON.stringify({ corretorId, corretorNome }),
       })
+      const ej = await ensure.json()
+      const name: string | undefined = ej?.data?.instance_name ?? instanceName ?? undefined
+      if (!name) {
+        setEstado("erro")
+        setErro("Não foi possível preparar a instância do corretor.")
+        return
+      }
+      setInstanceName(name)
       // Solicita o QR
       const res = await fetch("/api/whatsapp/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instanceName }),
+        body: JSON.stringify({ instanceName: name }),
       })
       const json = await res.json()
       if (!res.ok || !json.qrCode) {
@@ -105,7 +125,7 @@ export function WhatsappConnectionCard({
       }
       setQrCode(json.qrCode)
       setEstado("aguardando_leitura")
-      iniciarPolling()
+      iniciarPolling(name)
     } catch {
       setEstado("erro")
       setErro("Falha de conexão. Tente novamente.")
