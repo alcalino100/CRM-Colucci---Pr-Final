@@ -67,6 +67,7 @@ interface Store {
   logChange: (e: Omit<ChangeLog, "id" | "dataHora">) => void
   logAudit: (e: AuditInput) => void
   addQualityNote: (leadId: string, texto: string) => void
+  addJustification: (leadId: string, motivo: string, observacao?: string) => Promise<{ ok: boolean; error?: string }>
   addUser: (u: Omit<User, "id" | "criadoEm">) => { ok: boolean; error?: string }
   updateUser: (id: string, patch: Partial<User>) => { ok: boolean; error?: string }
   updateProfile: (patch: { avatar?: string; senha?: string }) => Promise<{ ok: boolean; error?: string }>
@@ -260,7 +261,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   }, [userId, userRole])
 
   useEffect(() => {
-    loadLeads(); loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadJustifications(); loadQuality(); loadAudit()
+    loadLeads(); loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadQuality(); loadAudit()
 
     const canal = supabase
       .channel("crm-realtime")
@@ -276,7 +277,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     return () => {
       supabase.removeChannel(canal)
     }
-  }, [loadLeads, loadVisits, loadUsers, loadNotifications, loadAdminNotifications, loadJustifications, loadQuality, loadAudit, processScheduledNotifications, userRole])
+  }, [loadLeads, loadVisits, loadUsers, loadNotifications, loadAdminNotifications, loadQuality, loadAudit, processScheduledNotifications, userRole])
 
   const userName = (id: string) => users.find((u) => u.id === id)?.nome ?? "—"
 
@@ -480,6 +481,52 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     await loadVisits()
   }
 
+  const addJustification: Store["addJustification"] = async (leadId, motivo, observacao) => {
+    const lead = leads.find((item) => item.id === leadId)
+    if (!lead || !user || (user.role !== "gestor" && lead.corretorId !== user.id)) return { ok: false, error: "Você não tem permissão para justificar este lead." }
+    const cleanReason = motivo.trim()
+    const cleanNote = observacao?.trim() ?? ""
+    if (!cleanReason || (cleanReason === "Outro" && !cleanNote)) return { ok: false, error: "Informe o motivo e detalhe a opção Outro." }
+    const now = new Date().toISOString()
+    const { data, error } = await supabase.from("justificativas_operacionais").insert({
+      lead_id: leadId,
+      motivo: cleanReason,
+      observacao: cleanNote || null,
+      etapa: lead.status,
+      autor_id: user.id,
+      autor_nome: user.nome,
+    }).select("*").single()
+    if (error || !data) return { ok: false, error: error?.message ?? "Não foi possível confirmar a justificativa." }
+    const { error: updateError } = await supabase.from("leads").update({ atualizado_em: now }).eq("id", leadId)
+    if (updateError) return { ok: false, error: updateError.message }
+    logAudit({ leadId, leadNome: lead.nome, usuarioNome: user.nome, tipo: "justificativa", descricao: `Lead parado: ${cleanReason}${cleanNote ? ` — ${cleanNote}` : ""}` })
+    setJustifications((current) => [rowToJustification(data), ...current.filter((item) => item.id !== data.id)])
+    await loadLeads()
+    return { ok: true }
+  }
+
+  // ---------- Observações internas de qualidade (somente gestores) ----------
+  const addQualityNote: Store["addQualityNote"] = (leadId, texto) => {
+    if (userRole !== "gestor" || !texto.trim()) return
+    const lead = leads.find((l) => l.id === leadId)
+    void supabase.from("observacoes_qualidade").insert({
+      lead_id: leadId,
+      autor_id: userId || null,
+      autor_nome: user?.nome ?? "Gestor",
+      texto: texto.trim(),
+    }).then(() => loadQuality())
+    logAudit({ leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? "Gestor", tipo: "qualidade", descricao: "Observação interna de qualidade registrada" })
+  }
+
+  // ---------- Usuários ----------
+  const addUser: Store["addUser"] = (u) => {
+    const email = u.email.trim().toLowerCase()
+    if (users.some((x) => x.email.toLowerCase() === email)) return { ok: false, error: "E-mail já cadastrado." }
+    void supabase.from("usuarios").insert({
+      nome: u.nome, email, senha_hash: u.senha, role: u.role, status: u.ativo ? "ativo" : "inativo",
+    }).then(() => loadUsers())
+    return { ok: true }
+  }
   const updateUser: Store["updateUser"] = (id, patch) => {
     const email = patch.email ? patch.email.trim().toLowerCase() : undefined
     if (email && users.some((x) => x.id !== id && x.email.toLowerCase() === email)) return { ok: false, error: "E-mail já cadastrado." }
@@ -513,7 +560,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       value={{
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, corretores, userName,
         checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead,
-        addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote,
+        addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification,
         addUser, updateUser, updateProfile,
       }}
     >
