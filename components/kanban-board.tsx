@@ -41,47 +41,9 @@ export function KanbanBoard({
   const [submitting, setSubmitting] = useState(false)
   const [tempFilter, setTempFilter] = useState<Temperatura | "todas">("todas")
   const [query, setQuery] = useState("")
-  const [justificationLead, setJustificationLead] = useState<Lead | null>(null)
-  const [justificationReason, setJustificationReason] = useState("")
-  const [justificationNote, setJustificationNote] = useState("")
-  const [pendingAction, setPendingAction] = useState<null | (() => void)>(null)
 
   const usuarioNome = user ? userName(user.id) : "Sistema"
   const canManage = (lead: Lead) => isGestor || lead.corretorId === currentCorretorId
-  const isOverdue = (lead: Lead) => {
-    if (!FOLLOWUP_STATUSES.includes(lead.status) || !canManage(lead)) return false
-    let base = new Date(lead.atualizadoEm || lead.criadoEm).getTime()
-    if (lead.status === "visita agendada") {
-      const latestVisit = visits.filter((visit) => visit.leadId === lead.id).sort((a, b) => `${b.data}T${b.hora}`.localeCompare(`${a.data}T${a.hora}`))[0]
-      if (latestVisit) base = Math.max(base, new Date(`${latestVisit.data}T${latestVisit.hora || "00:00"}`).getTime())
-    }
-    const latestJustification = justifications.find((item) => item.leadId === lead.id)
-    if (latestJustification) base = Math.max(base, new Date(latestJustification.criadoEm).getTime())
-    return Date.now() > base + FOLLOWUP_PRAZO_MS
-  }
-  const requireJustification = (lead: Lead, action: () => void) => {
-    if (!isOverdue(lead)) return action()
-    setJustificationLead(lead)
-    setJustificationReason("")
-    setJustificationNote("")
-    setPendingAction(() => action)
-  }
-
-  async function confirmJustification(event: React.FormEvent) {
-    event.preventDefault()
-    if (!justificationLead || !justificationReason) return toast("Selecione um motivo.", "error")
-    if (justificationReason === "Outro" && !justificationNote.trim()) return toast("Descreva o motivo.", "error")
-    setSubmitting(true)
-    const result = await addJustification(justificationLead.id, justificationReason, justificationNote)
-    setSubmitting(false)
-    if (!result.ok) return toast(result.error ?? "Não foi possível registrar a justificativa.", "error")
-    const action = pendingAction
-    setJustificationLead(null)
-    setPendingAction(null)
-    toast("Justificativa registrada.")
-    action?.()
-  }
-
   function handleEditSubmit(v: LeadFormValues) {
     if (!editLead) return
     setSubmitting(true)
@@ -157,7 +119,7 @@ export function KanbanBoard({
     const newStatus = destination.droppableId as LeadStatus
     const lead = leads.find((l) => l.id === draggableId)
     if (!lead || !canManage(lead)) return
-    requireJustification(lead, () => moveLead(lead, newStatus))
+    moveLead(lead, newStatus)
   }
 
   function moveLead(lead: Lead, newStatus: LeadStatus) {
@@ -357,10 +319,9 @@ export function KanbanBoard({
                               showCorretor={showCorretor}
                               canManage={canManage(lead)}
                               podeExcluir={isGestor}
-                              overdue={isOverdue(lead)}
-                                onOpen={(item) => requireJustification(item, () => router.push(`/painel-corretor/${item.id}`))}
-                                onEdit={(item) => requireJustification(item, () => setEditLead(item))}
-                                onDelete={(item) => requireJustification(item, () => setDelLead(item))}
+                                                              onOpen={(item) => router.push(`/painel-corretor/${item.id}`)}
+                                onEdit={(item) => setEditLead(item)}
+                                onDelete={(item) => setDelLead(item)}
                               />
                             </div>
                           )}
@@ -377,26 +338,6 @@ export function KanbanBoard({
         </div>
       </DragDropContext>
       )}
-
-      <Dialog open={!!justificationLead} onClose={() => {}} title="Justificativa obrigatória">
-        <form onSubmit={confirmJustification} className="flex flex-col gap-4">
-          <p className="text-sm leading-relaxed text-muted-foreground">O lead <span className="font-semibold text-foreground">{justificationLead?.nome}</span> está há mais de 2 dias sem movimentação na etapa <span className="font-semibold text-foreground">{justificationLead ? STATUS_LABEL[justificationLead.status] : ""}</span>. Registre o follow-up para continuar.</p>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="justification-reason">Motivo *</Label>
-            <Select id="justification-reason" value={justificationReason} onChange={(event) => setJustificationReason(event.target.value)} required>
-              <option value="">Selecione</option>
-              {(justificationLead ? followupReasons(justificationLead.status) : []).map((reason) => (
-                <option key={reason} value={reason}>{reason}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="justification-note">Observação {justificationReason === "Outro" ? "*" : "(opcional)"}</Label>
-            <Textarea id="justification-note" value={justificationNote} onChange={(event) => setJustificationNote(event.target.value)} required={justificationReason === "Outro"} placeholder="Contextualize o motivo do atraso" />
-          </div>
-          <Button type="submit" disabled={submitting}>{submitting ? "Registrando..." : "Registrar e continuar"}</Button>
-        </form>
-      </Dialog>
 
       <Dialog open={!!visitLead} onClose={() => setVisitLead(null)} title="Agendar Visita">
         <form onSubmit={confirmVisit} className="flex flex-col gap-3">
