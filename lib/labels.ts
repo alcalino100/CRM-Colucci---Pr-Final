@@ -92,9 +92,7 @@ export function normalizePhone(phone: string) {
 
 // ---- Follow-up obrigatório por etapa ----
 // Prazo para exigir justificativa por falta de movimentação: 2 dias completos.
-export const FOLLOWUP_PRAZO_MS = 2 * 24 * 60 * 60 * 1000
 // Etapas que exigem follow-up (Fechado e Perdido não exigem).
-export const FOLLOWUP_STATUSES: LeadStatus[] = [
   "novo",
   "escolhendo opcoes",
   "imovel necessidade",
@@ -120,6 +118,18 @@ const FOLLOWUP_REASONS_NECESSIDADE = [
   "Sem resposta do lead",
 ]
 // Motivos coerentes por etapa (com "Outro" sempre ao final).
+
+// Motivos de exclusão de lead (com "Outro" ao final para detalhe livre)
+export const MOTIVOS_EXCLUSAO = [
+  "Lead duplicado",
+  "Dados incorretos / inválidos",
+  "Cadastro de teste",
+  "Solicitação do cliente (LGPD)",
+  "Spam / não é lead",
+  "Outro",
+] as const
+
+export const PROP_LABEL: Record<PropertyStatus, string> = { disponivel: "Disponível", vendido: "Vendido", alugado: "Alugado" }
 export const PROP_VARIANT: Record<PropertyStatus, string> = { disponivel: "green", vendido: "gray", alugado: "blue" }
 
 export const ROLE_VARIANT: Record<Role, string> = { gestor: "accent", corretor: "default" }
