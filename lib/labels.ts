@@ -120,22 +120,6 @@ const FOLLOWUP_REASONS_NECESSIDADE = [
   "Sem resposta do lead",
 ]
 // Motivos coerentes por etapa (com "Outro" sempre ao final).
-export function followupReasons(status: LeadStatus): string[] {
-  const list = status === "imovel necessidade" ? FOLLOWUP_REASONS_NECESSIDADE : FOLLOWUP_REASONS_BASE
-  return [...list, "Outro"]
-}
-
-// Motivos de exclusão de lead (com "Outro" ao final para detalhe livre)
-export const MOTIVOS_EXCLUSAO = [
-  "Lead duplicado",
-  "Dados incorretos / inválidos",
-  "Cadastro de teste",
-  "Solicitação do cliente (LGPD)",
-  "Spam / não é lead",
-  "Outro",
-] as const
-
-export const PROP_LABEL: Record<PropertyStatus, string> = { disponivel: "Disponível", vendido: "Vendido", alugado: "Alugado" }
 export const PROP_VARIANT: Record<PropertyStatus, string> = { disponivel: "green", vendido: "gray", alugado: "blue" }
 
 export const ROLE_VARIANT: Record<Role, string> = { gestor: "accent", corretor: "default" }
