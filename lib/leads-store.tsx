@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import {
   type AuditEntry,
   type AuditTipo,
@@ -175,8 +175,9 @@ function rowToJustification(r: any): OperationalJustification {
     motivo: r.motivo,
     observacao: r.observacao ?? undefined,
     etapa: normalizeStatus(r.etapa),
-    autorId: r.autor_id,
-    autorNome: r.autor_nome,
+    // A tabela real usa a coluna usuario_id (mantemos fallback p/ esquemas antigos)
+    autorId: r.usuario_id ?? r.autor_id ?? "",
+    autorNome: r.autor_nome ?? "",
     criadoEm: r.criado_em,
   }
 }
