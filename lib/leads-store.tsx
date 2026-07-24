@@ -67,7 +67,6 @@ interface Store {
   logChange: (e: Omit<ChangeLog, "id" | "dataHora">) => void
   logAudit: (e: AuditInput) => void
   addQualityNote: (leadId: string, texto: string) => void
-  addJustification: (leadId: string, motivo: string, observacao?: string) => Promise<{ ok: boolean; error?: string }>
   addUser: (u: Omit<User, "id" | "criadoEm">) => { ok: boolean; error?: string }
   updateUser: (id: string, patch: Partial<User>) => { ok: boolean; error?: string }
   updateProfile: (patch: { avatar?: string; senha?: string }) => Promise<{ ok: boolean; error?: string }>
@@ -259,6 +258,24 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     setScheduledNotifications([])
     if (sent) setSentNotifications(sent.map((r) => rowToNotification(r, userId)))
   }, [userId, userRole])
+  const loadJustifications = useCallback(async () => {
+    if (!userId) return
+    const { data } = await supabase.from("justificativas_operacionais").select("*").order("criado_em", { ascending: false })
+    if (data) setJustifications(data.map(rowToJustification))
+  }, [userId])
+  const loadQuality = useCallback(async () => {
+    if (userRole !== "gestor") return setQualityNotes([]) // corretores nunca carregam esse dado
+    const { data } = await supabase.from("observacoes_qualidade").select("*").order("criado_em", { ascending: false })
+    if (data) setQualityNotes(data.map(rowToQuality))
+  }, [userRole])
+  const loadAudit = useCallback(async () => {
+    if (userRole !== "gestor") return setAudit([])
+    const { data } = await supabase.from("auditoria").select("*").order("criado_em", { ascending: false }).limit(1000)
+    if (data) setAudit(data.map(rowToAudit))
+  }, [userRole])
+
+  // Agendamento de notificações desativado: o banco não possui a tabela notificacoes_agendadas.
+  const processScheduledNotifications = useCallback(async () => {}, [])
 
   useEffect(() => {
     loadLeads(); loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadQuality(); loadAudit()
@@ -560,8 +577,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       value={{
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, corretores, userName,
         checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead,
-        addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification,
-        addUser, updateUser, updateProfile,
+        addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addUser, updateUser, updateProfile,
       }}
     >
       {children}
