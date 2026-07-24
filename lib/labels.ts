@@ -93,31 +93,6 @@ export function normalizePhone(phone: string) {
 // ---- Follow-up obrigatório por etapa ----
 // Prazo para exigir justificativa por falta de movimentação: 2 dias completos.
 // Etapas que exigem follow-up (Fechado e Perdido não exigem).
-  "novo",
-  "escolhendo opcoes",
-  "imovel necessidade",
-  "visita agendada",
-  "negociando",
-]
-const FOLLOWUP_REASONS_BASE = [
-  "Aguardando retorno do cliente",
-  "Cliente pediu contato posterior",
-  "Aguardando documentos",
-  "Aguardando definição de imóvel",
-  "Não temos imóvel em carteira para o perfil buscado",
-  "Aguardando captação",
-  "Aguardando análise financeira",
-  "Aguardando retorno da gestão",
-  "Sem resposta do lead",
-]
-const FOLLOWUP_REASONS_NECESSIDADE = [
-  "Não temos imóvel compatível em carteira",
-  "Aguardando nova captação",
-  "Aguardando retorno sobre preferência do cliente",
-  "Aguardando análise financeira",
-  "Sem resposta do lead",
-]
-// Motivos coerentes por etapa (com "Outro" sempre ao final).
 
 // Motivos de exclusão de lead (com "Outro" ao final para detalhe livre)
 export const MOTIVOS_EXCLUSAO = [
