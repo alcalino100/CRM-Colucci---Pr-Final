@@ -67,7 +67,6 @@ interface Store {
   logChange: (e: Omit<ChangeLog, "id" | "dataHora">) => void
   logAudit: (e: AuditInput) => void
   addQualityNote: (leadId: string, texto: string) => void
-  addJustification: (leadId: string, motivo: string, observacao?: string) => Promise<{ ok: boolean; error?: string }>
   addUser: (u: Omit<User, "id" | "criadoEm">) => { ok: boolean; error?: string }
   updateUser: (id: string, patch: Partial<User>) => { ok: boolean; error?: string }
   updateProfile: (patch: { avatar?: string; senha?: string }) => Promise<{ ok: boolean; error?: string }>
@@ -259,24 +258,6 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     setScheduledNotifications([])
     if (sent) setSentNotifications(sent.map((r) => rowToNotification(r, userId)))
   }, [userId, userRole])
-  const loadJustifications = useCallback(async () => {
-    if (!userId) return
-    const { data } = await supabase.from("justificativas_operacionais").select("*").order("criado_em", { ascending: false })
-    if (data) setJustifications(data.map(rowToJustification))
-  }, [userId])
-  const loadQuality = useCallback(async () => {
-    if (userRole !== "gestor") return setQualityNotes([]) // corretores nunca carregam esse dado
-    const { data } = await supabase.from("observacoes_qualidade").select("*").order("criado_em", { ascending: false })
-    if (data) setQualityNotes(data.map(rowToQuality))
-  }, [userRole])
-  const loadAudit = useCallback(async () => {
-    if (userRole !== "gestor") return setAudit([])
-    const { data } = await supabase.from("auditoria").select("*").order("criado_em", { ascending: false }).limit(1000)
-    if (data) setAudit(data.map(rowToAudit))
-  }, [userRole])
-
-  // Agendamento de notificações desativado: o banco não possui a tabela notificacoes_agendadas.
-  const processScheduledNotifications = useCallback(async () => {}, [])
 
   useEffect(() => {
     loadLeads(); loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadJustifications(); loadQuality(); loadAudit()
@@ -288,7 +269,6 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "usuarios" }, loadUsers)
       .on("postgres_changes", { event: "*", schema: "public", table: "notificacoes" }, () => { loadNotifications(); loadAdminNotifications() })
       .on("broadcast", { event: "refresh" }, () => { loadNotifications(); loadAdminNotifications() })
-      .on("postgres_changes", { event: "*", schema: "public", table: "justificativas_operacionais" }, loadJustifications)
       .on("postgres_changes", { event: "*", schema: "public", table: "observacoes_qualidade" }, loadQuality)
       .on("postgres_changes", { event: "*", schema: "public", table: "auditoria" }, loadAudit)
       .subscribe()
@@ -500,52 +480,6 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     await loadVisits()
   }
 
-  const addJustification: Store["addJustification"] = async (leadId, motivo, observacao) => {
-    const lead = leads.find((item) => item.id === leadId)
-    if (!lead || !user || (user.role !== "gestor" && lead.corretorId !== user.id)) return { ok: false, error: "Você não tem permissão para justificar este lead." }
-    const cleanReason = motivo.trim()
-    const cleanNote = observacao?.trim() ?? ""
-    if (!cleanReason || (cleanReason === "Outro" && !cleanNote)) return { ok: false, error: "Informe o motivo e detalhe a opção Outro." }
-    const now = new Date().toISOString()
-    const { data, error } = await supabase.from("justificativas_operacionais").insert({
-      lead_id: leadId,
-      motivo: cleanReason,
-      observacao: cleanNote || null,
-      etapa: lead.status,
-      autor_id: user.id,
-      autor_nome: user.nome,
-    }).select("*").single()
-    if (error || !data) return { ok: false, error: error?.message ?? "Não foi possível confirmar a justificativa." }
-    const { error: updateError } = await supabase.from("leads").update({ atualizado_em: now }).eq("id", leadId)
-    if (updateError) return { ok: false, error: updateError.message }
-    logAudit({ leadId, leadNome: lead.nome, usuarioNome: user.nome, tipo: "justificativa", descricao: `Lead parado: ${cleanReason}${cleanNote ? ` — ${cleanNote}` : ""}` })
-    setJustifications((current) => [rowToJustification(data), ...current.filter((item) => item.id !== data.id)])
-    await loadLeads()
-    return { ok: true }
-  }
-
-  // ---------- Observações internas de qualidade (somente gestores) ----------
-  const addQualityNote: Store["addQualityNote"] = (leadId, texto) => {
-    if (userRole !== "gestor" || !texto.trim()) return
-    const lead = leads.find((l) => l.id === leadId)
-    void supabase.from("observacoes_qualidade").insert({
-      lead_id: leadId,
-      autor_id: userId || null,
-      autor_nome: user?.nome ?? "Gestor",
-      texto: texto.trim(),
-    }).then(() => loadQuality())
-    logAudit({ leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? "Gestor", tipo: "qualidade", descricao: "Observação interna de qualidade registrada" })
-  }
-
-  // ---------- Usuários ----------
-  const addUser: Store["addUser"] = (u) => {
-    const email = u.email.trim().toLowerCase()
-    if (users.some((x) => x.email.toLowerCase() === email)) return { ok: false, error: "E-mail já cadastrado." }
-    void supabase.from("usuarios").insert({
-      nome: u.nome, email, senha_hash: u.senha, role: u.role, status: u.ativo ? "ativo" : "inativo",
-    }).then(() => loadUsers())
-    return { ok: true }
-  }
   const updateUser: Store["updateUser"] = (id, patch) => {
     const email = patch.email ? patch.email.trim().toLowerCase() : undefined
     if (email && users.some((x) => x.id !== id && x.email.toLowerCase() === email)) return { ok: false, error: "E-mail já cadastrado." }
@@ -579,7 +513,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       value={{
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, corretores, userName,
         checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead,
-        addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification,
+        addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote,
         addUser, updateUser, updateProfile,
       }}
     >
