@@ -16,7 +16,7 @@ import type { AuditTipo } from "@/lib/mock-data"
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { user } = useAuth()
-  const { getLead, addInteraction, qualityNotes, justifications, audit, addQualityNote } = useLeads()
+  const { getLead, addInteraction, qualityNotes, audit, addQualityNote } = useLeads()
   const toast = useToast()
   const [nota, setNota] = useState("")
   const [qualiTexto, setQualiTexto] = useState("")
