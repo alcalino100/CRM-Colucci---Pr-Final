@@ -434,6 +434,13 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     return { ok: true }
   }
 
+  const assumirLead: Store["assumirLead"] = async (leadId) => {
+    const { error } = await supabase.from("leads").update({ gestor_responsavel: user?.id || null }).eq("id", leadId)
+    if (error) return { ok: false, error: error.message }
+    await loadLeads()
+    return { ok: true }
+  }
+
   const deleteLead: Store["deleteLead"] = async (id, motivo, motivoDetalhe) => {
     // Somente gestores podem excluir leads
     if (user?.role !== "gestor") return { ok: false, error: "Apenas gestores podem excluir leads." }
