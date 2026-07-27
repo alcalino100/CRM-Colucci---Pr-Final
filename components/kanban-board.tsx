@@ -35,6 +35,7 @@ export function KanbanBoard({
   const [propLead, setPropLead] = useState<Lead | null>(null)
   const [closeLead, setCloseLead] = useState<Lead | null>(null)
   const [editLead, setEditLead] = useState<Lead | null>(null)
+  const [assumirLead, setAssumirLead] = useState<Lead | null>(null)
   const [delLead, setDelLead] = useState<Lead | null>(null)
   const [delMotivo, setDelMotivo] = useState("")
   const [delDetalhe, setDelDetalhe] = useState("")
