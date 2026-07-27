@@ -27,7 +27,7 @@ export function KanbanBoard({
   isGestor?: boolean
   heightClass?: string
 }) {
-  const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, visits, corretores, userName } = useLeads()
+  const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, assumeLead, visits, corretores, userName } = useLeads()
   const { user } = useAuth()
   const router = useRouter()
   const toast = useToast()
