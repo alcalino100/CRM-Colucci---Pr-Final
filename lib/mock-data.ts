@@ -4,6 +4,7 @@ export type LeadStatus =
   | "escolhendo opcoes"
   | "imovel necessidade"
   | "visita agendada"
+  | "em_atendimento"
   | "negociando"
   | "fechado"
   | "perdido"
@@ -75,6 +76,7 @@ export interface Lead {
   status: LeadStatus
   valorNegociacao?: number
   corretorId: string
+  gestorResponsavel?: string // gestor dando suporte ao corretor
   criadoEm: string
   atualizadoEm: string
   interacoes: Interaction[]
@@ -86,6 +88,7 @@ export interface Visit {
   data: string // YYYY-MM-DD
   hora: string // HH:mm
   corretorId: string
+  gestorResponsavel?: string // gestor dando suporte ao corretor
   imovelRef: string
   referencias?: string
   observacoes: string
