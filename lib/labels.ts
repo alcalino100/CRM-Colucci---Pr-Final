@@ -43,6 +43,7 @@ export function refsTexto(l: Pick<Lead, "referencias" | "imovelRef">) {
 
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   novo: "Novo Lead",
+  "em_atendimento": "Em Atendimento",
   "escolhendo opcoes": "Separando Opções",
   "imovel necessidade": "Imóvel - Necessidade",
   "visita agendada": "Visita Agendada",
@@ -52,6 +53,7 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
 }
 export const STATUS_VARIANT: Record<LeadStatus, string> = {
   novo: "blue",
+  "em_atendimento": "indigo",
   "escolhendo opcoes": "slate",
   "imovel necessidade": "teal",
   "visita agendada": "amber",
@@ -62,6 +64,7 @@ export const STATUS_VARIANT: Record<LeadStatus, string> = {
 // cor de acento (topo da coluna do kanban)
 export const STATUS_ACCENT: Record<LeadStatus, string> = {
   novo: "#0ea5e9",
+  "em_atendimento": "#4f46e5",
   "escolhendo opcoes": "#54595f",
   "imovel necessidade": "#0d9488",
   "visita agendada": "#f59e0b",
@@ -71,6 +74,7 @@ export const STATUS_ACCENT: Record<LeadStatus, string> = {
 }
 export const LEAD_STATUSES: LeadStatus[] = [
   "novo",
+  "em_atendimento",
   "escolhendo opcoes",
   "imovel necessidade",
   "visita agendada",
