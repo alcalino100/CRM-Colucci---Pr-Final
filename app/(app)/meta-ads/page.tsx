@@ -18,6 +18,7 @@ import { useLeads } from "@/lib/leads-store"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Select, Skeleton, Input } from "@/components/ui/primitives"
 import { brl } from "@/lib/labels"
 import { cn } from "@/lib/utils"
+import MetaAiChat from "@/components/meta-ai-chat"
 
 // ---------- helpers ----------
 const fetcher = (u: string) => fetch(u).then(async (r) => {
@@ -324,6 +325,9 @@ function MetaAdsDashboard() {
           </>
         )}
       </div>
+
+      {/* IA Chat flutuante */}
+      <MetaAiChat />
 
       {/* Gráficos */}
       <div className="grid gap-4 xl:grid-cols-2">
