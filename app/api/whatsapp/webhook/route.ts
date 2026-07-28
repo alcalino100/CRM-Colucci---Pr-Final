@@ -101,17 +101,39 @@ async function handleMessageUpsert(payload: any) {
   let metaCampaignId: string | null = null
   let metaAdsetId: string | null = null
   let metaAdId: string | null = anuncioId
+  let nomeAnuncio: string | null = null
+  let nomeCampanha: string | null = null
+  let nomeConjunto: string | null = null
 
   if (anuncioId) {
     const { data: metaAd } = await wsupabase
       .from("meta_ads")
-      .select("campanha_id, adset_id")
+      .select("campanha_id, adset_id, nome")
       .eq("id", anuncioId)
       .maybeSingle()
     if (metaAd) {
       metaCampaignId = metaAd.campanha_id ?? null
       metaAdsetId = metaAd.adset_id ?? null
+      nomeAnuncio = metaAd.nome ?? null
     }
+  }
+
+  if (metaCampaignId) {
+    const { data: campanha } = await wsupabase
+      .from("meta_campanhas")
+      .select("nome")
+      .eq("id", metaCampaignId)
+      .maybeSingle()
+    nomeCampanha = campanha?.nome ?? null
+  }
+
+  if (metaAdsetId) {
+    const { data: conjunto } = await wsupabase
+      .from("meta_adsets")
+      .select("nome")
+      .eq("id", metaAdsetId)
+      .maybeSingle()
+    nomeConjunto = conjunto?.nome ?? null
   }
 
   const { data: candidatos } = await wsupabase.from("leads").select("id, telefone, corretor_id, status")
@@ -125,7 +147,11 @@ async function handleMessageUpsert(payload: any) {
 
   if (!existente) {
     // Caso A: novo lead via tráfego pago
-    const obs = `Lead criado automaticamente via WhatsApp (Click-to-WhatsApp Ad${anuncioTitulo ? ": " + anuncioTitulo : ""})`
+    const partesObs: string[] = ["Lead criado automaticamente via WhatsApp (Click-to-WhatsApp)"]
+    if (nomeAnuncio || anuncioTitulo) partesObs.push(`Anúncio: ${nomeAnuncio || anuncioTitulo}`)
+    if (nomeCampanha) partesObs.push(`Campanha: ${nomeCampanha}`)
+    if (nomeConjunto) partesObs.push(`Conjunto: ${nomeConjunto}`)
+    const obs = partesObs.join("\n")
     const { data: novo, error } = await wsupabase
       .from("leads")
       .insert({
