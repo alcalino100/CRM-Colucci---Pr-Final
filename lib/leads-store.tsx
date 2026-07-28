@@ -90,6 +90,7 @@ function rowToLead(r: any): Lead {
     metaCampaignId: r.meta_campaign_id ?? undefined,
     metaAdsetId: r.meta_adset_id ?? undefined,
     metaAdId: r.meta_ad_id ?? undefined,
+    arquivadoEm: r.arquivado_em ?? undefined,
     origem: (r.origem ?? "Outro") as Origem,
     observacoes: r.observacoes ?? "",
     status: normalizeStatus(r.status ?? "novo"),

@@ -77,9 +77,10 @@ export interface Lead {
   status: LeadStatus
   valorNegociacao?: number
   corretorId: string
-  gestorResponsavel?: string // gestor dando suporte ao corretor
+  gestorResponsavel?: string
   criadoEm: string
   atualizadoEm: string
+  arquivadoEm?: string
   interacoes: Interaction[]
 }
 

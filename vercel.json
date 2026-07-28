@@ -1,5 +1,6 @@
 {
   "crons": [
-    { "path": "/api/meta-sync", "schedule": "0 9 * * *" }
+    { "path": "/api/meta-sync", "schedule": "0 9 * * *" },
+    { "path": "/api/archive-leads", "schedule": "0 0 1 * *" }
   ]
 }

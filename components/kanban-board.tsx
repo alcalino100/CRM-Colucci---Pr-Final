@@ -42,6 +42,7 @@ export function KanbanBoard({
   const [submitting, setSubmitting] = useState(false)
   const [tempFilter, setTempFilter] = useState<Temperatura | "todas">("todas")
   const [query, setQuery] = useState("")
+  const [showArchived, setShowArchived] = useState(false)
 
   const usuarioNome = user ? userName(user.id) : "Sistema"
   const canManage = (lead: Lead) => isGestor || lead.corretorId === currentCorretorId
@@ -220,7 +221,12 @@ export function KanbanBoard({
       (l.observacoes ?? "").toLowerCase().includes(q)
     )
   }
-  const filtered = leads.filter((l) => (tempFilter === "todas" || l.temperatura === tempFilter) && matchesQuery(l))
+  const filtered = leads.filter(
+    (l) =>
+      (showArchived || !l.arquivadoEm) &&
+      (tempFilter === "todas" || l.temperatura === tempFilter) &&
+      matchesQuery(l),
+  )
   const byStatus = (s: LeadStatus) => filtered.filter((l) => l.status === s)
   const noResults = !!q && filtered.length === 0
 
@@ -270,6 +276,14 @@ export function KanbanBoard({
               {TEMP_LABEL[t]}
             </button>
           ))}
+          <span className="ml-2 h-5 w-px bg-border" aria-hidden />
+          <button
+            type="button"
+            onClick={() => setShowArchived(!showArchived)}
+            className={chip(showArchived, "#a1a1aa")}
+          >
+            {showArchived ? "Ocultar arquivados" : "Mostrar arquivados"}
+          </button>
         </div>
       </div>
       {noResults ? (
