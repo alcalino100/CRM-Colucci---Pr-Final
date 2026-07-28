@@ -79,37 +79,39 @@ LEADS RECENTES (${leadsTotal} total):
 ${(leadsData.data ?? []).slice(0, 5).map((l: any) => `- Lead #${l.id.slice(0, 8)} | Status: ${l.status ?? "novo"} | Corretor: ${l.corretor_id ?? "não atribuído"}`).join("\n")}`
 
     if (GEMINI_KEY) {
-      const systemPrompt = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO de forma clara e direta, como se fosse um especialista conversando com o gestor da imobiliária.
-
-Você tem acesso aos dados reais da conta de anúncios. Use esses dados para responder. Seja específico: mencione nomes de campanhas, valores, métricas. Não invente dados.
-
-Máximo 4 parágrafos por resposta. Seja conciso. Se não souber, diga que não tem dados suficientes.`
-
-      const contents = [
-        { role: "user", parts: [{ text: systemPrompt + "\n\n" + dadosContexto }] },
-        ...history.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-        { role: "user", parts: [{ text: message }] },
-      ]
-
       try {
+        const systemPrompt = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO de forma clara e direta, como se fosse um especialista conversando com o gestor da imobiliária. Use os dados fornecidos para responder. Seja específico: mencione nomes de campanhas, valores, métricas. Nunca invente dados. Máximo 4 parágrafos. Se não souber, diga que não tem dados suficientes.`
+
+        const gemBody = {
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [
+            { role: "user", parts: [{ text: dadosContexto }] },
+            { role: "model", parts: [{ text: "Entendi os dados. Agora vou responder a pergunta do usuário." }] },
+            ...history.map((m) => ({
+              role: m.role === "assistant" ? "model" as const : "user" as const,
+              parts: [{ text: m.content }],
+            })),
+            { role: "user", parts: [{ text: message }] },
+          ],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+        }
+
         const gemRes = await fetch(`${GEMINI_URL}?key=${GEMINI_KEY}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents,
-            generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
-          }),
+          body: JSON.stringify(gemBody),
         })
 
         if (gemRes.ok) {
           const gemJson = await gemRes.json()
           const text = gemJson?.candidates?.[0]?.content?.parts?.[0]?.text || ""
-          return NextResponse.json({ response: text || "Não consegui gerar uma análise agora." })
+          if (text) return NextResponse.json({ response: text })
         }
+
         const errText = await gemRes.text()
-        return NextResponse.json({ response: fallbackResposta(message, campGasto, campMap, leadsData, gastoTotal, leadsTotal, cpl) })
-      } catch {
-        return NextResponse.json({ response: fallbackResposta(message, campGasto, campMap, leadsData, gastoTotal, leadsTotal, cpl) })
+        console.error("Gemini error:", gemRes.status, errText.slice(0, 300))
+      } catch (e) {
+        console.error("Gemini exception:", e)
       }
     }
 
