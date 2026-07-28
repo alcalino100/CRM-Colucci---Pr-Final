@@ -375,7 +375,6 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   // ---------- Ações de LEAD ----------
   // Verifica telefone duplicado em toda a base carregada (todos os corretores/gestores).
-  const checkPhoneDuplicate: Store["checkPhoneDuplicate"] = (phone, excludeId) => {
     const alvo = normalizePhone(phone)
     if (!alvo) return null
     const found = leads.find((l) => l.id !== excludeId && normalizePhone(l.telefone) === alvo)
@@ -388,8 +387,6 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   const addLead: Store["addLead"] = async (l) => {
     const autor = user?.nome ?? "Sistema"
-    const dup = checkPhoneDuplicate(l.telefone)
-    if (dup) return { ok: false, error: "Este telefone já está cadastrado em outro lead." }
     const { data, error } = await supabase.from("leads").insert({
       nome: l.nome,
       telefone: l.telefone,
