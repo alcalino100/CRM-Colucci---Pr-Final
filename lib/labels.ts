@@ -79,11 +79,11 @@ export const LEAD_STATUSES: LeadStatus[] = [
   "novo",
   "em_atendimento",
   "escolhendo opcoes",
-  "imovel necessidade",
-  "permuta",
   "visita agendada",
   "negociando",
   "fechado",
+  "imovel necessidade",
+  "permuta",
   "perdido",
 ]
 // Mapeia status legados do banco para os atuais
