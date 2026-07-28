@@ -97,6 +97,23 @@ async function handleMessageUpsert(payload: any) {
   }
 
   // A partir daqui: mensagem confirmadamente vinda de anúncio (Click-to-WhatsApp).
+  // Busca informações de rastreamento Meta a partir do anúncio detectado
+  let metaCampaignId: string | null = null
+  let metaAdsetId: string | null = null
+  let metaAdId: string | null = anuncioId
+
+  if (anuncioId) {
+    const { data: metaAd } = await wsupabase
+      .from("meta_ads")
+      .select("campanha_id, adset_id")
+      .eq("id", anuncioId)
+      .maybeSingle()
+    if (metaAd) {
+      metaCampaignId = metaAd.campanha_id ?? null
+      metaAdsetId = metaAd.adset_id ?? null
+    }
+  }
+
   const { data: candidatos } = await wsupabase.from("leads").select("id, telefone, corretor_id, status")
   const existente = (candidatos ?? []).find((l) => onlyDigits(l.telefone) === telefone)
 
@@ -122,6 +139,9 @@ async function handleMessageUpsert(payload: any) {
         observacoes: obs,
         status: "novo",
         corretor_id: corretorId,
+        meta_campaign_id: metaCampaignId,
+        meta_adset_id: metaAdsetId,
+        meta_ad_id: metaAdId,
       })
       .select("id")
       .maybeSingle()
