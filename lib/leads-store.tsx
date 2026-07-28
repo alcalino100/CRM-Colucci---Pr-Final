@@ -402,7 +402,6 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       corretor_id: l.corretorId || null,
     }).select("id").maybeSingle()
     if (error) {
-      if (isPhoneUniqueViolation(error)) return { ok: false, error: "Este telefone já está cadastrado em outro lead." }
       return { ok: false, error: "Não foi possível cadastrar o lead. Tente novamente." }
     }
     const leadId = data?.id ?? null
@@ -417,15 +416,12 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   const updateLead: Store["updateLead"] = async (id, patch) => {
     if (patch.telefone !== undefined) {
-      const dup = checkPhoneDuplicate(patch.telefone, id)
-      if (dup) return { ok: false, error: "Este telefone já está cadastrado em outro lead." }
     }
     const { error } = await supabase
       .from("leads")
       .update({ ...leadPatchToRow(patch), atualizado_em: new Date().toISOString() })
       .eq("id", id)
     if (error) {
-      if (isPhoneUniqueViolation(error)) return { ok: false, error: "Este telefone já está cadastrado em outro lead." }
       return { ok: false, error: "Não foi possível salvar as alterações. Tente novamente." }
     }
     await loadLeads()
