@@ -221,19 +221,19 @@ ${adsStr || "(nenhum com dados)"}`
         console.error("GEMINI_API_KEY parece inválida (muito curta)")
       } else {
         try {
-          const sistema = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO de forma clara, direta e amigável. Mencione nomes exatos, valores e métricas. Não invente dados. Máximo 5 itens. Máximo 4 parágrafos.`
+          const sistema = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO. Seja direto — NÃO cumprimente, NÃO se apresente. Vá direto aos dados e recomendações. Mencione nomes e valores exatos. Não invente dados.`
 
           const gemBody = {
             contents: [
               { role: "user", parts: [{ text: `${sistema}\n\n${dadosContexto}` }] },
-              { role: "model", parts: [{ text: "Ok, entendi os dados. Vou responder com base neles." }] },
+              { role: "model", parts: [{ text: "Entendido. Vou responder direto ao ponto com base nos dados." }] },
               ...history.map((m) => ({
                 role: m.role === "assistant" ? "model" as const : "user" as const,
                 parts: [{ text: m.content }],
               })),
               { role: "user", parts: [{ text: message }] },
             ],
-            generationConfig: { temperature: 0.5, maxOutputTokens: 1024 },
+            generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
           }
 
           const gemRes = await fetch(`${GEMINI_URL}?key=${GEMINI_KEY}`, {
@@ -244,11 +244,16 @@ ${adsStr || "(nenhum com dados)"}`
 
           if (gemRes.ok) {
             const gemJson = await gemRes.json()
-            const text = gemJson?.candidates?.[0]?.content?.parts?.[0]?.text || ""
+            const cand = gemJson?.candidates?.[0]
+            const text = cand?.content?.parts?.[0]?.text || ""
+            const reason = cand?.finishReason || ""
+            if (reason === "SAFETY") {
+              console.error("Gemini: bloqueado por segurança", JSON.stringify(cand?.safetyRatings))
+            }
             if (text) {
               return NextResponse.json({ response: text + "\n\n— 🤖 Análise por IA Gemini" })
             }
-            console.error("Gemini: resposta vazia", JSON.stringify(gemJson).slice(0, 300))
+            console.error("Gemini: resposta vazia, finishReason:", reason, JSON.stringify(gemJson).slice(0, 300))
           } else {
             const errText = await gemRes.text()
             console.error("Gemini HTTP error:", gemRes.status, errText.slice(0, 500))
