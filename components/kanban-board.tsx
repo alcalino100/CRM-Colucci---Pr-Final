@@ -212,7 +212,7 @@ export function KanbanBoard({
   async function handleAssumir() {
     if (!assumirDialog || !user) return
     const novoGestor = assumirDialog.gestorResponsavel ? null : user.id
-    const res = await assumirLead(assumirDialog.id)
+    const res = await updateLead(assumirDialog.id, { gestorResponsavel: novoGestor })
     if (!res.ok) return toast(res.error ?? "Erro ao assumir lead.", "error")
     const msg = novoGestor
       ? `Gestor ${userName(user.id)} assumiu a supervisão do lead ${assumirDialog.nome}`
