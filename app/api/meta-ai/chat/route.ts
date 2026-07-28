@@ -60,49 +60,66 @@ export async function POST(req: Request) {
       leadsPorCamp.set(cid, (leadsPorCamp.get(cid) ?? 0) + 1)
     }
 
-    // Constrói contexto a partir da Meta API (dados frescos)
+    // Constrói contexto: Meta API (fresco) ou Supabase (cache) ou só leads
     let dadosContexto = ""
     let totalSpend = 0
     let totalResults = 0
     let totalLeads = leadsData?.length ?? 0
     let campanhasContext: { id: string; nome: string; gasto: number; resultados: number; impressoes: number; cliques: number; ctr: number; cpc: number; leads: number }[] = []
 
+    // Tenta buscar dados da Meta API (rota preferencial)
+    let metaOk = false
     if (token) {
       try {
-        const accId = process.env.META_AD_ACCOUNT_ID
-        const conta = accId?.startsWith("act_") ? accId : `act_${accId}`
-        const range = `time_range=${encodeURIComponent(JSON.stringify({ since: trintaDias, until: hoje }))}`
-        const fields = "campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type"
-        const url = `${BASE}/${conta}/insights?level=campaign&fields=${fields}&${range}&limit=500&access_token=${token}`
+        // Descobre a conta de anúncios (mesmo método do /api/meta)
+        const accsRes = await fetch(`${BASE}/me/adaccounts?fields=id&limit=1&access_token=${token}`)
+        const accsJson = await accsRes.json()
+        let contaId = accsJson?.data?.[0]?.id ||
+          process.env.META_AD_ACCOUNT_ID ||
+          ""
 
-        const res = await fetch(url)
-        const json = await res.json()
-        const data: any[] = json.data || []
+        if (contaId) {
+          if (!contaId.startsWith("act_")) contaId = `act_${contaId}`
+          const range = `time_range=${encodeURIComponent(JSON.stringify({ since: trintaDias, until: hoje }))}`
+          const fields = "campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type"
+          const url = `${BASE}/${contaId}/insights?level=campaign&fields=${fields}&${range}&limit=500&access_token=${token}`
 
-        for (const r of data) {
-          const spend = Number(r.spend || 0)
-          const resCount = resultados(r.actions)
-          totalSpend += spend
-          totalResults += resCount
-          const campId = r.campaign_id
-          campanhasContext.push({
-            id: campId,
-            nome: r.campaign_name || campId,
-            gasto: spend,
-            resultados: resCount,
-            impressoes: Number(r.impressions || 0),
-            cliques: Number(r.clicks || 0),
-            ctr: Number(r.ctr || 0),
-            cpc: Number(r.cpc || 0),
-            leads: leadsPorCamp.get(campId) ?? 0,
-          })
+          const res = await fetch(url)
+          const json = await res.json()
+          const data: any[] = json.data || []
+
+          for (const r of data) {
+            const spend = Number(r.spend || 0)
+            const resCount = resultados(r.actions)
+            totalSpend += spend
+            totalResults += resCount
+            const campId = r.campaign_id
+            campanhasContext.push({
+              id: campId,
+              nome: r.campaign_name || campId,
+              gasto: spend,
+              resultados: resCount,
+              impressoes: Number(r.impressions || 0),
+              cliques: Number(r.clicks || 0),
+              ctr: Number(r.ctr || 0),
+              cpc: Number(r.cpc || 0),
+              leads: leadsPorCamp.get(campId) ?? 0,
+            })
+          }
+
+          campanhasContext.sort((a, b) => b.gasto - a.gasto)
+          metaOk = true
+        } else {
+          console.error("Nenhuma conta de anúncios encontrada via API ou env var")
         }
+      } catch (e: any) {
+        console.error("Meta API insight error:", e.message)
+      }
+    }
 
-        campanhasContext.sort((a, b) => b.gasto - a.gasto)
-
-        const cpl = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : "N/A"
-
-        dadosContexto = `CONTEXTO - DADOS REAIS DA CONTA META ADS (${trintaDias} a ${hoje}):
+    if (metaOk) {
+      const cpl = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : "N/A"
+      dadosContexto = `CONTEXTO - DADOS REAIS DA CONTA META ADS (${trintaDias} a ${hoje}):
 
 Gasto total: R$ ${totalSpend.toFixed(2)}
 Total de resultados (leads+conversas): ${totalResults}
@@ -117,43 +134,40 @@ ${campanhasContext.map(c =>
 
 LEADS RECENTES (${totalLeads} total):
 ${(leadsData ?? []).slice(0, 5).map((l: any) => `- Lead #${String(l.id).slice(0, 8)} | Status: ${l.status ?? "novo"} | Corretor: ${l.corretor_id ?? "não atribuído"}`).join("\n")}`
-      } catch (e: any) {
-        console.error("Meta API error:", e.message)
-        dadosContexto = `Dados da Meta API indisponíveis no momento. Use dados genéricos para responder.`
-      }
     } else {
-      // Sem token: usa dados dos leads do CRM + tabelas locais
-      const { data: campRows } = await supabase.from("meta_insights_campaign_daily").select("*")
-        .gte("data", trintaDias).lte("data", hoje)
-      const { data: campanhas } = await supabase.from("meta_campanhas").select("id, nome, status")
+      // Fallback: Supabase tables
+      try {
+        const { data: campRows } = await supabase.from("meta_insights_campaign_daily").select("*")
+          .gte("data", trintaDias).lte("data", hoje)
+        const { data: campanhas } = await supabase.from("meta_campanhas").select("id, nome, status")
 
-      const campMap = new Map((campanhas ?? []).map((c: any) => [c.id, c]))
-      const gastoPorCamp = new Map<string, { gasto: number; impressoes: number; cliques: number; conversas: number }>()
-      for (const r of campRows ?? []) {
-        const cur = gastoPorCamp.get(r.campanha_id) ?? { gasto: 0, impressoes: 0, cliques: 0, conversas: 0 }
-        cur.gasto += Number(r.gasto ?? 0)
-        cur.impressoes += Number(r.impressoes ?? 0)
-        cur.cliques += Number(r.cliques ?? 0)
-        cur.conversas += Number(r.mensagens_iniciadas ?? 0)
-        gastoPorCamp.set(r.campanha_id, cur)
-      }
-
-      totalSpend = [...gastoPorCamp.values()].reduce((s, g) => s + g.gasto, 0)
-      totalResults = [...gastoPorCamp.values()].reduce((s, g) => s + g.conversas, 0)
-      const cpl = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : "N/A"
-
-      campanhasContext = [...gastoPorCamp.entries()].map(([id, g]) => {
-        const c = campMap.get(id)
-        return {
-          id, nome: c?.nome ?? id, gasto: g.gasto, resultados: g.conversas,
-          impressoes: g.impressoes, cliques: g.cliques,
-          ctr: g.impressoes ? (g.cliques / g.impressoes) * 100 : 0,
-          cpc: g.cliques ? g.gasto / g.cliques : 0,
-          leads: leadsPorCamp.get(id) ?? 0,
+        const campMap = new Map((campanhas ?? []).map((c: any) => [c.id, c]))
+        const gastoPorCamp = new Map<string, { gasto: number; impressoes: number; cliques: number; conversas: number }>()
+        for (const r of campRows ?? []) {
+          const cur = gastoPorCamp.get(r.campanha_id) ?? { gasto: 0, impressoes: 0, cliques: 0, conversas: 0 }
+          cur.gasto += Number(r.gasto ?? 0)
+          cur.impressoes += Number(r.impressoes ?? 0)
+          cur.cliques += Number(r.cliques ?? 0)
+          cur.conversas += Number(r.mensagens_iniciadas ?? 0)
+          gastoPorCamp.set(r.campanha_id, cur)
         }
-      }).sort((a, b) => b.gasto - a.gasto)
 
-      dadosContexto = `CONTEXTO - DADOS DO BANCO LOCAL (${trintaDias} a ${hoje}):
+        totalSpend = [...gastoPorCamp.values()].reduce((s, g) => s + g.gasto, 0)
+        totalResults = [...gastoPorCamp.values()].reduce((s, g) => s + g.conversas, 0)
+
+        campanhasContext = [...gastoPorCamp.entries()].map(([id, g]) => {
+          const c = campMap.get(id)
+          return {
+            id, nome: c?.nome ?? id, gasto: g.gasto, resultados: g.conversas,
+            impressoes: g.impressoes, cliques: g.cliques,
+            ctr: g.impressoes ? (g.cliques / g.impressoes) * 100 : 0,
+            cpc: g.cliques ? g.gasto / g.cliques : 0,
+            leads: leadsPorCamp.get(id) ?? 0,
+          }
+        }).sort((a, b) => b.gasto - a.gasto)
+
+        const cpl = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : "N/A"
+        dadosContexto = `CONTEXTO - DADOS DO BANCO LOCAL (${trintaDias} a ${hoje}):
 
 Gasto total: R$ ${totalSpend.toFixed(2)}
 Total de conversas registradas: ${totalResults}
@@ -165,6 +179,12 @@ CAMPANHAS:
 ${campanhasContext.map(c =>
   `- ${c.nome} | Gasto: R$ ${c.gasto.toFixed(2)} | Impressões: ${c.impressoes} | Cliques: ${c.cliques} | CTR: ${c.ctr.toFixed(2)}% | CPC: R$ ${c.cpc.toFixed(2)} | Conversas: ${c.resultados} | Leads CRM: ${c.leads}`
 ).join("\n")}`
+      } catch (e: any) {
+        console.error("Supabase fallback error:", e.message)
+        dadosContexto = `CONTEXTO - DADOS PARCIAIS (${trintaDias} a ${hoje}):
+Total de leads no CRM: ${totalLeads}
+Campanhas: dados indisponíveis no momento.`
+      }
     }
 
     // Gemini
