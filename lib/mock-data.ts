@@ -3,6 +3,7 @@ export type LeadStatus =
   | "novo"
   | "escolhendo opcoes"
   | "imovel necessidade"
+  | "permuta"
   | "visita agendada"
   | "em_atendimento"
   | "negociando"
