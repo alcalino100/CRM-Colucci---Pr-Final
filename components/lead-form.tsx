@@ -28,7 +28,7 @@ export interface LeadFormValues {
 const schema = z.object({
   nome: z.string().trim().min(1, "Informe o nome do lead."),
   telefone: z.string().trim().min(1, "Informe o telefone."),
-  origem: z.enum(["Instagram", "Indicação", "Tráfego Pago", "Outro"]),
+  origem: z.enum(["Instagram", "Indicação", "Tráfego Pago", "WhatsApp", "Outro"]),
   email: z.string().email("E-mail inválido.").or(z.literal("")),
 })
 
@@ -181,6 +181,7 @@ export function LeadForm({
           <Select id="origem" value={v.origem} onChange={(e) => set("origem", e.target.value as Origem)} aria-label="Origem">
             {ORIGENS.map((o) => <option key={o} value={o}>{o}</option>)}
           </Select>
+          {err("origem")}
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="email">E-mail</Label>
