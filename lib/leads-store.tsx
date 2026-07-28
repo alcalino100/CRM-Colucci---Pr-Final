@@ -375,6 +375,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   // ---------- Ações de LEAD ----------
   // Verifica telefone duplicado em toda a base carregada (todos os corretores/gestores).
+  const checkPhoneDuplicate: Store["checkPhoneDuplicate"] = (phone, excludeId) => {
     const alvo = normalizePhone(phone)
     if (!alvo) return null
     const found = leads.find((l) => l.id !== excludeId && normalizePhone(l.telefone) === alvo)
