@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 60
+export const maxDuration = 120
 
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 
@@ -19,7 +19,6 @@ interface Mensagem {
   content: string
 }
 
-// ---------- Token: mesmo padrão do /api/meta ----------
 async function resolveToken(): Promise<string | null> {
   try {
     const { data } = await db().from("meta_conexao").select("access_token").eq("id", 1).maybeSingle()
@@ -38,6 +37,31 @@ function resultados(actions: any[]): number {
     .reduce((s: number, a: any) => s + Number(a.value || 0), 0)
 }
 
+async function metaGetAll(url: string): Promise<any[]> {
+  const out: any[] = []
+  let next: string | null = url
+  let guard = 0
+  while (next && guard < 5) {
+    guard++
+    const r: Response = await fetch(next)
+    const j: any = await r.json()
+    if (j.error) throw new Error(j.error.message)
+    if (Array.isArray(j.data)) out.push(...j.data)
+    next = j.paging?.next ?? null
+  }
+  return out
+}
+
+interface CampanhaData {
+  id: string; nome: string; gasto: number; resultados: number
+  impressoes: number; cliques: number; ctr: number; cpc: number; leads: number
+}
+interface AdData {
+  id: string; nome: string; campanha_id: string; campanha_nome: string
+  gasto: number; resultados: number; impressoes: number; cliques: number
+  ctr: number; cpc: number
+}
+
 export async function POST(req: Request) {
   try {
     const { message, history = [] }: { message: string; history?: Mensagem[] } = await req.json()
@@ -46,9 +70,9 @@ export async function POST(req: Request) {
     const token = await resolveToken()
     const supabase = db()
 
-    // Busca leads do CRM do período (últimos 30 dias)
     const trintaDias = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10)
     const hoje = new Date().toISOString().slice(0, 10)
+
     const { data: leadsData } = await supabase
       .from("leads").select("meta_campaign_id, created_at, status, corretor_id")
       .eq("origem", "Tráfego Pago").not("meta_campaign_id", "is", null)
@@ -59,148 +83,157 @@ export async function POST(req: Request) {
       const cid = l.meta_campaign_id
       leadsPorCamp.set(cid, (leadsPorCamp.get(cid) ?? 0) + 1)
     }
+    const totalLeads = leadsData?.length ?? 0
 
-    // Constrói contexto: Meta API (fresco) ou Supabase (cache) ou só leads
+    // ---------- DADOS ----------
     let dadosContexto = ""
     let totalSpend = 0
     let totalResults = 0
-    let totalLeads = leadsData?.length ?? 0
-    let campanhasContext: { id: string; nome: string; gasto: number; resultados: number; impressoes: number; cliques: number; ctr: number; cpc: number; leads: number }[] = []
-
-    // Tenta buscar dados da Meta API (rota preferencial)
+    let campanhasContext: CampanhaData[] = []
+    let adsContext: AdData[] = []
     let metaOk = false
+
     if (token) {
       try {
-        // Descobre a conta de anúncios (mesmo método do /api/meta)
         const accsRes = await fetch(`${BASE}/me/adaccounts?fields=id&limit=1&access_token=${token}`)
         const accsJson = await accsRes.json()
-        let contaId = accsJson?.data?.[0]?.id ||
-          process.env.META_AD_ACCOUNT_ID ||
-          ""
-
+        let contaId = accsJson?.data?.[0]?.id || process.env.META_AD_ACCOUNT_ID || ""
         if (contaId) {
           if (!contaId.startsWith("act_")) contaId = `act_${contaId}`
           const range = `time_range=${encodeURIComponent(JSON.stringify({ since: trintaDias, until: hoje }))}`
-          const fields = "campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type"
-          const url = `${BASE}/${contaId}/insights?level=campaign&fields=${fields}&${range}&limit=500&access_token=${token}`
 
-          const res = await fetch(url)
-          const json = await res.json()
-          const data: any[] = json.data || []
-
-          for (const r of data) {
+          // Campanhas
+          const campFields = "campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,actions"
+          const campData = await metaGetAll(
+            `${BASE}/${contaId}/insights?level=campaign&fields=${campFields}&${range}&limit=500&access_token=${token}`
+          )
+          for (const r of campData) {
             const spend = Number(r.spend || 0)
             const resCount = resultados(r.actions)
-            totalSpend += spend
-            totalResults += resCount
-            const campId = r.campaign_id
+            totalSpend += spend; totalResults += resCount
             campanhasContext.push({
-              id: campId,
-              nome: r.campaign_name || campId,
-              gasto: spend,
-              resultados: resCount,
-              impressoes: Number(r.impressions || 0),
-              cliques: Number(r.clicks || 0),
-              ctr: Number(r.ctr || 0),
-              cpc: Number(r.cpc || 0),
-              leads: leadsPorCamp.get(campId) ?? 0,
+              id: r.campaign_id, nome: r.campaign_name || r.campaign_id,
+              gasto: spend, resultados: resCount,
+              impressoes: Number(r.impressions || 0), cliques: Number(r.clicks || 0),
+              ctr: Number(r.ctr || 0), cpc: Number(r.cpc || 0),
+              leads: leadsPorCamp.get(r.campaign_id) ?? 0,
             })
           }
-
           campanhasContext.sort((a, b) => b.gasto - a.gasto)
+
+          // Ads (anúncios individuais / criativos)
+          const adFields = "ad_id,ad_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,actions"
+          const adData = await metaGetAll(
+            `${BASE}/${contaId}/insights?level=ad&fields=${adFields}&${range}&limit=500&access_token=${token}`
+          )
+          for (const r of adData) {
+            const spend = Number(r.spend || 0)
+            const resCount = resultados(r.actions)
+            adsContext.push({
+              id: r.ad_id, nome: r.ad_name || r.ad_id,
+              campanha_id: r.campaign_id, campanha_nome: r.campaign_name || "",
+              gasto: spend, resultados: resCount,
+              impressoes: Number(r.impressions || 0), cliques: Number(r.clicks || 0),
+              ctr: Number(r.ctr || 0), cpc: Number(r.cpc || 0),
+            })
+          }
+          adsContext.sort((a, b) => b.gasto - a.gasto)
           metaOk = true
-        } else {
-          console.error("Nenhuma conta de anúncios encontrada via API ou env var")
         }
       } catch (e: any) {
-        console.error("Meta API insight error:", e.message)
+        console.error("Meta API error:", e.message)
       }
     }
 
-    if (metaOk) {
-      const cpl = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : "N/A"
-      dadosContexto = `CONTEXTO - DADOS REAIS DA CONTA META ADS (${trintaDias} a ${hoje}):
-
-Gasto total: R$ ${totalSpend.toFixed(2)}
-Total de resultados (leads+conversas): ${totalResults}
-Total de leads no CRM: ${totalLeads}
-Custo por lead (CPL): R$ ${cpl}
-Campanhas com gasto: ${campanhasContext.length}
-
-CAMPANHAS:
-${campanhasContext.map(c =>
-  `- ${c.nome} | Gasto: R$ ${c.gasto.toFixed(2)} | Impressões: ${c.impressoes} | Cliques: ${c.cliques} | CTR: ${c.ctr.toFixed(2)}% | CPC: R$ ${c.cpc.toFixed(2)} | Resultados: ${c.resultados} | Leads CRM: ${c.leads}`
-).join("\n")}
-
-LEADS RECENTES (${totalLeads} total):
-${(leadsData ?? []).slice(0, 5).map((l: any) => `- Lead #${String(l.id).slice(0, 8)} | Status: ${l.status ?? "novo"} | Corretor: ${l.corretor_id ?? "não atribuído"}`).join("\n")}`
-    } else {
-      // Fallback: Supabase tables
+    if (!metaOk) {
+      // Fallback: Supabase
       try {
-        const { data: campRows } = await supabase.from("meta_insights_campaign_daily").select("*")
-          .gte("data", trintaDias).lte("data", hoje)
-        const { data: campanhas } = await supabase.from("meta_campanhas").select("id, nome, status")
+        const [campRows, adRows, campanhas] = await Promise.all([
+          supabase.from("meta_insights_campaign_daily").select("*")
+            .gte("data", trintaDias).lte("data", hoje),
+          supabase.from("meta_insights_ad_daily").select("*")
+            .gte("data", trintaDias).lte("data", hoje),
+          supabase.from("meta_campanhas").select("id, nome, status"),
+        ])
+        const campMap = new Map((campanhas.data ?? []).map((c: any) => [c.id, c]))
 
-        const campMap = new Map((campanhas ?? []).map((c: any) => [c.id, c]))
         const gastoPorCamp = new Map<string, { gasto: number; impressoes: number; cliques: number; conversas: number }>()
-        for (const r of campRows ?? []) {
+        for (const r of campRows.data ?? []) {
           const cur = gastoPorCamp.get(r.campanha_id) ?? { gasto: 0, impressoes: 0, cliques: 0, conversas: 0 }
-          cur.gasto += Number(r.gasto ?? 0)
-          cur.impressoes += Number(r.impressoes ?? 0)
-          cur.cliques += Number(r.cliques ?? 0)
-          cur.conversas += Number(r.mensagens_iniciadas ?? 0)
+          cur.gasto += Number(r.gasto ?? 0); cur.impressoes += Number(r.impressoes ?? 0)
+          cur.cliques += Number(r.cliques ?? 0); cur.conversas += Number(r.mensagens_iniciadas ?? 0)
           gastoPorCamp.set(r.campanha_id, cur)
         }
-
         totalSpend = [...gastoPorCamp.values()].reduce((s, g) => s + g.gasto, 0)
         totalResults = [...gastoPorCamp.values()].reduce((s, g) => s + g.conversas, 0)
-
         campanhasContext = [...gastoPorCamp.entries()].map(([id, g]) => {
           const c = campMap.get(id)
-          return {
-            id, nome: c?.nome ?? id, gasto: g.gasto, resultados: g.conversas,
-            impressoes: g.impressoes, cliques: g.cliques,
-            ctr: g.impressoes ? (g.cliques / g.impressoes) * 100 : 0,
-            cpc: g.cliques ? g.gasto / g.cliques : 0,
-            leads: leadsPorCamp.get(id) ?? 0,
-          }
+          return { id, nome: c?.nome ?? id, gasto: g.gasto, resultados: g.conversas, impressoes: g.impressoes, cliques: g.cliques, ctr: g.impressoes ? (g.cliques / g.impressoes) * 100 : 0, cpc: g.cliques ? g.gasto / g.cliques : 0, leads: leadsPorCamp.get(id) ?? 0 }
         }).sort((a, b) => b.gasto - a.gasto)
 
-        const cpl = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : "N/A"
-        dadosContexto = `CONTEXTO - DADOS DO BANCO LOCAL (${trintaDias} a ${hoje}):
-
-Gasto total: R$ ${totalSpend.toFixed(2)}
-Total de conversas registradas: ${totalResults}
-Total de leads no CRM: ${totalLeads}
-Custo por lead (CPL): R$ ${cpl}
-Campanhas com gasto: ${campanhasContext.length}
-
-CAMPANHAS:
-${campanhasContext.map(c =>
-  `- ${c.nome} | Gasto: R$ ${c.gasto.toFixed(2)} | Impressões: ${c.impressoes} | Cliques: ${c.cliques} | CTR: ${c.ctr.toFixed(2)}% | CPC: R$ ${c.cpc.toFixed(2)} | Conversas: ${c.resultados} | Leads CRM: ${c.leads}`
-).join("\n")}`
+        const gastoPorAd = new Map<string, { gasto: number; impressoes: number; cliques: number; conversas: number }>()
+        for (const r of adRows.data ?? []) {
+          const cur = gastoPorAd.get(r.ad_id) ?? { gasto: 0, impressoes: 0, cliques: 0, conversas: 0 }
+          cur.gasto += Number(r.gasto ?? 0); cur.impressoes += Number(r.impressoes ?? 0)
+          cur.cliques += Number(r.cliques ?? 0); cur.conversas += Number(r.mensagens_iniciadas ?? 0)
+          gastoPorAd.set(r.ad_id, cur)
+        }
+        adsContext = [...gastoPorAd.entries()].map(([id, g]) => ({
+          id, nome: id, campanha_id: "", campanha_nome: "",
+          gasto: g.gasto, resultados: g.conversas, impressoes: g.impressoes, cliques: g.cliques,
+          ctr: g.impressoes ? (g.cliques / g.impressoes) * 100 : 0, cpc: g.cliques ? g.gasto / g.cliques : 0,
+        })).sort((a, b) => b.gasto - a.gasto)
       } catch (e: any) {
-        console.error("Supabase fallback error:", e.message)
-        dadosContexto = `CONTEXTO - DADOS PARCIAIS (${trintaDias} a ${hoje}):
-Total de leads no CRM: ${totalLeads}
-Campanhas: dados indisponíveis no momento.`
+        console.error("Supabase error:", e.message)
       }
     }
 
-    // Gemini
+    const cpl = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : "N/A"
+    const fonte = metaOk ? "META ADS (API direta)" : "BANCO LOCAL"
+
+    const campanhasStr = campanhasContext.map(c =>
+      `- ${c.nome} | Gasto: R$ ${c.gasto.toFixed(2)} | Impressões: ${c.impressoes} | Cliques: ${c.cliques} | CTR: ${c.ctr.toFixed(2)}% | CPC: R$ ${c.cpc.toFixed(2)} | Resultados: ${c.resultados} | Leads CRM: ${c.leads}`
+    ).join("\n")
+
+    const adsStr = adsContext.slice(0, 20).map(a =>
+      `- ${a.nome} | Campanha: ${a.campanha_nome} | Gasto: R$ ${a.gasto.toFixed(2)} | Resultados: ${a.resultados} | Impressões: ${a.impressoes} | Cliques: ${a.cliques} | CTR: ${a.ctr.toFixed(2)}% | CPC: R$ ${a.cpc.toFixed(2)}`
+    ).join("\n")
+
+    dadosContexto = `FONTE: ${fonte} (${trintaDias} a ${hoje})
+
+RESUMO:
+Gasto total: R$ ${totalSpend.toFixed(2)}
+Resultados totais (leads+conversas): ${totalResults}
+Leads no CRM: ${totalLeads}
+CPL: R$ ${cpl}
+Campanhas com gasto: ${campanhasContext.length}
+Anúncios individuais com gasto: ${adsContext.length}
+
+CAMPANHAS:
+${campanhasStr || "(nenhuma com dados)"}
+
+ANÚNCIOS (top 20 por gasto):
+${adsStr || "(nenhum com dados)"}`
+
+    // ---------- GEMINI ----------
     if (GEMINI_KEY) {
       try {
-        const systemPrompt = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO de forma clara, direta e amigável, como se fosse um especialista conversando com o gestor da imobiliária.
+        const systemPrompt = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO de forma clara, direta e amigável.
 
-Você recebeu dados REAIS da conta de anúncios. Use esses dados para responder. Seja específico: mencione nomes de campanhas, valores exatos, métricas. Não invente dados. Se não houver dados suficientes para responder, diga claramente.
+Você recebe dados REAIS de campanhas E anúncios individuais da conta. Use esses dados para responder com PRECISÃO.
 
-Sempre responda em texto natural, sem marcadores especiais. Máximo 4 parágrafos.`
+REGRAS:
+- Quando perguntar sobre "criativos" ou "anúncios" (no plural ou singular), responda com base nos ANÚNCIOS INDIVIDUAIS (seção "ANÚNCIOS").
+- Quando perguntar sobre "campanhas", use a seção "CAMPANHAS".
+- Mencione nomes exatos, valores e métricas. Não invente dados.
+- Máximo 5 itens quando pedir rankings. Máximo 4 parágrafos.
+- Se não houver dados suficientes, diga claramente o que está faltando.`
 
         const gemBody = {
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [
             { role: "user", parts: [{ text: dadosContexto }] },
-            { role: "model", parts: [{ text: "Ok, recebi os dados da conta. Vou analisar e responder com base neles." }] },
+            { role: "model", parts: [{ text: "Ok, recebi dados de campanhas e anúncios individuais. Vou responder com base neles." }] },
             ...history.map((m) => ({
               role: m.role === "assistant" ? "model" as const : "user" as const,
               parts: [{ text: m.content }],
@@ -221,7 +254,6 @@ Sempre responda em texto natural, sem marcadores especiais. Máximo 4 parágrafo
           const text = gemJson?.candidates?.[0]?.content?.parts?.[0]?.text || ""
           if (text) return NextResponse.json({ response: text })
         }
-
         const errText = await gemRes.text()
         console.error("Gemini error:", gemRes.status, errText.slice(0, 400))
       } catch (e) {
@@ -229,8 +261,8 @@ Sempre responda em texto natural, sem marcadores especiais. Máximo 4 parágrafo
       }
     }
 
-    // Fallback
-    const res = fallbackResposta(message, campanhasContext, totalSpend, totalResults, totalLeads)
+    // ---------- FALLBACK ----------
+    const res = fallbackResposta(message, campanhasContext, adsContext, totalSpend, totalResults, totalLeads)
     return NextResponse.json({ response: res })
   } catch (e: any) {
     return NextResponse.json({ response: `Erro ao processar: ${e.message}` }, { status: 500 })
@@ -239,7 +271,8 @@ Sempre responda em texto natural, sem marcadores especiais. Máximo 4 parágrafo
 
 function fallbackResposta(
   message: string,
-  campanhas: { id: string; nome: string; gasto: number; resultados: number; impressoes: number; cliques: number; ctr: number; cpc: number; leads: number }[],
+  campanhas: CampanhaData[],
+  ads: AdData[],
   totalSpend: number,
   totalResults: number,
   totalLeads: number,
@@ -249,50 +282,67 @@ function fallbackResposta(
   const ativas = campanhas.filter(c => c.gasto > 0)
   const cpl = totalLeads > 0 ? totalSpend / totalLeads : 0
 
-  if (msg.includes("melhor") || msg.includes("top") || msg.includes("destaque") || msg.includes("bom") || msg.includes("criativo") || msg.includes("anúncio")) {
-    const top = [...campanhas].filter(c => c.resultados > 0)
-      .sort((a, b) => b.resultados - a.resultados).slice(0, 5)
+  // "criativos" ou "anúncios" → nível de anúncio individual
+  if (msg.includes("criativo") || (msg.includes("anúncio") && !msg.includes("anúncios"))) {
+    const topAds = ads.filter(a => a.resultados > 0).sort((a, b) => b.resultados - a.resultados).slice(0, 5)
+    if (topAds.length > 0) {
+      lines.push("📊 *Melhores anúncios/criativos por resultado:*")
+      topAds.forEach((a, i) => {
+        const info = a.campanha_nome ? ` (campanha: ${a.campanha_nome})` : ""
+        lines.push(`${i + 1}. ${a.nome}${info}: ${a.resultados} resultados, R$ ${a.gasto.toFixed(2)} gastos`)
+      })
+      const semRes = ads.filter(a => a.gasto > 0 && a.resultados === 0)
+      if (semRes.length > 0) {
+        lines.push("")
+        lines.push(`⚠️ ${semRes.length} anúncio(s) tiveram gasto sem resultado.`)
+      }
+    } else if (ads.filter(a => a.gasto > 0).length > 0) {
+      lines.push("📊 Anúncios com gasto mas nenhum resultado registrado no período.")
+      const topGasto = [...ads].filter(a => a.gasto > 0).sort((a, b) => b.gasto - a.gasto).slice(0, 5)
+      lines.push("*Maiores gastos:*")
+      topGasto.forEach((a, i) => lines.push(`${i + 1}. ${a.nome}: R$ ${a.gasto.toFixed(2)} (${a.impressoes} imp, ${a.cliques} cliques)`))
+    } else {
+      lines.push("Nenhum dado de anúncio individual encontrado.")
+    }
+    return lines.join("\n")
+  }
+
+  // "melhores", "top", "destaque" (sem "criativo") → campanhas
+  if (msg.includes("melhor") || msg.includes("top") || msg.includes("destaque") || msg.includes("bom")) {
+    const top = [...campanhas].filter(c => c.resultados > 0).sort((a, b) => b.resultados - a.resultados).slice(0, 5)
     if (top.length > 0) {
       lines.push("📊 *Melhores campanhas por resultado:*")
-      top.forEach((c, i) => {
-        lines.push(`${i + 1}. ${c.nome}: ${c.resultados} resultados, R$ ${c.gasto.toFixed(2)} gastos (CPA: R$ ${(c.gasto / c.resultados).toFixed(2)})`)
-      })
-      if (top.length < ativas.length) {
-        const semResult = ativas.filter(a => a.resultados === 0)
-        if (semResult.length > 0) {
-          lines.push("")
-          lines.push(`⚠️ ${semResult.length} campanha(s) tiveram gasto mas nenhum resultado: ${semResult.slice(0, 3).map(s => s.nome).join(", ")}`)
-        }
-      }
+      top.forEach((c, i) => lines.push(`${i + 1}. ${c.nome}: ${c.resultados} resultados, R$ ${c.gasto.toFixed(2)} (CPA: R$ ${(c.gasto / c.resultados).toFixed(2)})`))
+      const semResult = ativas.filter(a => a.resultados === 0)
+      if (semResult.length > 0) lines.push(`\n⚠️ ${semResult.length} campanha(s) gastaram sem resultado: ${semResult.slice(0, 3).map(s => s.nome).join(", ")}`)
     } else {
-      if (totalSpend > 0) {
-        lines.push(`📊 No período, foram gastos R$ ${totalSpend.toFixed(2)} em ${ativas.length} campanhas, mas nenhuma gerou resultados registrados.`)
-        lines.push("💡 Pode ser que os resultados estejam sendo contabilizados de forma diferente, ou as campanhas são de reconhecimento/engajamento que não geram conversas diretas.")
-      } else {
-        lines.push("Nenhum dado de campanha encontrado para o período selecionado.")
-      }
+      lines.push(totalSpend > 0
+        ? `📊 R$ ${totalSpend.toFixed(2)} gastos em ${ativas.length} campanhas sem resultados registrados.`
+        : "Nenhum dado de campanha encontrado.")
     }
-  } else if (msg.includes("pior") || msg.includes("ruim") || msg.includes("gasto") || msg.includes("caro") || msg.includes("problema")) {
+    return lines.join("\n")
+  }
+
+  if (msg.includes("pior") || msg.includes("ruim") || msg.includes("problema")) {
     const ruins = ativas.filter(c => c.resultados === 0).slice(0, 3)
     if (ruins.length > 0) {
       lines.push("⚠️ *Campanhas com gasto sem resultado:*")
-      ruins.forEach(c => {
-        lines.push(`• ${c.nome}: R$ ${c.gasto.toFixed(2)} gastos, 0 resultados. ${c.cliques > 0 ? `${c.cliques} cliques mas sem conversão.` : "Sem cliques — revisar público-alvo."}`)
-      })
+      ruins.forEach(c => lines.push(`• ${c.nome}: R$ ${c.gasto.toFixed(2)} gastos, 0 resultados. ${c.cliques > 0 ? `${c.cliques} cliques sem conversão.` : "Sem cliques — revisar."}`))
     } else if (ativas.length > 0) {
-      lines.push("✅ Todas as campanhas ativas tiveram pelo menos 1 resultado.")
+      lines.push("✅ Todas as campanhas ativas tiveram resultado.")
       const caras = [...ativas].sort((a, b) => b.cpc - a.cpc).slice(0, 2)
-      if (caras.length > 0) {
-        lines.push(`🔍 As com maior CPC: ${caras.map(c => `${c.nome} (R$ ${c.cpc.toFixed(2)})`).join(", ")}`)
-      }
+      if (caras.length > 0) lines.push(`🔍 Maior CPC: ${caras.map(c => `${c.nome} (R$ ${c.cpc.toFixed(2)})`).join(", ")}`)
     } else {
-      lines.push("Nenhuma campanha com gasto no período.")
+      lines.push("Nenhuma campanha com gasto.")
     }
-  } else if (msg.includes("lead") || msg.includes("cpl") || msg.includes("custo")) {
+    return lines.join("\n")
+  }
+
+  if (msg.includes("lead") || msg.includes("cpl") || msg.includes("custo")) {
     if (totalLeads > 0) {
-      lines.push(`👥 *Leads no CRM:* ${totalLeads} no período`)
+      lines.push(`👥 *Leads no CRM:* ${totalLeads}`)
       lines.push(`💰 *CPL médio:* R$ ${cpl.toFixed(2)}`)
-      lines.push(`📈 *Total gasto:* R$ ${totalSpend.toFixed(2)}`)
+      lines.push(`📈 *Gasto total:* R$ ${totalSpend.toFixed(2)}`)
       const topLeads = [...campanhas].filter(c => c.leads > 0).sort((a, b) => b.leads - a.leads).slice(0, 3)
       if (topLeads.length > 0) {
         lines.push("")
@@ -300,9 +350,12 @@ function fallbackResposta(
         topLeads.forEach(c => lines.push(`• ${c.nome}: ${c.leads} leads`))
       }
     } else {
-      lines.push("Nenhum lead de Tráfego Pago foi registrado no CRM no período.")
+      lines.push("Nenhum lead de Tráfego Pago no CRM no período.")
     }
-  } else if (msg.includes("geral") || msg.includes("resumo") || msg.includes("visão") || msg.includes("ontem") || msg.includes("hoje") || msg.includes("desempenho")) {
+    return lines.join("\n")
+  }
+
+  if (msg.includes("geral") || msg.includes("resumo") || msg.includes("visão") || msg.includes("ontem") || msg.includes("hoje") || msg.includes("desempenho")) {
     lines.push(`📈 *Resumo geral dos anúncios:*`)
     lines.push(`• Gasto total: R$ ${totalSpend.toFixed(2)}`)
     lines.push(`• Campanhas ativas: ${ativas.length}`)
@@ -315,22 +368,22 @@ function fallbackResposta(
       const topR = [...ativas].filter(c => c.resultados > 0).sort((a, b) => b.resultados - a.resultados)
       if (topR.length > 0) lines.push(`• Melhor resultado: ${topR[0].nome} (${topR[0].resultados} resultados)`)
     }
-  } else {
-    lines.push(`📊 *Análise dos seus anúncios Meta Ads*`)
-    if (totalSpend > 0) {
-      lines.push(`Nos últimos 30 dias, foram investidos R$ ${totalSpend.toFixed(2)} em ${ativas.length} campanhas.`)
-      if (totalResults > 0) lines.push(`${totalResults} resultados foram gerados.`)
-      if (totalLeads > 0) lines.push(`${totalLeads} leads chegaram ao CRM com CPL de R$ ${cpl.toFixed(2)}.`)
-    } else {
-      lines.push("Nenhum dado de performance encontrado para o período. O sync ocorre diariamente.")
-    }
-    lines.push("")
-    lines.push("💡 *Perguntas que posso responder:*")
-    lines.push('• "Quais os melhores anúncios?"')
-    lines.push('• "Quanto gastei e quantos leads tive?"')
-    lines.push('• "Quais campanhas estão com problema?"')
-    lines.push('• "Resumo geral do desempenho"')
+    return lines.join("\n")
   }
 
+  lines.push(`📊 *Análise dos seus anúncios Meta Ads*`)
+  if (totalSpend > 0) {
+    lines.push(`Nos últimos 30 dias, foram investidos R$ ${totalSpend.toFixed(2)} em ${ativas.length} campanhas (${ads.filter(a => a.gasto > 0).length} anúncios).`)
+    if (totalResults > 0) lines.push(`${totalResults} resultados gerados.`)
+    if (totalLeads > 0) lines.push(`${totalLeads} leads no CRM, CPL de R$ ${cpl.toFixed(2)}.`)
+  } else {
+    lines.push("Nenhum dado de performance no período.")
+  }
+  lines.push("")
+  lines.push("💡 *Perguntas que posso responder:*")
+  lines.push('• "Quais os melhores criativos?"')
+  lines.push('• "Quais os melhores anúncios?"')
+  lines.push('• "Resumo geral do desempenho"')
+  lines.push('• "Quanto gastei e quantos leads tive?"')
   return lines.join("\n")
 }
