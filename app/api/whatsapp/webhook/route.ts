@@ -205,6 +205,24 @@ async function handleMessageUpsert(payload: any) {
       para_role: "gestor",
       lead_id: existente.id,
     })
+    // Mesmo sendo duplicado, enriquece os dados do lead original com as informações do anúncio
+    const partesAd: string[] = []
+    if (nomeAnuncio || anuncioTitulo) partesAd.push(`Anúncio: ${nomeAnuncio || anuncioTitulo}`)
+    if (nomeCampanha) partesAd.push(`Campanha: ${nomeCampanha}`)
+    if (nomeConjunto) partesAd.push(`Conjunto: ${nomeConjunto}`)
+    if (partesAd.length) {
+      const obsExtra = `[${new Date().toLocaleString("pt-BR")} - Clique em anúncio]\n${partesAd.join("\n")}`
+      await wsupabase
+        .from("leads")
+        .update({
+          meta_campaign_id: metaCampaignId || existente.meta_campaign_id || null,
+          meta_adset_id: metaAdsetId || existente.meta_adset_id || null,
+          meta_ad_id: metaAdId || existente.meta_ad_id || null,
+          observacoes: (existente.observacoes || "") + "\n\n" + obsExtra,
+          atualizado_em: new Date().toISOString(),
+        })
+        .eq("id", existente.id)
+    }
   }
 
   // Registra a mensagem recebida (com contexto do anúncio)
