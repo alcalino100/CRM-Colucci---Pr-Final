@@ -119,8 +119,7 @@ export function LeadForm({
       for (const issue of result.error.issues) errs[issue.path[0] as string] = issue.message
     }
     if (showValor && (!v.valorNegociacao || v.valorNegociacao <= 0)) errs.valorNegociacao = "Informe o valor da negociação."
-    const dup = validatePhone(v.telefone)
-    if (dup) errs.telefone = "Este telefone já está cadastrado em outro lead."
+    // Validação de telefone duplicado removida (permite múltiplos leads com mesmo telefone)
     setErrors(errs)
     if (Object.values(errs).some(Boolean)) return
     const principal = v.referencias.find((r) => r.principal)?.ref ?? v.referencias[0]?.ref ?? ""
