@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, Camera, Users, Megaphone, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2 } from "lucide-react"
+import { AlertTriangle, Camera, Users, Megaphone, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck } from "lucide-react"
 import { Badge } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
 import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate } from "@/lib/labels"
@@ -21,31 +21,42 @@ export function LeadCard({
   showCorretor = false,
   canManage = false,
   podeExcluir = false,
+  isGestor = false,
   overdue = false,
   onOpen,
   onEdit,
   onDelete,
+  onAssumir,
 }: {
   lead: Lead
   showCorretor?: boolean
   canManage?: boolean
   podeExcluir?: boolean
+  isGestor?: boolean
   overdue?: boolean
   onOpen?: (lead: Lead) => void
   onEdit?: (lead: Lead) => void
   onDelete?: (lead: Lead) => void
+  onAssumir?: (lead: Lead) => void
 }) {
   const { userName } = useLeads()
   const OrigemIcon = ORIGEM_ICON[lead.origem]
   const initials = userName(lead.corretorId).split(" ").map((n) => n[0]).slice(0, 2).join("")
   const [menu, setMenu] = useState(false)
   const stop = (e: React.SyntheticEvent) => e.stopPropagation()
+  const gestorNome = lead.gestorResponsavel ? userName(lead.gestorResponsavel) : null
   return (
     <div className={cn(
       "group relative rounded-xl border bg-card p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
       overdue ? "border-destructive/50 ring-1 ring-destructive/20" : "border-border hover:border-primary/30",
+      lead.gestorResponsavel && "ring-1 ring-violet-400/40",
     )}>
       {overdue && <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2 py-1.5 text-xs font-semibold text-destructive"><AlertTriangle className="size-3.5" /> Follow-up pendente</div>}
+      {gestorNome && (
+        <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-violet-100 px-2 py-1.5 text-xs font-semibold text-violet-700">
+          <UserCheck className="size-3.5" /> Assumido por {gestorNome}
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2">
         <button type="button" onClick={() => onOpen?.(lead)} className="text-left font-display text-[0.95rem] font-semibold leading-tight text-foreground transition-colors hover:text-primary">
           {lead.nome}
@@ -70,7 +81,7 @@ export function LeadCard({
               {menu && (
                 <>
                   <div className="fixed inset-0 z-10" onPointerDown={stop} onClick={(e) => { stop(e); setMenu(false) }} />
-                  <div className="absolute right-0 top-8 z-20 w-32 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg" onPointerDown={stop}>
+                  <div className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg" onPointerDown={stop}>
                     <button
                       type="button"
                       onClick={(e) => { stop(e); setMenu(false); onEdit?.(lead) }}
@@ -78,6 +89,16 @@ export function LeadCard({
                     >
                       <Pencil className="size-3.5" /> Editar
                     </button>
+                    {isGestor && (
+                      <button
+                        type="button"
+                        onClick={(e) => { stop(e); setMenu(false); onAssumir?.(lead) }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                      >
+                        <UserCheck className="size-3.5" />
+                        {lead.gestorResponsavel ? "Desassumir" : "Assumir"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={!podeExcluir}

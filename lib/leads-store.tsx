@@ -60,6 +60,7 @@ interface Store {
   deleteLead: (id: string, motivo: string, motivoDetalhe?: string) => Promise<{ ok: boolean; error?: string }>
   addInteraction: (leadId: string, i: Omit<Interaction, "id" | "timestamp">) => void
   getLead: (id: string) => Lead | undefined
+  assumirLead: (leadId: string) => Promise<{ ok: boolean; error?: string }>
   addVisit: (v: Omit<Visit, "id">) => void
   notify: (texto: string, opts?: NotifyOpts) => void
   sendAdminNotification: (input: { mensagem: string; paraRole?: Role | null; paraUsuarioId?: string | null }) => Promise<{ ok: boolean; error?: string }>
@@ -96,6 +97,7 @@ function rowToLead(r: any): Lead {
     status: normalizeStatus(r.status ?? "novo"),
     valorNegociacao: r.valor_proposta ?? undefined,
     corretorId: r.corretor_id ?? "",
+    gestorResponsavel: r.gestor_responsavel ?? undefined,
     criadoEm: r.criado_em,
     atualizadoEm: r.atualizado_em,
     interacoes: [],
@@ -120,6 +122,7 @@ function leadPatchToRow(p: Partial<Lead>): Record<string, any> {
   if (p.status !== undefined) row.status = p.status
   if (p.valorNegociacao !== undefined) row.valor_proposta = p.valorNegociacao
   if (p.corretorId !== undefined) row.corretor_id = p.corretorId || null
+  if (p.gestorResponsavel !== undefined) row.gestor_responsavel = p.gestorResponsavel || null
   return row
 }
 
@@ -578,7 +581,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     <Ctx.Provider
       value={{
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, corretores, userName,
-        checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead,
+        checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead, assumirLead,
         addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addUser, updateUser, updateProfile,
       }}
     >

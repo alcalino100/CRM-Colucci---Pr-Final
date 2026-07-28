@@ -27,7 +27,7 @@ export function KanbanBoard({
   isGestor?: boolean
   heightClass?: string
 }) {
-  const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, assumeLead, visits, corretores, userName } = useLeads()
+  const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, assumirLead, visits, corretores, userName } = useLeads()
   const { user } = useAuth()
   const router = useRouter()
   const toast = useToast()
@@ -35,7 +35,7 @@ export function KanbanBoard({
   const [propLead, setPropLead] = useState<Lead | null>(null)
   const [closeLead, setCloseLead] = useState<Lead | null>(null)
   const [editLead, setEditLead] = useState<Lead | null>(null)
-  const [assumirLead, setAssumirLead] = useState<Lead | null>(null)
+  const [assumirDialog, setAssumirDialog] = useState<Lead | null>(null)
   const [delLead, setDelLead] = useState<Lead | null>(null)
   const [delMotivo, setDelMotivo] = useState("")
   const [delDetalhe, setDelDetalhe] = useState("")
@@ -209,6 +209,23 @@ export function KanbanBoard({
     setCloseLead(null)
   }
 
+  async function handleAssumir() {
+    if (!assumirDialog || !user) return
+    const novoGestor = assumirDialog.gestorResponsavel ? null : user.id
+    const res = await assumirLead(assumirDialog.id)
+    if (!res.ok) return toast(res.error ?? "Erro ao assumir lead.", "error")
+    const msg = novoGestor
+      ? `Gestor ${userName(user.id)} assumiu a supervisão do lead ${assumirDialog.nome}`
+      : `Gestor ${userName(user.id)} removeu a supervisão do lead ${assumirDialog.nome}`
+    logAudit({ leadId: assumirDialog.id, leadNome: assumirDialog.nome, usuarioNome: userName(user.id), tipo: "responsavel", descricao: msg })
+    notify(msg, { tipo: "responsavel", paraRole: "gestor", leadId: assumirDialog.id })
+    if (assumirDialog.corretorId) {
+      notify(novoGestor ? `Seu lead ${assumirDialog.nome} foi assumido pela gestão` : `A supervisão do lead ${assumirDialog.nome} foi removida pela gestão`, { tipo: "responsavel", paraUsuarioId: assumirDialog.corretorId, leadId: assumirDialog.id })
+    }
+    setAssumirDialog(null)
+    toast(novoGestor ? "Lead assumido com sucesso!" : "Supervisão removida.")
+  }
+
   const q = query.trim().toLowerCase()
   const qDigits = normalizePhone(query)
   const matchesQuery = (l: Lead) => {
@@ -330,13 +347,15 @@ export function KanbanBoard({
                               className={ds.isDragging ? "opacity-60" : ""}
                             >
                               <LeadCard
-                              lead={lead}
-                              showCorretor={showCorretor}
-                              canManage={canManage(lead)}
-                              podeExcluir={isGestor}
-                                                              onOpen={(item) => router.push(`/painel-corretor/${item.id}`)}
+                                lead={lead}
+                                showCorretor={showCorretor}
+                                canManage={canManage(lead)}
+                                podeExcluir={isGestor}
+                                isGestor={isGestor}
+                                onOpen={(item) => router.push(`/painel-corretor/${item.id}`)}
                                 onEdit={(item) => setEditLead(item)}
                                 onDelete={(item) => setDelLead(item)}
+                                onAssumir={(item) => setAssumirDialog(item)}
                               />
                             </div>
                           )}
@@ -436,6 +455,28 @@ export function KanbanBoard({
             onCancel={() => setEditLead(null)}
           />
         )}
+      </Dialog>
+
+      <Dialog open={!!assumirDialog} onClose={() => setAssumirDialog(null)} title="Assumir Atendimento">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Lead: <span className="font-medium text-foreground">{assumirDialog?.nome}</span>
+            {assumirDialog && assumirDialog.corretorId && (
+              <> — Corretor: <span className="font-medium text-foreground">{userName(assumirDialog.corretorId)}</span></>
+            )}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {assumirDialog?.gestorResponsavel
+              ? `Este lead está atualmente sob responsabilidade de ${userName(assumirDialog.gestorResponsavel)}. Deseja remover a supervisão deste lead?`
+              : "Você está assumindo a supervisão deste lead. O corretor será notificado sobre sua supervisão."}
+          </p>
+          <div className="mt-1 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setAssumirDialog(null)}>Cancelar</Button>
+            <Button type="button" onClick={handleAssumir}>
+              {assumirDialog?.gestorResponsavel ? "Remover supervisão" : "Assumir lead"}
+            </Button>
+          </div>
+        </div>
       </Dialog>
 
       <Dialog open={!!delLead} onClose={() => (!submitting ? closeDelete() : undefined)} title="Excluir Lead">
