@@ -12,7 +12,7 @@ function db() {
 }
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
 
 interface Mensagem {
   role: "user" | "assistant"
@@ -221,22 +221,12 @@ ${adsStr || "(nenhum com dados)"}`
         console.error("GEMINI_API_KEY parece inválida (muito curta)")
       } else {
         try {
-          const systemPrompt = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO de forma clara, direta e amigável.
-
-Você recebe dados REAIS de campanhas E anúncios individuais da conta. Use esses dados para responder com PRECISÃO.
-
-REGRAS:
-- Quando perguntar sobre "criativos" ou "anúncios" (no plural ou singular), responda com base nos ANÚNCIOS INDIVIDUAIS (seção "ANÚNCIOS").
-- Quando perguntar sobre "campanhas", use a seção "CAMPANHAS".
-- Mencione nomes exatos, valores e métricas. Não invente dados.
-- Máximo 5 itens quando pedir rankings. Máximo 4 parágrafos.
-- Se não houver dados suficientes, diga claramente o que está faltando.`
+          const sistema = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO de forma clara, direta e amigável. Mencione nomes exatos, valores e métricas. Não invente dados. Máximo 5 itens. Máximo 4 parágrafos.`
 
           const gemBody = {
-            systemInstruction: { parts: [{ text: systemPrompt }] },
             contents: [
-              { role: "user", parts: [{ text: dadosContexto }] },
-              { role: "model", parts: [{ text: "Ok, recebi dados de campanhas e anúncios individuais. Vou responder com base neles." }] },
+              { role: "user", parts: [{ text: `${sistema}\n\n${dadosContexto}` }] },
+              { role: "model", parts: [{ text: "Ok, entendi os dados. Vou responder com base neles." }] },
               ...history.map((m) => ({
                 role: m.role === "assistant" ? "model" as const : "user" as const,
                 parts: [{ text: m.content }],
@@ -258,9 +248,11 @@ REGRAS:
             if (text) {
               return NextResponse.json({ response: text + "\n\n— 🤖 Análise por IA Gemini" })
             }
+            console.error("Gemini: resposta vazia", JSON.stringify(gemJson).slice(0, 300))
+          } else {
+            const errText = await gemRes.text()
+            console.error("Gemini HTTP error:", gemRes.status, errText.slice(0, 500))
           }
-          const errText = await gemRes.text()
-          console.error("Gemini error:", gemRes.status, errText.slice(0, 400))
         } catch (e) {
           console.error("Gemini exception:", e)
         }
