@@ -217,8 +217,11 @@ ${adsStr || "(nenhum com dados)"}`
 
     // ---------- GEMINI ----------
     if (GEMINI_KEY) {
-      try {
-        const systemPrompt = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO de forma clara, direta e amigável.
+      if (GEMINI_KEY.length < 10) {
+        console.error("GEMINI_API_KEY parece inválida (muito curta)")
+      } else {
+        try {
+          const systemPrompt = `Você é um analista de Meta Ads da Imobiliária Colucci. Responda EM PORTUGUÊS BRASILEIRO de forma clara, direta e amigável.
 
 Você recebe dados REAIS de campanhas E anúncios individuais da conta. Use esses dados para responder com PRECISÃO.
 
@@ -229,41 +232,45 @@ REGRAS:
 - Máximo 5 itens quando pedir rankings. Máximo 4 parágrafos.
 - Se não houver dados suficientes, diga claramente o que está faltando.`
 
-        const gemBody = {
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [
-            { role: "user", parts: [{ text: dadosContexto }] },
-            { role: "model", parts: [{ text: "Ok, recebi dados de campanhas e anúncios individuais. Vou responder com base neles." }] },
-            ...history.map((m) => ({
-              role: m.role === "assistant" ? "model" as const : "user" as const,
-              parts: [{ text: m.content }],
-            })),
-            { role: "user", parts: [{ text: message }] },
-          ],
-          generationConfig: { temperature: 0.5, maxOutputTokens: 1024 },
-        }
+          const gemBody = {
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents: [
+              { role: "user", parts: [{ text: dadosContexto }] },
+              { role: "model", parts: [{ text: "Ok, recebi dados de campanhas e anúncios individuais. Vou responder com base neles." }] },
+              ...history.map((m) => ({
+                role: m.role === "assistant" ? "model" as const : "user" as const,
+                parts: [{ text: m.content }],
+              })),
+              { role: "user", parts: [{ text: message }] },
+            ],
+            generationConfig: { temperature: 0.5, maxOutputTokens: 1024 },
+          }
 
-        const gemRes = await fetch(`${GEMINI_URL}?key=${GEMINI_KEY}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(gemBody),
-        })
+          const gemRes = await fetch(`${GEMINI_URL}?key=${GEMINI_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(gemBody),
+          })
 
-        if (gemRes.ok) {
-          const gemJson = await gemRes.json()
-          const text = gemJson?.candidates?.[0]?.content?.parts?.[0]?.text || ""
-          if (text) return NextResponse.json({ response: text })
+          if (gemRes.ok) {
+            const gemJson = await gemRes.json()
+            const text = gemJson?.candidates?.[0]?.content?.parts?.[0]?.text || ""
+            if (text) {
+              return NextResponse.json({ response: text + "\n\n— 🤖 Análise por IA Gemini" })
+            }
+          }
+          const errText = await gemRes.text()
+          console.error("Gemini error:", gemRes.status, errText.slice(0, 400))
+        } catch (e) {
+          console.error("Gemini exception:", e)
         }
-        const errText = await gemRes.text()
-        console.error("Gemini error:", gemRes.status, errText.slice(0, 400))
-      } catch (e) {
-        console.error("Gemini exception:", e)
       }
     }
 
     // ---------- FALLBACK ----------
     const res = fallbackResposta(message, campanhasContext, adsContext, totalSpend, totalResults, totalLeads)
-    return NextResponse.json({ response: res })
+    const sufixo = GEMINI_KEY ? "\n\n— ⚠️ IA indisponível no momento, exibindo análise local" : "\n\n— ℹ️ Análise local (GEMINI_API_KEY não configurada)"
+    return NextResponse.json({ response: res + sufixo })
   } catch (e: any) {
     return NextResponse.json({ response: `Erro ao processar: ${e.message}` }, { status: 500 })
   }
