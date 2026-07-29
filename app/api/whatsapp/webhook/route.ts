@@ -27,32 +27,31 @@ async function handleConnectionUpdate(payload: any) {
 }
 
 // Detecta se a mensagem nasceu de um clique em anúncio (Click-to-WhatsApp).
-// A Meta injeta esse contexto na 1ª mensagem; a Evolution repassa em campos que
-// variam por versão, então tentamos todos, em ordem de prioridade.
+// Usa critérios restritivos para evitar falso positivo em mensagens orgânicas.
 function detectAd(msg: any): { veioDeAnuncio: boolean; anuncioId: string | null; anuncioTitulo: string | null } {
   const ctx = msg?.contextInfo ?? msg?.message?.contextInfo ?? msg?.message?.extendedTextMessage?.contextInfo
   const externalAd = ctx?.externalAdReplyInfo
   const referral = msg?.message?.referral ?? msg?.referral
 
-  let anuncioId: string | null = null
-  let anuncioTitulo: string | null = null
-  let veioDeAnuncio = false
-
-  if (ctx?.conversionSource) {
-    veioDeAnuncio = true
-  }
-  if (externalAd && (externalAd.sourceId || externalAd.sourceUrl || externalAd.title || externalAd.body)) {
-    veioDeAnuncio = true
-    anuncioId = externalAd.sourceId ?? anuncioId
-    anuncioTitulo = externalAd.title ?? externalAd.body ?? anuncioTitulo
-  }
-  if (referral && (referral.source_id || referral.source_type === "ad" || referral.headline || referral.body)) {
-    veioDeAnuncio = true
-    anuncioId = referral.source_id ?? anuncioId
-    anuncioTitulo = referral.headline ?? referral.body ?? anuncioTitulo
+  // Sinal forte: referral com source_type === "ad" (campo oficial da Meta)
+  if (referral?.source_type === "ad") {
+    return {
+      veioDeAnuncio: true,
+      anuncioId: referral.source_id ?? null,
+      anuncioTitulo: referral.headline ?? referral.body ?? null,
+    }
   }
 
-  return { veioDeAnuncio, anuncioId, anuncioTitulo }
+  // Sinal moderado: externalAdReplyInfo com mediaType (anúncios sempre têm mídia)
+  if (externalAd?.mediaType && (externalAd.sourceId || externalAd.sourceUrl || externalAd.title || externalAd.body)) {
+    return {
+      veioDeAnuncio: true,
+      anuncioId: externalAd.sourceId ?? null,
+      anuncioTitulo: externalAd.title ?? externalAd.body ?? null,
+    }
+  }
+
+  return { veioDeAnuncio: false, anuncioId: null, anuncioTitulo: null }
 }
 
 async function handleMessageUpsert(payload: any) {
