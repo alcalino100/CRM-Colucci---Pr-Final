@@ -23,32 +23,33 @@ export default function DashboardGestaoPage() {
   }, [])
 
   const kpis = useMemo(() => {
-    const ativos = leads.filter((l) => !["fechado", "perdido"].includes(l.status)).length
+    const naoArquivados = leads.filter((l) => !l.arquivadoEm)
+    const ativos = naoArquivados.filter((l) => !["fechado", "perdido"].includes(l.status)).length
     const weekStart = new Date(); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - weekStart.getDay())
     const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7)
     const visitasSemana = visits.filter((v) => {
       const d = new Date(v.data + "T00:00:00")
       return d >= weekStart && d < weekEnd
     }).length
-    const emProposta = leads.filter((l) => l.status === "negociando")
+    const emProposta = naoArquivados.filter((l) => l.status === "negociando")
     const valorPropostas = emProposta.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
-    const valorFechado = leads.filter((l) => l.status === "fechado").reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
+    const valorFechado = naoArquivados.filter((l) => l.status === "fechado").reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
     return { ativos, visitasSemana, valorPropostas, valorFechado }
   }, [leads, visits])
 
   const leadsPorCorretor = useMemo(
-    () => corretores.map((c) => ({ nome: c.nome.split(" ")[0], total: leads.filter((l) => l.corretorId === c.id).length })),
+    () => corretores.map((c) => ({ nome: c.nome.split(" ")[0], total: leads.filter((l) => !l.arquivadoEm && l.corretorId === c.id).length })),
     [leads, corretores],
   )
   const origemData = useMemo(
-    () => ORIGENS.map((o) => ({ name: o, value: leads.filter((l) => l.origem === (o as Origem)).length })).filter((d) => d.value > 0),
+    () => ORIGENS.map((o) => ({ name: o, value: leads.filter((l) => !l.arquivadoEm && l.origem === (o as Origem)).length })).filter((d) => d.value > 0),
     [leads],
   )
 
   const kanbanLeads = filterCorretor === "todos" ? leads : leads.filter((l) => l.corretorId === filterCorretor)
 
-  const propostasAndamento = leads.filter((l) => l.status === "negociando")
-  const propostasFechadas = leads.filter((l) => l.status === "fechado")
+  const propostasAndamento = leads.filter((l) => !l.arquivadoEm && l.status === "negociando")
+  const propostasFechadas = leads.filter((l) => !l.arquivadoEm && l.status === "fechado")
   const listaProp = subAba === "andamento" ? propostasAndamento : propostasFechadas
   const totalAba = listaProp.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
 

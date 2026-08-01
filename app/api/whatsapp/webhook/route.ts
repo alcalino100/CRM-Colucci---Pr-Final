@@ -27,7 +27,8 @@ async function handleConnectionUpdate(payload: any) {
 }
 
 // Detecta se a mensagem nasceu de um clique em anúncio (Click-to-WhatsApp).
-// Usa critérios restritivos para evitar falso positivo em mensagens orgânicas.
+// A Meta injeta esse contexto na 1ª mensagem; a Evolution repassa em campos que
+// variam por versão, então tentamos todos, em ordem de prioridade.
 function detectAd(msg: any): { veioDeAnuncio: boolean; anuncioId: string | null; anuncioTitulo: string | null } {
   const ctx = msg?.contextInfo ?? msg?.message?.contextInfo ?? msg?.message?.extendedTextMessage?.contextInfo
   const externalAd = ctx?.externalAdReplyInfo
@@ -42,12 +43,27 @@ function detectAd(msg: any): { veioDeAnuncio: boolean; anuncioId: string | null;
     }
   }
 
-  // Sinal moderado: externalAdReplyInfo com mediaType (anúncios sempre têm mídia)
-  if (externalAd?.mediaType && (externalAd.sourceId || externalAd.sourceUrl || externalAd.title || externalAd.body)) {
+  // Sinal forte: externalAdReplyInfo presente (Click-to-WhatsApp / anúncios com mídia)
+  if (externalAd && (externalAd.sourceId || externalAd.sourceUrl || externalAd.title || externalAd.body || externalAd.mediaType)) {
     return {
       veioDeAnuncio: true,
       anuncioId: externalAd.sourceId ?? null,
       anuncioTitulo: externalAd.title ?? externalAd.body ?? null,
+    }
+  }
+
+  // Sinal da Evolution para Click-to-WhatsApp: contextInfo.conversionSource
+  // (não carrega ID do anúncio, mas é o que a Evolution repassa de fato)
+  if (ctx?.conversionSource) {
+    return { veioDeAnuncio: true, anuncioId: null, anuncioTitulo: null }
+  }
+
+  // Fallback: referral genérico com qualquer campo de anúncio
+  if (referral && (referral.source_id || referral.source_type || referral.headline || referral.body)) {
+    return {
+      veioDeAnuncio: true,
+      anuncioId: referral.source_id ?? null,
+      anuncioTitulo: referral.headline ?? referral.body ?? null,
     }
   }
 
