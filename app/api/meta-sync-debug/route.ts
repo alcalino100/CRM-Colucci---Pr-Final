@@ -63,9 +63,8 @@ export async function GET() {
       }
     })()
 
-    report.adsets = await (async () => {
-      try {
-        const a = await metaGetAll(`${base}/${conta}/adsets?fields=id,name,effective_status,campaign_id&include_deleted=true&limit=500&access_token=${token}`)
+    report.adsets = await (async () => {      try {
+        const a = await metaGetAll(`${base}/${conta}/adsets?fields=id,name,effective_status,campaign_id&limit=500&access_token=${token}`)
         const linhas = a.map((x) => ({ id: x.id, campanha_id: x.campaign_id, nome: x.name ?? "", status: x.effective_status ?? null, atualizado_em: new Date().toISOString() }))
         if (linhas.length) {
           const { error } = await supabase.from("meta_adsets").upsert(linhas, { onConflict: "id" })
@@ -79,7 +78,7 @@ export async function GET() {
 
     report.ads = await (async () => {
       try {
-        const a = await metaGetAll(`${base}/${conta}/ads?fields=id,name,effective_status,campaign_id,adset_id&include_deleted=true&limit=500&access_token=${token}`)
+        const a = await metaGetAll(`${base}/${conta}/ads?fields=id,name,effective_status,campaign_id,adset_id&limit=500&access_token=${token}`)
         const linhas = a.map((x) => ({ id: x.id, campanha_id: x.campaign_id, adset_id: x.adset_id, nome: x.name ?? "", status: x.effective_status ?? null, atualizado_em: new Date().toISOString() }))
         if (linhas.length) {
           const { error } = await supabase.from("meta_ads").upsert(linhas, { onConflict: "id" })
@@ -91,15 +90,27 @@ export async function GET() {
       }
     })()
 
+    const { data: idsCamp } = await supabase.from("meta_campanhas").select("id")
+    const { data: idsAdset } = await supabase.from("meta_adsets").select("id")
+    const { data: idsAd } = await supabase.from("meta_ads").select("id")
+    const campValidos = new Set((idsCamp ?? []).map((r: any) => String(r.id)))
+    const adsetValidos = new Set((idsAdset ?? []).map((r: any) => String(r.id)))
+    const adValidos = new Set((idsAd ?? []).map((r: any) => String(r.id)))
+
     report.insightsCampanha = await (async () => {
       try {
         const r = await metaGetAll(`${base}/${conta}/insights?level=campaign&fields=campaign_id,spend,impressions,clicks,actions&time_increment=1&${datePart}&limit=500&access_token=${token}`)
-        const linhas = r.map((x: any) => ({
-          campanha_id: x.campaign_id, data: x.date_start,
-          gasto: Number(x.spend ?? 0), impressoes: Number(x.impressions ?? 0), cliques: Number(x.clicks ?? 0),
-          mensagens_iniciadas: Number((x.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
-        }))
-        if (linhas.length) await supabase.from("meta_insights_campaign_daily").upsert(linhas, { onConflict: "campanha_id,data" })
+        const linhas = r
+          .filter((x: any) => campValidos.has(String(x.campaign_id)))
+          .map((x: any) => ({
+            campanha_id: x.campaign_id, data: x.date_start,
+            gasto: Number(x.spend ?? 0), impressoes: Number(x.impressions ?? 0), cliques: Number(x.clicks ?? 0),
+            mensagens_iniciadas: Number((x.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
+          }))
+        if (linhas.length) {
+          const { error } = await supabase.from("meta_insights_campaign_daily").upsert(linhas, { onConflict: "campanha_id,data" })
+          if (error) return { ok: false, total: r.length, gravados: linhas.length, erro: error.message }
+        }
         return { ok: true, total: r.length, gravados: linhas.length }
       } catch (e: any) {
         return { ok: false, erro: e.message }
@@ -109,12 +120,17 @@ export async function GET() {
     report.insightsAdset = await (async () => {
       try {
         const r = await metaGetAll(`${base}/${conta}/insights?level=adset&fields=adset_id,spend,impressions,clicks,actions&time_increment=1&${datePart}&limit=500&access_token=${token}`)
-        const linhas = r.map((x: any) => ({
-          adset_id: x.adset_id, data: x.date_start,
-          gasto: Number(x.spend ?? 0), impressoes: Number(x.impressions ?? 0), cliques: Number(x.clicks ?? 0),
-          mensagens_iniciadas: Number((x.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
-        }))
-        if (linhas.length) await supabase.from("meta_insights_adset_daily").upsert(linhas, { onConflict: "adset_id,data" })
+        const linhas = r
+          .filter((x: any) => adsetValidos.has(String(x.adset_id)))
+          .map((x: any) => ({
+            adset_id: x.adset_id, data: x.date_start,
+            gasto: Number(x.spend ?? 0), impressoes: Number(x.impressions ?? 0), cliques: Number(x.clicks ?? 0),
+            mensagens_iniciadas: Number((x.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
+          }))
+        if (linhas.length) {
+          const { error } = await supabase.from("meta_insights_adset_daily").upsert(linhas, { onConflict: "adset_id,data" })
+          if (error) return { ok: false, total: r.length, gravados: linhas.length, erro: error.message }
+        }
         return { ok: true, total: r.length, gravados: linhas.length }
       } catch (e: any) {
         return { ok: false, erro: e.message }
@@ -124,12 +140,17 @@ export async function GET() {
     report.insightsAd = await (async () => {
       try {
         const r = await metaGetAll(`${base}/${conta}/insights?level=ad&fields=ad_id,spend,impressions,clicks,actions&time_increment=1&${datePart}&limit=500&access_token=${token}`)
-        const linhas = r.map((x: any) => ({
-          ad_id: x.ad_id, data: x.date_start,
-          gasto: Number(x.spend ?? 0), impressoes: Number(x.impressions ?? 0), cliques: Number(x.clicks ?? 0),
-          mensagens_iniciadas: Number((x.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
-        }))
-        if (linhas.length) await supabase.from("meta_insights_ad_daily").upsert(linhas, { onConflict: "ad_id,data" })
+        const linhas = r
+          .filter((x: any) => adValidos.has(String(x.ad_id)))
+          .map((x: any) => ({
+            ad_id: x.ad_id, data: x.date_start,
+            gasto: Number(x.spend ?? 0), impressoes: Number(x.impressions ?? 0), cliques: Number(x.clicks ?? 0),
+            mensagens_iniciadas: Number((x.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
+          }))
+        if (linhas.length) {
+          const { error } = await supabase.from("meta_insights_ad_daily").upsert(linhas, { onConflict: "ad_id,data" })
+          if (error) return { ok: false, total: r.length, gravados: linhas.length, erro: error.message }
+        }
         return { ok: true, total: r.length, gravados: linhas.length }
       } catch (e: any) {
         return { ok: false, erro: e.message }

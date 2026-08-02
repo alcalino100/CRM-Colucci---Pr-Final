@@ -73,9 +73,7 @@ export async function GET(req: Request) {
     const ok = (e: string[]) => (e.length ? { ok: false, erros: e } : { ok: true })
 
     // ---------- CAMPANHAS ----------
-    // include_deleted=true: garante que entidades com insight recente mas já deletadas
-    // existam no banco (senão as tabelas de insights falham por FK).
-    const campanhas = await metaGetAll(`${base}/${conta}/campaigns?fields=id,name,effective_status&include_deleted=true&limit=200&access_token=${token}`)
+    const campanhas = await metaGetAll(`${base}/${conta}/campaigns?fields=id,name,effective_status&limit=200&access_token=${token}`)
     const { data: corretores } = await supabase.from("usuarios").select("id, nome").eq("role", "corretor")
     const mapaCorretor = new Map<string, string>()
     for (const c of corretores ?? []) {
@@ -95,7 +93,7 @@ export async function GET(req: Request) {
 
     // ---------- CONJUNTOS (adsets) ----------
     try {
-      const adsets = await metaGetAll(`${base}/${conta}/adsets?fields=id,name,effective_status,campaign_id&include_deleted=true&limit=500&access_token=${token}`)
+      const adsets = await metaGetAll(`${base}/${conta}/adsets?fields=id,name,effective_status,campaign_id&limit=500&access_token=${token}`)
       const linhasAdsets = adsets.map((a) => ({
         id: a.id, campanha_id: a.campaign_id, nome: a.name ?? "", status: a.effective_status ?? null,
         atualizado_em: new Date().toISOString(),
@@ -110,7 +108,7 @@ export async function GET(req: Request) {
 
     // ---------- ANÚNCIOS (ads) ----------
     try {
-      const ads = await metaGetAll(`${base}/${conta}/ads?fields=id,name,effective_status,campaign_id,adset_id&include_deleted=true&limit=500&access_token=${token}`)
+      const ads = await metaGetAll(`${base}/${conta}/ads?fields=id,name,effective_status,campaign_id,adset_id&limit=500&access_token=${token}`)
       const linhasAds = ads.map((a) => ({
         id: a.id, campanha_id: a.campaign_id, adset_id: a.adset_id, nome: a.name ?? "", status: a.effective_status ?? null,
         atualizado_em: new Date().toISOString(),
@@ -123,16 +121,27 @@ export async function GET(req: Request) {
       erros.push(`ads: ${e.message}`)
     }
 
+    // IDs válidos para as FKs das tabelas de insights (entidades que podem ter sido
+    // criadas e deletadas dentro da janela de insights não existem no banco e falhariam).
+    const { data: idsCamp } = await supabase.from("meta_campanhas").select("id")
+    const { data: idsAdset } = await supabase.from("meta_adsets").select("id")
+    const { data: idsAd } = await supabase.from("meta_ads").select("id")
+    const campValidos = new Set((idsCamp ?? []).map((r: any) => String(r.id)))
+    const adsetValidos = new Set((idsAdset ?? []).map((r: any) => String(r.id)))
+    const adValidos = new Set((idsAd ?? []).map((r: any) => String(r.id)))
+
     // ---------- INSIGHTS POR CAMPANHA ----------
     try {
       const insightsCampanha = await metaGetAll(
         `${base}/${conta}/insights?level=campaign&fields=campaign_id,spend,impressions,clicks,actions&time_increment=1&${datePart}&limit=500&access_token=${token}`
       )
-      const linhasGastoCamp = insightsCampanha.map((r: any) => ({
-        campanha_id: r.campaign_id, data: r.date_start,
-        gasto: Number(r.spend ?? 0), impressoes: Number(r.impressions ?? 0), cliques: Number(r.clicks ?? 0),
-        mensagens_iniciadas: Number((r.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
-      }))
+      const linhasGastoCamp = insightsCampanha
+        .filter((r: any) => campValidos.has(String(r.campaign_id)))
+        .map((r: any) => ({
+          campanha_id: r.campaign_id, data: r.date_start,
+          gasto: Number(r.spend ?? 0), impressoes: Number(r.impressions ?? 0), cliques: Number(r.clicks ?? 0),
+          mensagens_iniciadas: Number((r.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
+        }))
       if (linhasGastoCamp.length) {
         const { error } = await supabase.from("meta_insights_campaign_daily").upsert(linhasGastoCamp, { onConflict: "campanha_id,data" })
         if (error) erros.push(`insights_campaign: ${error.message}`)
@@ -146,11 +155,13 @@ export async function GET(req: Request) {
       const insightsAdset = await metaGetAll(
         `${base}/${conta}/insights?level=adset&fields=adset_id,spend,impressions,clicks,actions&time_increment=1&${datePart}&limit=500&access_token=${token}`
       )
-      const linhasGastoAdset = insightsAdset.map((r: any) => ({
-        adset_id: r.adset_id, data: r.date_start,
-        gasto: Number(r.spend ?? 0), impressoes: Number(r.impressions ?? 0), cliques: Number(r.clicks ?? 0),
-        mensagens_iniciadas: Number((r.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
-      }))
+      const linhasGastoAdset = insightsAdset
+        .filter((r: any) => adsetValidos.has(String(r.adset_id)))
+        .map((r: any) => ({
+          adset_id: r.adset_id, data: r.date_start,
+          gasto: Number(r.spend ?? 0), impressoes: Number(r.impressions ?? 0), cliques: Number(r.clicks ?? 0),
+          mensagens_iniciadas: Number((r.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
+        }))
       if (linhasGastoAdset.length) {
         const { error } = await supabase.from("meta_insights_adset_daily").upsert(linhasGastoAdset, { onConflict: "adset_id,data" })
         if (error) erros.push(`insights_adset: ${error.message}`)
@@ -164,11 +175,13 @@ export async function GET(req: Request) {
       const insightsAd = await metaGetAll(
         `${base}/${conta}/insights?level=ad&fields=ad_id,spend,impressions,clicks,actions&time_increment=1&${datePart}&limit=500&access_token=${token}`
       )
-      const linhasGastoAd = insightsAd.map((r: any) => ({
-        ad_id: r.ad_id, data: r.date_start,
-        gasto: Number(r.spend ?? 0), impressoes: Number(r.impressions ?? 0), cliques: Number(r.clicks ?? 0),
-        mensagens_iniciadas: Number((r.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
-      }))
+      const linhasGastoAd = insightsAd
+        .filter((r: any) => adValidos.has(String(r.ad_id)))
+        .map((r: any) => ({
+          ad_id: r.ad_id, data: r.date_start,
+          gasto: Number(r.spend ?? 0), impressoes: Number(r.impressions ?? 0), cliques: Number(r.clicks ?? 0),
+          mensagens_iniciadas: Number((r.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
+        }))
       if (linhasGastoAd.length) {
         const { error } = await supabase.from("meta_insights_ad_daily").upsert(linhasGastoAd, { onConflict: "ad_id,data" })
         if (error) erros.push(`insights_ad: ${error.message}`)
