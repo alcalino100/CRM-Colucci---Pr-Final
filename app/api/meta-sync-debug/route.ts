@@ -65,7 +65,7 @@ export async function GET() {
 
     report.adsets = await (async () => {
       try {
-        const a = await metaGetAll(`${base}/${conta}/adsets?fields=id,name,effective_status,campaign_id&limit=500&access_token=${token}`)
+        const a = await metaGetAll(`${base}/${conta}/adsets?fields=id,name,effective_status,campaign_id&include_deleted=true&limit=500&access_token=${token}`)
         const linhas = a.map((x) => ({ id: x.id, campanha_id: x.campaign_id, nome: x.name ?? "", status: x.effective_status ?? null, atualizado_em: new Date().toISOString() }))
         if (linhas.length) {
           const { error } = await supabase.from("meta_adsets").upsert(linhas, { onConflict: "id" })
@@ -79,7 +79,7 @@ export async function GET() {
 
     report.ads = await (async () => {
       try {
-        const a = await metaGetAll(`${base}/${conta}/ads?fields=id,name,effective_status,campaign_id,adset_id&limit=500&access_token=${token}`)
+        const a = await metaGetAll(`${base}/${conta}/ads?fields=id,name,effective_status,campaign_id,adset_id&include_deleted=true&limit=500&access_token=${token}`)
         const linhas = a.map((x) => ({ id: x.id, campanha_id: x.campaign_id, adset_id: x.adset_id, nome: x.name ?? "", status: x.effective_status ?? null, atualizado_em: new Date().toISOString() }))
         if (linhas.length) {
           const { error } = await supabase.from("meta_ads").upsert(linhas, { onConflict: "id" })

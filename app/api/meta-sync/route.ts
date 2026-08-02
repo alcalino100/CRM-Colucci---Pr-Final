@@ -73,7 +73,9 @@ export async function GET(req: Request) {
     const ok = (e: string[]) => (e.length ? { ok: false, erros: e } : { ok: true })
 
     // ---------- CAMPANHAS ----------
-    const campanhas = await metaGetAll(`${base}/${conta}/campaigns?fields=id,name,effective_status&limit=200&access_token=${token}`)
+    // include_deleted=true: garante que entidades com insight recente mas já deletadas
+    // existam no banco (senão as tabelas de insights falham por FK).
+    const campanhas = await metaGetAll(`${base}/${conta}/campaigns?fields=id,name,effective_status&include_deleted=true&limit=200&access_token=${token}`)
     const { data: corretores } = await supabase.from("usuarios").select("id, nome").eq("role", "corretor")
     const mapaCorretor = new Map<string, string>()
     for (const c of corretores ?? []) {
@@ -86,28 +88,37 @@ export async function GET(req: Request) {
       id: c.id, nome: c.name ?? "", status: c.effective_status ?? null, conta,
       corretor_id: achaCorretor(c.name ?? ""), atualizado_em: new Date().toISOString(),
     }))
-    if (linhasCamp.length) await supabase.from("meta_campanhas").upsert(linhasCamp, { onConflict: "id" })
+    if (linhasCamp.length) {
+      const { error } = await supabase.from("meta_campanhas").upsert(linhasCamp, { onConflict: "id" })
+      if (error) erros.push(`campanhas: ${error.message}`)
+    }
 
     // ---------- CONJUNTOS (adsets) ----------
     try {
-      const adsets = await metaGetAll(`${base}/${conta}/adsets?fields=id,name,effective_status,campaign_id&limit=500&access_token=${token}`)
+      const adsets = await metaGetAll(`${base}/${conta}/adsets?fields=id,name,effective_status,campaign_id&include_deleted=true&limit=500&access_token=${token}`)
       const linhasAdsets = adsets.map((a) => ({
         id: a.id, campanha_id: a.campaign_id, nome: a.name ?? "", status: a.effective_status ?? null,
         atualizado_em: new Date().toISOString(),
       }))
-      if (linhasAdsets.length) await supabase.from("meta_adsets").upsert(linhasAdsets, { onConflict: "id" })
+      if (linhasAdsets.length) {
+        const { error } = await supabase.from("meta_adsets").upsert(linhasAdsets, { onConflict: "id" })
+        if (error) erros.push(`adsets: ${error.message}`)
+      }
     } catch (e: any) {
       erros.push(`adsets: ${e.message}`)
     }
 
     // ---------- ANÚNCIOS (ads) ----------
     try {
-      const ads = await metaGetAll(`${base}/${conta}/ads?fields=id,name,effective_status,campaign_id,adset_id&limit=500&access_token=${token}`)
+      const ads = await metaGetAll(`${base}/${conta}/ads?fields=id,name,effective_status,campaign_id,adset_id&include_deleted=true&limit=500&access_token=${token}`)
       const linhasAds = ads.map((a) => ({
         id: a.id, campanha_id: a.campaign_id, adset_id: a.adset_id, nome: a.name ?? "", status: a.effective_status ?? null,
         atualizado_em: new Date().toISOString(),
       }))
-      if (linhasAds.length) await supabase.from("meta_ads").upsert(linhasAds, { onConflict: "id" })
+      if (linhasAds.length) {
+        const { error } = await supabase.from("meta_ads").upsert(linhasAds, { onConflict: "id" })
+        if (error) erros.push(`ads: ${error.message}`)
+      }
     } catch (e: any) {
       erros.push(`ads: ${e.message}`)
     }
@@ -122,7 +133,10 @@ export async function GET(req: Request) {
         gasto: Number(r.spend ?? 0), impressoes: Number(r.impressions ?? 0), cliques: Number(r.clicks ?? 0),
         mensagens_iniciadas: Number((r.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
       }))
-      if (linhasGastoCamp.length) await supabase.from("meta_insights_campaign_daily").upsert(linhasGastoCamp, { onConflict: "campanha_id,data" })
+      if (linhasGastoCamp.length) {
+        const { error } = await supabase.from("meta_insights_campaign_daily").upsert(linhasGastoCamp, { onConflict: "campanha_id,data" })
+        if (error) erros.push(`insights_campaign: ${error.message}`)
+      }
     } catch (e: any) {
       erros.push(`insights_campaign: ${e.message}`)
     }
@@ -137,7 +151,10 @@ export async function GET(req: Request) {
         gasto: Number(r.spend ?? 0), impressoes: Number(r.impressions ?? 0), cliques: Number(r.clicks ?? 0),
         mensagens_iniciadas: Number((r.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
       }))
-      if (linhasGastoAdset.length) await supabase.from("meta_insights_adset_daily").upsert(linhasGastoAdset, { onConflict: "adset_id,data" })
+      if (linhasGastoAdset.length) {
+        const { error } = await supabase.from("meta_insights_adset_daily").upsert(linhasGastoAdset, { onConflict: "adset_id,data" })
+        if (error) erros.push(`insights_adset: ${error.message}`)
+      }
     } catch (e: any) {
       erros.push(`insights_adset: ${e.message}`)
     }
@@ -152,7 +169,10 @@ export async function GET(req: Request) {
         gasto: Number(r.spend ?? 0), impressoes: Number(r.impressions ?? 0), cliques: Number(r.clicks ?? 0),
         mensagens_iniciadas: Number((r.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
       }))
-      if (linhasGastoAd.length) await supabase.from("meta_insights_ad_daily").upsert(linhasGastoAd, { onConflict: "ad_id,data" })
+      if (linhasGastoAd.length) {
+        const { error } = await supabase.from("meta_insights_ad_daily").upsert(linhasGastoAd, { onConflict: "ad_id,data" })
+        if (error) erros.push(`insights_ad: ${error.message}`)
+      }
     } catch (e: any) {
       erros.push(`insights_ad: ${e.message}`)
     }
