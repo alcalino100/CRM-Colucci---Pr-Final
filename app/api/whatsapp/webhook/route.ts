@@ -29,7 +29,21 @@ async function handleConnectionUpdate(payload: any) {
 // Detecta se a mensagem nasceu de um clique em anúncio (Click-to-WhatsApp).
 // A Meta injeta esse contexto na 1ª mensagem; a Evolution repassa em campos que
 // variam por versão, então tentamos todos, em ordem de prioridade.
-function detectAd(msg: any): { veioDeAnuncio: boolean; anuncioId: string | null; anuncioTitulo: string | null } {
+// Alguns cliques chegam SEM contexto (Evolution inconsistente) — nesse caso,
+// cai no fallback por conteúdo (texto pré-preenchido do anúncio).
+function pareceTextoDeAnuncio(texto: string): boolean {
+  const t = (texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  // Texto pré-preenchido padrão dos anúncios Click-to-WhatsApp da Meta
+  return /^ola\s+gostaria\s+de\s+saber\s+mais\s+sobre\s+o\s+imovel/.test(t)
+}
+
+function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId: string | null; anuncioTitulo: string | null } {
   const ctx = msg?.contextInfo ?? msg?.message?.contextInfo ?? msg?.message?.extendedTextMessage?.contextInfo
   const externalAd = ctx?.externalAdReplyInfo
   const referral = msg?.message?.referral ?? msg?.referral
@@ -67,6 +81,11 @@ function detectAd(msg: any): { veioDeAnuncio: boolean; anuncioId: string | null;
     }
   }
 
+  // Fallback por conteúdo: texto pré-preenchido do anúncio (mesmo sem contexto CTWA)
+  if (corpo && pareceTextoDeAnuncio(corpo)) {
+    return { veioDeAnuncio: true, anuncioId: null, anuncioTitulo: corpo }
+  }
+
   return { veioDeAnuncio: false, anuncioId: null, anuncioTitulo: null }
 }
 
@@ -96,7 +115,7 @@ async function handleMessageUpsert(payload: any) {
   const corretorId = inst?.corretor_id
   if (!corretorId) return
 
-  const { veioDeAnuncio, anuncioId, anuncioTitulo } = detectAd(msg)
+  const { veioDeAnuncio, anuncioId, anuncioTitulo } = detectAd(msg, corpo)
 
   // Mensagem orgânica: só registra para referência, não cria lead nem notifica.
   if (!veioDeAnuncio) {
@@ -268,7 +287,14 @@ export async function POST(request: Request) {
 
     const event: string = payload.event ?? payload.type ?? ""
     if (event.includes("connection")) await handleConnectionUpdate(payload)
-    else if (event.includes("messages")) await handleMessageUpsert(payload)
+    else if (event.includes("messages")) {
+      // Processa TODAS as mensagens do lote (não só data[0])
+      const itens = Array.isArray(payload?.data) ? payload.data : [payload?.data]
+      for (const item of itens) {
+        if (!item) continue
+        await handleMessageUpsert({ ...payload, data: item })
+      }
+    }
 
     return ok()
   } catch (error) {
