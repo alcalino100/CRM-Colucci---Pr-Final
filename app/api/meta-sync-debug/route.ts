@@ -27,6 +27,19 @@ async function metaGetAll(url: string): Promise<any[]> {
   return out
 }
 
+async function resolveConta(base: string, token: string): Promise<string> {
+  let raw = process.env.META_AD_ACCOUNT_ID || ""
+  if (raw) {
+    raw = raw.trim()
+    return raw.startsWith("act_") ? raw : `act_${raw}`
+  }
+  const accs = await metaGetAll(`${base}/me/adaccounts?fields=id,account_status&limit=100&access_token=${token}`)
+  const ativa = accs.find((a: any) => a.account_status === 1) ?? accs[0]
+  if (!ativa?.id) throw new Error("Nenhuma conta de anúncio encontrada")
+  const id = String(ativa.id)
+  return id.startsWith("act_") ? id : `act_${id}`
+}
+
 export async function GET() {
   const report: any = {}
   try {
@@ -34,11 +47,10 @@ export async function GET() {
     const token = rawToken?.trim().replace(/^['"]+|['"]+$/g, "")
     if (!token) return NextResponse.json({ ok: false, erro: "sem token" })
     const versao = process.env.META_API_VERSION || "v25.0"
-    let conta = process.env.META_AD_ACCOUNT_ID!
-    if (!conta.startsWith("act_")) conta = `act_${conta}`
+    const base = `https://graph.facebook.com/${versao}`
+    const conta = await resolveConta(base, token)
     report.versao = versao
     report.conta = conta
-    const base = `https://graph.facebook.com/${versao}`
     const supabase = db()
     const datePart = `date_preset=last_30d`
 
