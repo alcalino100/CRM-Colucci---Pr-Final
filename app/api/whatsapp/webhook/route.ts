@@ -186,14 +186,16 @@ async function handleMessageUpsert(payload: any) {
     if (nomeCampanha) partesObs.push(`Campanha: ${nomeCampanha}`)
     if (nomeConjunto) partesObs.push(`Conjunto: ${nomeConjunto}`)
     const obs = partesObs.join("\n")
+    // Se o anúncio não carregou contexto (detecção por conteúdo), tenta extrair o Ref. do imóvel do texto
+    const referenciaExtraida = !anuncioId ? (corpo.match(/ref[.:]?\s*(\d{3,})/i)?.[1] ?? "") : ""
     const { data: novo, error } = await wsupabase
       .from("leads")
       .insert({
         nome,
         telefone,
         email: "",
-        referencia_imovel: "",
-        referencias: [],
+        referencia_imovel: referenciaExtraida,
+        referencias: referenciaExtraida ? [referenciaExtraida] : [],
         temperatura: "morno",
         origem: "Tráfego Pago",
         observacoes: obs,
