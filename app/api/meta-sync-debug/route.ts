@@ -94,7 +94,13 @@ export async function GET() {
     report.insightsCampanha = await (async () => {
       try {
         const r = await metaGetAll(`${base}/${conta}/insights?level=campaign&fields=campaign_id,spend,impressions,clicks,actions&time_increment=1&${datePart}&limit=500&access_token=${token}`)
-        return { ok: true, total: r.length }
+        const linhas = r.map((x: any) => ({
+          campanha_id: x.campaign_id, data: x.date_start,
+          gasto: Number(x.spend ?? 0), impressoes: Number(x.impressions ?? 0), cliques: Number(x.clicks ?? 0),
+          mensagens_iniciadas: Number((x.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
+        }))
+        if (linhas.length) await supabase.from("meta_insights_campaign_daily").upsert(linhas, { onConflict: "campanha_id,data" })
+        return { ok: true, total: r.length, gravados: linhas.length }
       } catch (e: any) {
         return { ok: false, erro: e.message }
       }
@@ -103,7 +109,13 @@ export async function GET() {
     report.insightsAdset = await (async () => {
       try {
         const r = await metaGetAll(`${base}/${conta}/insights?level=adset&fields=adset_id,spend,impressions,clicks,actions&time_increment=1&${datePart}&limit=500&access_token=${token}`)
-        return { ok: true, total: r.length }
+        const linhas = r.map((x: any) => ({
+          adset_id: x.adset_id, data: x.date_start,
+          gasto: Number(x.spend ?? 0), impressoes: Number(x.impressions ?? 0), cliques: Number(x.clicks ?? 0),
+          mensagens_iniciadas: Number((x.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
+        }))
+        if (linhas.length) await supabase.from("meta_insights_adset_daily").upsert(linhas, { onConflict: "adset_id,data" })
+        return { ok: true, total: r.length, gravados: linhas.length }
       } catch (e: any) {
         return { ok: false, erro: e.message }
       }
@@ -112,7 +124,13 @@ export async function GET() {
     report.insightsAd = await (async () => {
       try {
         const r = await metaGetAll(`${base}/${conta}/insights?level=ad&fields=ad_id,spend,impressions,clicks,actions&time_increment=1&${datePart}&limit=500&access_token=${token}`)
-        return { ok: true, total: r.length }
+        const linhas = r.map((x: any) => ({
+          ad_id: x.ad_id, data: x.date_start,
+          gasto: Number(x.spend ?? 0), impressoes: Number(x.impressions ?? 0), cliques: Number(x.clicks ?? 0),
+          mensagens_iniciadas: Number((x.actions || []).find((a: any) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")?.value ?? 0),
+        }))
+        if (linhas.length) await supabase.from("meta_insights_ad_daily").upsert(linhas, { onConflict: "ad_id,data" })
+        return { ok: true, total: r.length, gravados: linhas.length }
       } catch (e: any) {
         return { ok: false, erro: e.message }
       }
