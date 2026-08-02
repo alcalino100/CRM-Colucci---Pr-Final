@@ -190,12 +190,15 @@ export async function GET(req: Request) {
       erros.push(`insights_ad: ${e.message}`)
     }
 
+    const { count: countAdsets } = await supabase.from("meta_adsets").select("id", { count: "exact", head: true })
+    const { count: countAds } = await supabase.from("meta_ads").select("id", { count: "exact", head: true })
+
     return NextResponse.json({
       ok: erros.length === 0,
       conta,
       campanhas: linhasCamp.length,
-      conjuntos: (await supabase.from("meta_adsets").select("id").limit(1)).data?.length ?? 0,
-      anuncios: (await supabase.from("meta_ads").select("id").limit(1)).data?.length ?? 0,
+      conjuntos: countAdsets ?? 0,
+      anuncios: countAds ?? 0,
       erros,
       quando: new Date().toISOString(),
     })
