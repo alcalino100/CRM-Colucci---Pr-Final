@@ -120,6 +120,11 @@ export async function GET(req: Request) {
       body = mock
         ? { data: [] }
         : { data: await metaGetAll(`${BASE}/${acc}/adspixels?fields=id,name,is_unavailable,is_created_by_business,owner_business{id,name}&limit=100&access_token=${token}`) }
+    } else if (op === "pixel") {
+      const id = url.searchParams.get("id")!
+      body = mock
+        ? { id }
+        : (await metaGetAll(`${BASE}/${id}?fields=id,name,is_unavailable,owner_business{id,name},ad_accounts{id,name}&access_token=${token}`))[0]
     } else if (op === "creative") {
       const cr = url.searchParams.get("id")!
       body = mock
@@ -170,6 +175,16 @@ export async function POST(req: Request) {
 
     const adsetId: string | undefined = body.adset_id
     const dailyBudget: number | undefined = body.daily_budget
+    if (op === "link_pixel") {
+      const pixelId: string | undefined = body.pixel_id
+      const adaccountId: string | undefined = body.adaccount_id
+      if (!pixelId || !adaccountId) return NextResponse.json({ error: "informe pixel_id e adaccount_id" }, { status: 400 })
+      const form = new URLSearchParams({ access_token: token, adaccount_id: adaccountId })
+      const r = await fetch(`${BASE}/${pixelId}/adaccounts`, { method: "POST", body: form })
+      const j: any = await r.json()
+      if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code }, { status: r.status })
+      return NextResponse.json({ ok: true, pixel_id: pixelId, adaccount_id: adaccountId, meta: j })
+    }
     if (!adsetId || !Number.isInteger(dailyBudget) || dailyBudget! < 1) {
       return NextResponse.json({ error: "informe adset_id e daily_budget inteiro (em centavos, >= 1)" }, { status: 400 })
     }

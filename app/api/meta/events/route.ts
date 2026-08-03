@@ -11,7 +11,7 @@ export const maxDuration = 30
 
 const VERSAO = process.env.META_API_VERSION || "v21.0"
 const BASE = `https://graph.facebook.com/${VERSAO}`
-const PIXEL_PADRAO = "554284008964640"
+const PIXEL_PADRAO = "2053723892017546"
 
 function resolveToken(): string | null {
   const raw = process.env.META_CAPI_TOKEN || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN
