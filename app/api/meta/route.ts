@@ -109,7 +109,7 @@ export async function GET(req: Request) {
       const camp = url.searchParams.get("campaign")!
       body = mock
         ? mockAdsets(camp)
-        : { data: await metaGetAll(`${BASE}/${camp}/adsets?fields=id,name,effective_status,campaign_id,optimization_goal,optimization_event,billing_event,daily_budget,lifetime_budget,promoted_object{id,pixel_id,custom_event_type,custom_event_str,page_id,application_id,offline_conversion_data_set_id},targeting{geo_locations,age_min,age_max}&limit=200&access_token=${token}`) }
+        : { data: await metaGetAll(`${BASE}/${camp}/adsets?fields=id,name,effective_status,campaign_id,optimization_goal,optimization_event,billing_event,daily_budget,lifetime_budget,promoted_object{pixel_id,custom_event_type,custom_event_str,page_id,application_id,offline_conversion_data_set_id},targeting{geo_locations,age_min,age_max}&limit=200&access_token=${token}`) }
     } else if (op === "ads") {
       const adset = url.searchParams.get("adset")!
       body = mock
