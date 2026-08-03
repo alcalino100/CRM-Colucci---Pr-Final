@@ -6,8 +6,27 @@ import { ChevronDown, ChevronRight } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Badge, Card, CardHeader, CardTitle, Select, Skeleton, Table, TD, TH, THead, TR } from "@/components/ui/primitives"
-import { ACCESS_LABEL, ACTION_LABEL, ACTION_VARIANT, fmtDateTime } from "@/lib/labels"
+import { ACCESS_LABEL, ACTION_LABEL, ACTION_VARIANT, brl, fmtDateTime } from "@/lib/labels"
 import { ACCESS_LOGS, USERS } from "@/lib/mock-data"
+
+type MetaEventLog = {
+  id: string
+  event_id?: string | null
+  event_name: string
+  pixel_id: string
+  origem: string
+  lead_id?: string | null
+  nome?: string | null
+  telefone_mascarado?: string | null
+  valor?: number | null
+  corretor_id?: string | null
+  status: string
+  http_status?: number | null
+  events_received?: number | null
+  meta_code?: string | null
+  meta_message?: string | null
+  criado_em: string
+}
 
 export default function LogsPage() {
   const { user } = useAuth()
@@ -19,6 +38,20 @@ export default function LogsPage() {
   const [fEntidade, setFEntidade] = useState("todos")
   const [dias, setDias] = useState("todos")
   const [expanded, setExpanded] = useState<string | null>(null)
+
+  const [metaLogs, setMetaLogs] = useState<MetaEventLog[] | null>(null)
+  const [metaErro, setMetaErro] = useState("")
+
+  useEffect(() => {
+    if (user?.role !== "gestor") return
+    fetch(`/api/meta/event-logs?usuario_id=${user.id}&limite=50`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.ok) setMetaLogs(j.logs)
+        else setMetaErro(j.erro ?? "Não foi possível carregar os logs do Meta")
+      })
+      .catch(() => setMetaErro("Falha de rede ao carregar os logs do Meta"))
+  }, [user?.id, user?.role])
 
   useEffect(() => {
     if (user && user.role !== "gestor") router.replace("/painel-corretor")
@@ -122,6 +155,49 @@ export default function LogsPage() {
                     <Badge variant={a.acao === "tentativa falha" ? "red" : a.acao === "login" ? "green" : "gray"}>
                       {ACCESS_LABEL[a.acao]}
                     </Badge>
+                  </TD>
+                </TR>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </Card>
+
+      {/* Envios para o Meta (CAPI) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Envio de eventos para o Meta (CAPI)</CardTitle>
+        </CardHeader>
+        {metaErro ? (
+          <p className="p-6 text-sm text-destructive">{metaErro}</p>
+        ) : metaLogs === null ? (
+          <div className="flex flex-col gap-2 p-4">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : metaLogs.length === 0 ? (
+          <p className="p-12 text-center text-sm text-muted-foreground">Nenhum evento enviado ao Meta ainda.</p>
+        ) : (
+          <Table>
+            <THead><TR><TH>Data/hora</TH><TH>Lead</TH><TH>Valor</TH><TH>Origem</TH><TH>Status</TH><TH>Detalhes</TH></TR></THead>
+            <tbody>
+              {metaLogs.map((m) => (
+                <TR key={m.id}>
+                  <TD className="whitespace-nowrap text-muted-foreground">{fmtDateTime(m.criado_em)}</TD>
+                  <TD>
+                    <div className="font-medium">{m.nome || "—"}</div>
+                    <div className="text-xs text-muted-foreground">{m.telefone_mascarado || ""}</div>
+                  </TD>
+                  <TD className="whitespace-nowrap">{brl(m.valor ?? undefined)}</TD>
+                  <TD>
+                    <Badge variant={m.origem === "backfill" ? "blue" : "gray"} className="capitalize">{m.origem}</Badge>
+                  </TD>
+                  <TD>
+                    <Badge variant={m.status === "enviado" ? "green" : "red"}>
+                      {m.status === "enviado" ? `Enviado${m.events_received ? ` (${m.events_received})` : ""}` : "Erro"}
+                    </Badge>
+                  </TD>
+                  <TD className="text-xs text-muted-foreground">
+                    {m.meta_message
+                      ? `${m.meta_message}${m.meta_code ? ` (${m.meta_code})` : ""}`
+                      : m.event_id ? <span className="font-mono">{m.event_id}</span> : ""}
                   </TD>
                 </TR>
               ))}

@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
-import { resolveMetaToken, metaPixelId, buildPurchaseEvent, sendMetaEvents } from "@/lib/meta/capi"
+import { resolveMetaToken, metaPixelId, buildPurchaseEvent, sendMetaEvents, persistMetaEventLog } from "@/lib/meta/capi"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -34,10 +34,10 @@ export async function GET(req: Request) {
 
     if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
 
-    const events = (leads ?? [])
+    const eventosComMeta = (leads ?? [])
       .filter((l) => l.telefone && String(l.telefone).trim())
-      .map((l) =>
-        buildPurchaseEvent({
+      .map((l) => {
+        const event = buildPurchaseEvent({
           lead_id: l.id,
           telefone: l.telefone,
           nome: l.nome,
@@ -48,21 +48,44 @@ export async function GET(req: Request) {
           ad_id: l.meta_ad_id,
           event_time: Math.floor(new Date(l.atualizado_em || l.criado_em || new Date().toISOString()).getTime() / 1000),
         })
-      )
+        return { event, lead: l }
+      })
 
-    const ignorados = (leads ?? []).length - events.length
+    const ignorados = (leads ?? []).length - eventosComMeta.length
 
     const lotes: any[] = []
-    for (let i = 0; i < events.length; i += BATCH) {
-      const chunk = events.slice(i, i + BATCH)
-      const { status, json } = await sendMetaEvents(token, pixel, chunk)
+    for (let i = 0; i < eventosComMeta.length; i += BATCH) {
+      const chunk = eventosComMeta.slice(i, i + BATCH)
+      const { status, json } = await sendMetaEvents(token, pixel, chunk.map((c) => c.event))
+      const ok = !json.error
+      await Promise.all(chunk.map((c) =>
+        persistMetaEventLog({
+          origem: "backfill",
+          event_id: c.event.event_id,
+          pixel_id: pixel,
+          lead_id: c.lead.id,
+          nome: c.lead.nome,
+          telefone: c.lead.telefone,
+          valor: c.lead.valor_proposta,
+          corretor_id: c.lead.corretor_id,
+          campaign_id: c.lead.meta_campaign_id,
+          adset_id: c.lead.meta_adset_id,
+          ad_id: c.lead.meta_ad_id,
+          status: ok ? "enviado" : "erro",
+          http_status: status,
+          events_received: ok ? json.events_received : null,
+          meta_code: ok ? null : json.error?.code,
+          meta_message: ok ? null : json.error?.message,
+          event_time: c.event.event_time,
+        })
+      ))
       lotes.push({ lote: Math.floor(i / BATCH) + 1, eventos: chunk.length, http: status, recebidos: json.events_received ?? 0, erro: json.error?.message ?? null })
     }
 
     return NextResponse.json({
       ok: true,
       total_leads_fechados: leads?.length ?? 0,
-      eventos_enviados: events.length,
+      eventos_enviados: eventosComMeta.length,
       ignorados_sem_telefone: ignorados,
       pixel_id: pixel,
       lotes,
