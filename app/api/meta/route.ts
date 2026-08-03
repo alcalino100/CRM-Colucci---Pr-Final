@@ -173,14 +173,26 @@ export async function POST(req: Request) {
   const op = url.searchParams.get("op")
   const { token } = await resolveToken()
   if (!token) return NextResponse.json({ error: "sem token (env META_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN)" }, { status: 401 })
-  if (op !== "set_budget" && op !== "link_pixel") return NextResponse.json({ error: "op inválida (use op=set_budget ou op=link_pixel)" }, { status: 400 })
+  if (op !== "set_budget" && op !== "link_pixel" && op !== "set_pixel") return NextResponse.json({ error: "op inválida (use op=set_budget, op=link_pixel ou op=set_pixel)" }, { status: 400 })
 
   try {
     let body: any
     try { body = await req.json() } catch { return NextResponse.json({ error: "body JSON inválido" }, { status: 400 }) }
 
     const adsetId: string | undefined = body.adset_id
-    const dailyBudget: number | undefined = body.daily_budget
+    if (op === "set_pixel") {
+      const pixelId: string | undefined = body.pixel_id
+      const pageId: string | undefined = body.page_id
+      const customEventType: string | undefined = body.custom_event_type || "PURCHASE"
+      if (!adsetId || !pixelId) return NextResponse.json({ error: "informe adset_id e pixel_id" }, { status: 400 })
+      const po: any = { pixel_id: pixelId, custom_event_type: customEventType }
+      if (pageId) po.page_id = pageId
+      const form = new URLSearchParams({ access_token: token, promoted_object: JSON.stringify(po) })
+      const r = await fetch(`${BASE}/${adsetId}`, { method: "POST", body: form })
+      const j: any = await r.json()
+      if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
+      return NextResponse.json({ ok: true, adset_id: adsetId, promoted_object: po, meta: j })
+    }
     if (op === "link_pixel") {
       const pixelId: string | undefined = body.pixel_id
       const adaccountId: string | undefined = body.adaccount_id
@@ -191,6 +203,7 @@ export async function POST(req: Request) {
       if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code }, { status: r.status })
       return NextResponse.json({ ok: true, pixel_id: pixelId, adaccount_id: adaccountId, meta: j })
     }
+    const dailyBudget: number | undefined = body.daily_budget
     if (!adsetId || !Number.isInteger(dailyBudget) || dailyBudget! < 1) {
       return NextResponse.json({ error: "informe adset_id e daily_budget inteiro (em centavos, >= 1)" }, { status: 400 })
     }
