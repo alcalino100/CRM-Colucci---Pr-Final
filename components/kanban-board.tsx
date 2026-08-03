@@ -207,6 +207,23 @@ export function KanbanBoard({
     }
     toast("Fechamento registrado.")
     setCloseLead(null)
+    if (closeLead.origem === "Tráfego Pago") {
+      fetch("/api/meta/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          lead_id: closeLead.id,
+          telefone: closeLead.telefone,
+          nome: closeLead.nome,
+          valor: closeLead.valorNegociacao,
+          corretor_id: closeLead.corretorId,
+          campanha_id: closeLead.metaCampaignId,
+          adset_id: closeLead.metaAdsetId,
+          ad_id: closeLead.metaAdId,
+        }),
+      }).catch(() => {})
+    }
   }
 
   async function handleAssumir() {
