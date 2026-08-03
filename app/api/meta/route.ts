@@ -149,3 +149,32 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: e.message, expired: !!e.expired }, { status })
   }
 }
+
+// ---------- Mutação: atualizar orçamento diário de um conjunto ----------
+// POST /api/meta?op=set_budget  body: { adset_id: string, daily_budget: number (em centavos) }
+export async function POST(req: Request) {
+  const url = new URL(req.url)
+  const op = url.searchParams.get("op")
+  const { token } = await resolveToken()
+  if (!token) return NextResponse.json({ error: "sem token (env META_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN)" }, { status: 401 })
+  if (op !== "set_budget") return NextResponse.json({ error: "op inválida (use op=set_budget)" }, { status: 400 })
+
+  try {
+    let body: any
+    try { body = await req.json() } catch { return NextResponse.json({ error: "body JSON inválido" }, { status: 400 }) }
+
+    const adsetId: string | undefined = body.adset_id
+    const dailyBudget: number | undefined = body.daily_budget
+    if (!adsetId || !Number.isInteger(dailyBudget) || dailyBudget! < 1) {
+      return NextResponse.json({ error: "informe adset_id e daily_budget inteiro (em centavos, >= 1)" }, { status: 400 })
+    }
+
+    const form = new URLSearchParams({ access_token: token, daily_budget: String(dailyBudget) })
+    const r = await fetch(`${BASE}/${adsetId}`, { method: "POST", body: form })
+    const j: any = await r.json()
+    if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
+    return NextResponse.json({ ok: true, adset_id: adsetId, daily_budget: dailyBudget, meta: j })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
