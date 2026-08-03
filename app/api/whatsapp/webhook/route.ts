@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { normalizePhone } from "@/lib/labels"
 import { mapConnectionState, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
 
 export const runtime = "nodejs"
@@ -171,16 +172,19 @@ async function handleMessageUpsert(payload: any) {
   }
 
   const { data: candidatos } = await wsupabase.from("leads").select("id, telefone, corretor_id, status")
-  const existente = (candidatos ?? []).find((l) => onlyDigits(l.telefone) === telefone)
-
-  let leadId: string | null = existente?.id ?? null
+  const existente = (candidatos ?? []).find((l) => normalizePhone(l.telefone) === normalizePhone(telefone))
 
   // Nome do corretor da instância (para as notificações)
   const { data: corretor } = await wsupabase.from("usuarios").select("nome").eq("id", corretorId).maybeSingle()
   const corretorNome = corretor?.nome ?? "corretor"
 
-  if (!existente) {
-    // Caso A: novo lead via tráfego pago
+  // Telefone que já é do MESMO corretor: não duplica, apenas anexa a mensagem ao lead existente
+  const mesmoCorretor = existente && existente.corretor_id === corretorId
+  let leadId: string | null = mesmoCorretor ? existente.id : null
+
+  if (!mesmoCorretor) {
+    // Cria lead para o corretor que recebeu o clique — mesmo que o telefone já exista para outro corretor.
+    // Assim o lead do tráfego nunca fica "invisível" para quem recebeu a mensagem.
     const partesObs: string[] = ["Lead criado automaticamente via WhatsApp (Click-to-WhatsApp)"]
     if (nomeAnuncio || anuncioTitulo) partesObs.push(`Anúncio: ${nomeAnuncio || anuncioTitulo}`)
     if (nomeCampanha) partesObs.push(`Campanha: ${nomeCampanha}`)
@@ -208,9 +212,9 @@ async function handleMessageUpsert(payload: any) {
       .select("id")
       .maybeSingle()
     if (error) {
-      // Corrida (unique 23505): telefone inserido em paralelo — trata como existente
+      // Corrida: telefone inserido em paralelo — trata como existente
       const { data: candidatos2 } = await wsupabase.from("leads").select("id, telefone, corretor_id, status")
-      const again = (candidatos2 ?? []).find((l) => onlyDigits(l.telefone) === telefone)
+      const again = (candidatos2 ?? []).find((l) => normalizePhone(l.telefone) === normalizePhone(telefone))
       leadId = again?.id ?? null
       if (again && again.corretor_id && again.corretor_id !== corretorId) {
         await wsupabase.from("notificacoes").insert({
@@ -230,34 +234,17 @@ async function handleMessageUpsert(payload: any) {
         para_role: "gestor",
         lead_id: leadId,
       })
-    }
-  } else if (existente.corretor_id && existente.corretor_id !== corretorId) {
-    // Caso B: telefone já pertence a outro corretor
-    const { data: dono } = await wsupabase.from("usuarios").select("nome").eq("id", existente.corretor_id).maybeSingle()
-    await wsupabase.from("notificacoes").insert({
-      mensagem: `Possível lead duplicado: ${telefone} clicou em anúncio e escreveu para o WhatsApp de ${corretorNome}, mas já é lead de ${dono?.nome ?? "outro corretor"} (status: ${existente.status}).`,
-      tipo: "possivel_duplicado",
-      usuario_id: corretorId,
-      para_role: "gestor",
-      lead_id: existente.id,
-    })
-    // Mesmo sendo duplicado, enriquece os dados do lead original com as informações do anúncio
-    const partesAd: string[] = []
-    if (nomeAnuncio || anuncioTitulo) partesAd.push(`Anúncio: ${nomeAnuncio || anuncioTitulo}`)
-    if (nomeCampanha) partesAd.push(`Campanha: ${nomeCampanha}`)
-    if (nomeConjunto) partesAd.push(`Conjunto: ${nomeConjunto}`)
-    if (partesAd.length) {
-      const obsExtra = `[${new Date().toLocaleString("pt-BR")} - Clique em anúncio]\n${partesAd.join("\n")}`
-      await wsupabase
-        .from("leads")
-        .update({
-          meta_campaign_id: metaCampaignId || existente.meta_campaign_id || null,
-          meta_adset_id: metaAdsetId || existente.meta_adset_id || null,
-          meta_ad_id: metaAdId || existente.meta_ad_id || null,
-          observacoes: (existente.observacoes || "") + "\n\n" + obsExtra,
-          atualizado_em: new Date().toISOString(),
+      // Telefone já cadastrado para outro corretor: avisa o gestor, mas o lead do clique é de quem recebeu
+      if (existente && existente.corretor_id && existente.corretor_id !== corretorId) {
+        const { data: dono } = await wsupabase.from("usuarios").select("nome").eq("id", existente.corretor_id).maybeSingle()
+        await wsupabase.from("notificacoes").insert({
+          mensagem: `Possível lead duplicado: ${telefone} clicou em anúncio e escreveu para o WhatsApp de ${corretorNome}, mas já é lead de ${dono?.nome ?? "outro corretor"} (status: ${existente.status}).`,
+          tipo: "possivel_duplicado",
+          usuario_id: corretorId,
+          para_role: "gestor",
+          lead_id: existente.id,
         })
-        .eq("id", existente.id)
+      }
     }
   }
 

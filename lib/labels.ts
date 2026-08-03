@@ -93,9 +93,11 @@ export function normalizeStatus(s: string): LeadStatus {
   return (LEAD_STATUSES as string[]).includes(s) ? (s as LeadStatus) : "novo"
 }
 
-// Normaliza telefone para comparação (só dígitos)
+// Normaliza telefone para comparação (só dígitos, sem prefixo de país "55").
+// Isso garante que "5518996106482" e "18 99610-6482" sejam tratados como iguais.
 export function normalizePhone(phone: string) {
-  return (phone || "").replace(/\D/g, "")
+  const d = (phone || "").replace(/\D/g, "")
+  return d.length > 11 && d.startsWith("55") ? d.slice(2) : d
 }
 
 // ---- Follow-up obrigatório por etapa ----
