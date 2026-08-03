@@ -115,6 +115,11 @@ export async function GET(req: Request) {
       body = mock
         ? mockAds(adset)
         : { data: await metaGetAll(`${BASE}/${adset}/ads?fields=id,name,effective_status,adset_id,creative{id}&limit=200&access_token=${token}`) }
+    } else if (op === "pixels") {
+      const acc = url.searchParams.get("account") || "act_321873088505518"
+      body = mock
+        ? { data: [] }
+        : { data: await metaGetAll(`${BASE}/${acc}/adspixels?fields=id,name,is_unavailable,is_created_by_business,owner_business{id,name}&limit=100&access_token=${token}`) }
     } else if (op === "creative") {
       const cr = url.searchParams.get("id")!
       body = mock
