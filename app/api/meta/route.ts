@@ -127,9 +127,10 @@ export async function GET(req: Request) {
         : (await metaGetAll(`${BASE}/${id}?fields=id,name,is_unavailable,owner_business{id,name}&access_token=${token}`))[0]
     } else if (op === "pixel_accounts") {
       const id = url.searchParams.get("id")!
+      const business = url.searchParams.get("business") || "721281944944285"
       body = mock
         ? { data: [] }
-        : { data: await metaGetAll(`${BASE}/${id}/adaccounts?fields=id,name&limit=100&access_token=${token}`) }
+        : { data: await metaGetAll(`${BASE}/${id}/adaccounts?business=${business}&fields=id,name&limit=100&access_token=${token}`) }
     } else if (op === "creative") {
       const cr = url.searchParams.get("id")!
       body = mock
@@ -172,7 +173,7 @@ export async function POST(req: Request) {
   const op = url.searchParams.get("op")
   const { token } = await resolveToken()
   if (!token) return NextResponse.json({ error: "sem token (env META_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN)" }, { status: 401 })
-  if (op !== "set_budget") return NextResponse.json({ error: "op inválida (use op=set_budget)" }, { status: 400 })
+  if (op !== "set_budget" && op !== "link_pixel") return NextResponse.json({ error: "op inválida (use op=set_budget ou op=link_pixel)" }, { status: 400 })
 
   try {
     let body: any
