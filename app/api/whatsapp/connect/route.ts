@@ -23,6 +23,37 @@ function extractQr(payload: any): string | null {
   return raw.startsWith("data:image") ? raw : `data:image/png;base64,${raw}`
 }
 
+// Configura o webhook da Evolution para a instância (mensagens + conexão).
+// Em caso de falha retorna o motivo para um aviso — não bloqueia a conexão.
+async function configureWebhook(cfg: { url: string; key: string }, instanceName: string, request: Request): Promise<string | null> {
+  try {
+    const origin = new URL(request.url).origin
+    const secret = process.env.WHATSAPP_WEBHOOK_SECRET
+    const webhookUrl = `${origin}/api/whatsapp/webhook${secret ? `?secret=${encodeURIComponent(secret)}` : ""}`
+    const res = await fetchWithTimeout(`${cfg.url}/webhook/set/${encodeURIComponent(instanceName)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: cfg.key },
+      body: JSON.stringify({
+        webhook: {
+          url: webhookUrl,
+          enabled: true,
+          events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+          webhook_by_events: false,
+          webhook_base64: false,
+        },
+      }),
+    })
+    if (!res.ok) {
+      const txt = (await res.text().catch(() => "")).slice(0, 200)
+      return `webhook: ${res.status} ${txt}`
+    }
+    return null
+  } catch (err) {
+    const cause = (err as any)?.cause?.code || (err as any)?.name || "UNKNOWN"
+    return `webhook: ${cause}`
+  }
+}
+
 export async function POST(request: Request) {
   const cfg = evolutionConfig()
   if (!cfg.ok) return NextResponse.json({ error: "Integração WhatsApp não configurada." }, { status: 500 })
@@ -50,7 +81,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2) Solicita o QR de conexão
+    // 2) Configura o webhook da instância (mensagens + conexão) apontando para o app
+    const webhookAviso = await configureWebhook(cfg, instanceName, request)
+
+    // 3) Solicita o QR de conexão
     const connectRes = await fetchWithTimeout(`${cfg.url}/instance/connect/${encodeURIComponent(instanceName)}`, {
       headers: { apikey: cfg.key },
     })
@@ -63,7 +97,7 @@ export async function POST(request: Request) {
       .eq("instance_name", instanceName)
 
     if (!qrCode) return NextResponse.json({ error: "QR Code indisponível no momento. Tente novamente." }, { status: 502 })
-    return NextResponse.json({ qrCode, status: "conectando" })
+    return NextResponse.json({ qrCode, status: "conectando", ...(webhookAviso ? { aviso: webhookAviso } : {}) })
   } catch (err) {
     // Loga a causa real no servidor (sem expor URL/chave ao client)
     const cause = (err as any)?.cause?.code || (err as any)?.name || ""
