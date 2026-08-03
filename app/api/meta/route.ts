@@ -124,7 +124,12 @@ export async function GET(req: Request) {
       const id = url.searchParams.get("id")!
       body = mock
         ? { id }
-        : (await metaGetAll(`${BASE}/${id}?fields=id,name,is_unavailable,owner_business{id,name},ad_accounts{id,name}&access_token=${token}`))[0]
+        : (await metaGetAll(`${BASE}/${id}?fields=id,name,is_unavailable,owner_business{id,name}&access_token=${token}`))[0]
+    } else if (op === "pixel_accounts") {
+      const id = url.searchParams.get("id")!
+      body = mock
+        ? { data: [] }
+        : { data: await metaGetAll(`${BASE}/${id}/adaccounts?fields=id,name&limit=100&access_token=${token}`) }
     } else if (op === "creative") {
       const cr = url.searchParams.get("id")!
       body = mock
