@@ -36,6 +36,7 @@ export function KanbanBoard({
   const [closeLead, setCloseLead] = useState<Lead | null>(null)
   const [editLead, setEditLead] = useState<Lead | null>(null)
   const [assumirDialog, setAssumirDialog] = useState<Lead | null>(null)
+  const [uploadMeta, setUploadMeta] = useState<Lead | null>(null)
   const [delLead, setDelLead] = useState<Lead | null>(null)
   const [delMotivo, setDelMotivo] = useState("")
   const [delDetalhe, setDelDetalhe] = useState("")
@@ -241,6 +242,46 @@ export function KanbanBoard({
     toast(novoGestor ? "Lead assumido com sucesso!" : "Supervisão removida.")
   }
 
+  async function handleUploadMeta() {
+    if (!uploadMeta || !user || submitting) return
+    if (user.role !== "gestor") {
+      setUploadMeta(null)
+      return
+    }
+    setSubmitting(true)
+    const alvo = uploadMeta
+    try {
+      const res = await fetch("/api/meta/lead-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_id: alvo.id, usuario_id: user.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data?.erro ?? "Erro ao enviar ao Meta.", "error")
+        setSubmitting(false)
+        return
+      }
+      await updateLead(alvo.id, { arquivadoEm: new Date().toISOString() })
+      logAudit({
+        leadId: alvo.id,
+        leadNome: alvo.nome,
+        usuarioNome: userName(user.id),
+        tipo: "edicao",
+        descricao: `Enviado ao Meta (CAPI) e arquivado por ${userName(user.id)} — ${brl(alvo.valorNegociacao)}${alvo.refFechamento ? ` — Ref: ${alvo.refFechamento}` : ""}`,
+      })
+      if (alvo.corretorId) {
+        notify(`Seu lead ${alvo.nome} foi enviado ao Meta e arquivado pela gestão`, { tipo: "fechamento", paraUsuarioId: alvo.corretorId, leadId: alvo.id })
+      }
+      setUploadMeta(null)
+      setSubmitting(false)
+      toast(`Enviado ao Meta (${data.events_received ?? 0} evento) e arquivado.`)
+    } catch {
+      setSubmitting(false)
+      toast("Falha de conexão ao enviar.", "error")
+    }
+  }
+
   const q = query.trim().toLowerCase()
   const qDigits = normalizePhone(query)
   const matchesQuery = (l: Lead) => {
@@ -371,6 +412,7 @@ export function KanbanBoard({
                                 onEdit={(item) => setEditLead(item)}
                                 onDelete={(item) => setDelLead(item)}
                                 onAssumir={(item) => setAssumirDialog(item)}
+                                onEnviarMeta={(item) => setUploadMeta(item)}
                               />
                             </div>
                           )}
@@ -489,6 +531,29 @@ export function KanbanBoard({
             <Button type="button" variant="outline" onClick={() => setAssumirDialog(null)}>Cancelar</Button>
             <Button type="button" onClick={handleAssumir}>
               {assumirDialog?.gestorResponsavel ? "Remover supervisão" : "Assumir lead"}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={!!uploadMeta} onClose={() => (!submitting ? setUploadMeta(null) : undefined)} title="Enviar ao Meta e arquivar">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Lead: <span className="font-medium text-foreground">{uploadMeta?.nome}</span>
+            {uploadMeta && uploadMeta.corretorId && (
+              <> — Corretor: <span className="font-medium text-foreground">{userName(uploadMeta.corretorId)}</span></>
+            )}
+          </p>
+          {uploadMeta && (
+            <p className="text-sm font-display font-semibold text-primary">{brl(uploadMeta.valorNegociacao)}{uploadMeta.refFechamento ? ` — Ref: ${uploadMeta.refFechamento}` : ""}</p>
+          )}
+          <p className="text-sm text-muted-foreground">
+            O evento de compra será enviado ao Meta Ads e o lead será <strong className="text-foreground">arquivado</strong> (sai do quadro, mas permanece no histórico).
+          </p>
+          <div className="mt-1 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setUploadMeta(null)} disabled={submitting}>Cancelar</Button>
+            <Button type="button" onClick={handleUploadMeta} disabled={submitting}>
+              {submitting ? "Enviando…" : "Enviar ao Meta e arquivar"}
             </Button>
           </div>
         </div>

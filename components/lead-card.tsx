@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, Camera, Users, Megaphone, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck } from "lucide-react"
+import { AlertTriangle, Camera, Users, Megaphone, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send } from "lucide-react"
 import { Badge } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
 import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate } from "@/lib/labels"
@@ -27,6 +27,7 @@ export function LeadCard({
   onEdit,
   onDelete,
   onAssumir,
+  onEnviarMeta,
 }: {
   lead: Lead
   showCorretor?: boolean
@@ -38,6 +39,7 @@ export function LeadCard({
   onEdit?: (lead: Lead) => void
   onDelete?: (lead: Lead) => void
   onAssumir?: (lead: Lead) => void
+  onEnviarMeta?: (lead: Lead) => void
 }) {
   const { userName } = useLeads()
   const OrigemIcon = ORIGEM_ICON[lead.origem]
@@ -97,6 +99,15 @@ export function LeadCard({
                       >
                         <UserCheck className="size-3.5" />
                         {lead.gestorResponsavel ? "Desassumir" : "Assumir"}
+                      </button>
+                    )}
+                    {isGestor && lead.status === "fechado" && !lead.arquivadoEm && (
+                      <button
+                        type="button"
+                        onClick={(e) => { stop(e); setMenu(false); onEnviarMeta?.(lead) }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                      >
+                        <Send className="size-3.5" /> Enviar ao Meta e arquivar
                       </button>
                     )}
                     <button

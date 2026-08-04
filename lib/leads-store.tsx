@@ -123,6 +123,7 @@ function leadPatchToRow(p: Partial<Lead>): Record<string, any> {
   if (p.valorNegociacao !== undefined) row.valor_proposta = p.valorNegociacao
   if (p.corretorId !== undefined) row.corretor_id = p.corretorId || null
   if (p.gestorResponsavel !== undefined) row.gestor_responsavel = p.gestorResponsavel || null
+  if (p.arquivadoEm !== undefined) row.arquivado_em = p.arquivadoEm || null
   return row
 }
 
