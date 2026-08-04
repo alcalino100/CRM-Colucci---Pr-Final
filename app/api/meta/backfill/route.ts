@@ -1,7 +1,8 @@
 // Backfill: envia eventos Purchase (CAPI) dos leads JÁ fechados no CRM.
 // - GET, protegido pelo CRON_SECRET (mesma convenção do archive-leads).
-// - event_id determinístico (lead_id + event_time) → reexecutar não duplica.
-// - Idempotente: rodar de novo envia os mesmos eventos; o Meta deduplica por event_id.
+// - Dedup: usa meta_event_logs para NÃO reenviar leads já enviados (por lead_id).
+//   Use ?force=1 para reenviar tudo (ex.: depois de corrigir algum dado).
+// - event_id determinístico (lead_id + event_time) → mesmo reenviando, o Meta deduplica.
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
@@ -24,6 +25,7 @@ export async function GET(req: Request) {
   const token = resolveMetaToken()
   if (!token) return NextResponse.json({ ok: false, erro: "sem token Meta" }, { status: 401 })
   const pixel = metaPixelId()
+  const force = url.searchParams.get("force") === "1"
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -34,8 +36,19 @@ export async function GET(req: Request) {
 
     if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
 
+    // Leads já enviados anteriormente (tempo real + backfill), por lead_id.
+    let jaEnviados = new Set<string>()
+    if (!force) {
+      const { data: logs } = await supabase
+        .from("meta_event_logs")
+        .select("lead_id")
+        .not("lead_id", "is", null)
+      for (const l of logs ?? []) if (l.lead_id) jaEnviados.add(String(l.lead_id))
+    }
+
     const eventosComMeta = (leads ?? [])
       .filter((l) => l.telefone && String(l.telefone).trim())
+      .filter((l) => force || !jaEnviados.has(String(l.id)))
       .map((l) => {
         const event = buildPurchaseEvent({
           lead_id: l.id,
@@ -51,7 +64,8 @@ export async function GET(req: Request) {
         return { event, lead: l }
       })
 
-    const ignorados = (leads ?? []).length - eventosComMeta.length
+    const ignorados_sem_telefone = (leads ?? []).filter((l) => !l.telefone || !String(l.telefone).trim()).length
+    const ignorados_ja_enviados = force ? 0 : (leads ?? []).filter((l) => l.telefone && String(l.telefone).trim() && jaEnviados.has(String(l.id))).length
 
     const lotes: any[] = []
     for (let i = 0; i < eventosComMeta.length; i += BATCH) {
@@ -86,7 +100,9 @@ export async function GET(req: Request) {
       ok: true,
       total_leads_fechados: leads?.length ?? 0,
       eventos_enviados: eventosComMeta.length,
-      ignorados_sem_telefone: ignorados,
+      ignorados_sem_telefone,
+      ignorados_ja_enviados,
+      force,
       pixel_id: pixel,
       lotes,
     })
