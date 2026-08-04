@@ -37,6 +37,7 @@ export function KanbanBoard({
   const [editLead, setEditLead] = useState<Lead | null>(null)
   const [assumirDialog, setAssumirDialog] = useState<Lead | null>(null)
   const [uploadMeta, setUploadMeta] = useState<Lead | null>(null)
+  const [archiveLead, setArchiveLead] = useState<Lead | null>(null)
   const [delLead, setDelLead] = useState<Lead | null>(null)
   const [delMotivo, setDelMotivo] = useState("")
   const [delDetalhe, setDelDetalhe] = useState("")
@@ -262,24 +263,44 @@ export function KanbanBoard({
         setSubmitting(false)
         return
       }
-      await updateLead(alvo.id, { arquivadoEm: new Date().toISOString() })
       logAudit({
         leadId: alvo.id,
         leadNome: alvo.nome,
         usuarioNome: userName(user.id),
         tipo: "edicao",
-        descricao: `Enviado ao Meta (CAPI) e arquivado por ${userName(user.id)} — ${brl(alvo.valorNegociacao)}${alvo.refFechamento ? ` — Ref: ${alvo.refFechamento}` : ""}`,
+        descricao: `Enviado ao Meta (CAPI) manualmente por ${userName(user.id)} — ${brl(alvo.valorNegociacao)}${alvo.refFechamento ? ` — Ref: ${alvo.refFechamento}` : ""}`,
       })
-      if (alvo.corretorId) {
-        notify(`Seu lead ${alvo.nome} foi enviado ao Meta e arquivado pela gestão`, { tipo: "fechamento", paraUsuarioId: alvo.corretorId, leadId: alvo.id })
-      }
       setUploadMeta(null)
       setSubmitting(false)
-      toast(`Enviado ao Meta (${data.events_received ?? 0} evento) e arquivado.`)
+      toast(`Enviado ao Meta (${data.events_received ?? 0} evento).`)
     } catch {
       setSubmitting(false)
       toast("Falha de conexão ao enviar.", "error")
     }
+  }
+
+  async function handleArquivar() {
+    if (!archiveLead || !user || submitting) return
+    if (user.role !== "gestor") {
+      setArchiveLead(null)
+      return
+    }
+    setSubmitting(true)
+    const alvo = archiveLead
+    await updateLead(alvo.id, { arquivadoEm: new Date().toISOString() })
+    logAudit({
+      leadId: alvo.id,
+      leadNome: alvo.nome,
+      usuarioNome: userName(user.id),
+      tipo: "edicao",
+      descricao: `Arquivado por ${userName(user.id)}${alvo.refFechamento ? ` — Ref: ${alvo.refFechamento}` : ""}`,
+    })
+    if (alvo.corretorId) {
+      notify(`Seu lead ${alvo.nome} foi arquivado pela gestão`, { tipo: "fechamento", paraUsuarioId: alvo.corretorId, leadId: alvo.id })
+    }
+    setArchiveLead(null)
+    setSubmitting(false)
+    toast("Lead arquivado.")
   }
 
   const q = query.trim().toLowerCase()
@@ -413,6 +434,7 @@ export function KanbanBoard({
                                 onDelete={(item) => setDelLead(item)}
                                 onAssumir={(item) => setAssumirDialog(item)}
                                 onEnviarMeta={(item) => setUploadMeta(item)}
+                                onArquivar={(item) => setArchiveLead(item)}
                               />
                             </div>
                           )}
@@ -536,7 +558,7 @@ export function KanbanBoard({
         </div>
       </Dialog>
 
-      <Dialog open={!!uploadMeta} onClose={() => (!submitting ? setUploadMeta(null) : undefined)} title="Enviar ao Meta e arquivar">
+      <Dialog open={!!uploadMeta} onClose={() => (!submitting ? setUploadMeta(null) : undefined)} title="Enviar ao Meta">
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
             Lead: <span className="font-medium text-foreground">{uploadMeta?.nome}</span>
@@ -548,12 +570,35 @@ export function KanbanBoard({
             <p className="text-sm font-display font-semibold text-primary">{brl(uploadMeta.valorNegociacao)}{uploadMeta.refFechamento ? ` — Ref: ${uploadMeta.refFechamento}` : ""}</p>
           )}
           <p className="text-sm text-muted-foreground">
-            O evento de compra será enviado ao Meta Ads e o lead será <strong className="text-foreground">arquivado</strong> (sai do quadro, mas permanece no histórico).
+            O evento de compra será enviado ao Meta Ads. O lead <strong className="text-foreground">não</strong> será arquivado — use a opção "Arquivar" depois, se quiser.
           </p>
           <div className="mt-1 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setUploadMeta(null)} disabled={submitting}>Cancelar</Button>
             <Button type="button" onClick={handleUploadMeta} disabled={submitting}>
-              {submitting ? "Enviando…" : "Enviar ao Meta e arquivar"}
+              {submitting ? "Enviando…" : "Enviar ao Meta"}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={!!archiveLead} onClose={() => (!submitting ? setArchiveLead(null) : undefined)} title="Arquivar Lead">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Lead: <span className="font-medium text-foreground">{archiveLead?.nome}</span>
+            {archiveLead && archiveLead.corretorId && (
+              <> — Corretor: <span className="font-medium text-foreground">{userName(archiveLead.corretorId)}</span></>
+            )}
+          </p>
+          {archiveLead && (
+            <p className="text-sm font-display font-semibold text-primary">{brl(archiveLead.valorNegociacao)}{archiveLead.refFechamento ? ` — Ref: ${archiveLead.refFechamento}` : ""}</p>
+          )}
+          <p className="text-sm text-muted-foreground">
+            O lead será <strong className="text-foreground">arquivado</strong> (sai do quadro, mas permanece no histórico). Nenhum evento será enviado ao Meta.
+          </p>
+          <div className="mt-1 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setArchiveLead(null)} disabled={submitting}>Cancelar</Button>
+            <Button type="button" onClick={handleArquivar} disabled={submitting}>
+              {submitting ? "Arquivando…" : "Arquivar"}
             </Button>
           </div>
         </div>
