@@ -43,8 +43,9 @@ export function LeadCard({
   onEnviarMeta?: (lead: Lead) => void
   onArquivar?: (lead: Lead) => void
 }) {
-  const { userName } = useLeads()
+  const { userName, users } = useLeads()
   const OrigemIcon = ORIGEM_ICON[lead.origem]
+  const corretor = users.find((u) => u.id === lead.corretorId)
   const initials = userName(lead.corretorId).split(" ").map((n) => n[0]).slice(0, 2).join("")
   const [menu, setMenu] = useState(false)
   const stop = (e: React.SyntheticEvent) => e.stopPropagation()
@@ -67,9 +68,14 @@ export function LeadCard({
         </button>
         <div className="flex shrink-0 items-center gap-1.5">
           {showCorretor && (
-            <span title={userName(lead.corretorId)} className="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground">
-              {initials}
-            </span>
+            corretor?.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={corretor.avatar} alt={corretor.nome} title={corretor.nome} className="size-6 rounded-full object-cover ring-1 ring-border" />
+            ) : (
+              <span title={userName(lead.corretorId)} className="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground">
+                {initials}
+              </span>
+            )
           )}
           {canManage && (
             <div className="relative">
