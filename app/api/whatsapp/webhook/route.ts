@@ -9,6 +9,16 @@ export const maxDuration = 30
 // Sempre responde 200 para não interromper o fluxo da Evolution
 const ok = () => NextResponse.json({ received: true })
 
+// Números internos que NUNCA podem virar lead (ex.: setor de vendas da empresa).
+// Configurável via WHATSAPP_BLOCKED_NUMBERS (separado por vírgula). Comparação só por dígitos.
+const BLOCKED_NUMBERS = new Set(
+  (process.env.WHATSAPP_BLOCKED_NUMBERS || "5518991976332")
+    .split(",")
+    .map((s) => s.trim().replace(/\D/g, ""))
+    .filter(Boolean)
+)
+const isBlocked = (telefone: string) => BLOCKED_NUMBERS.has(telefone)
+
 function getInstanceName(payload: any): string | null {
   return payload?.instance ?? payload?.instanceName ?? payload?.data?.instance ?? null
 }
@@ -101,6 +111,8 @@ async function handleMessageUpsert(payload: any) {
   if (remoteJid.includes("@g.us") || remoteJid.includes("broadcast")) return
   const telefone = onlyDigits(remoteJid.split("@")[0])
   if (!telefone) return
+  // Números internos bloqueados: ignora completamente (sem lead, sem mensagem, sem notificação)
+  if (isBlocked(telefone)) return
   const nome = msg?.pushName || telefone
   const corpo =
     msg?.message?.conversation ??
