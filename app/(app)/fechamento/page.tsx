@@ -20,12 +20,42 @@ function fmtMes(key: string): string {
   const [y, m] = key.split("-").map(Number)
   return new Date(y, m - 1, 1).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })
 }
+function ymd(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const dia = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${dia}`
+}
+// Semana começa na segunda-feira
+function inicioSemana(d: Date): Date {
+  const x = new Date(d)
+  const dia = x.getDay() // 0=dom, 1=seg ...
+  const delta = dia === 0 ? -6 : 1 - dia
+  x.setDate(x.getDate() + delta)
+  return x
+}
+function fmtRange(ini: string, fim: string): string {
+  if (!ini && !fim) return "Todos os períodos"
+  const f = (s: string) => (s ? new Date(s + "T00:00:00").toLocaleDateString("pt-BR") : "…")
+  return `${f(ini)} — ${f(fim)}`
+}
+
+const PRESETS: { label: string; get: () => { ini: string; fim: string } }[] = [
+  { label: "Hoje", get: () => { const h = new Date(); return { ini: ymd(h), fim: ymd(h) } } },
+  { label: "Essa semana", get: () => { const h = new Date(); return { ini: ymd(inicioSemana(h)), fim: ymd(h) } } },
+  { label: "Esse mês", get: () => { const h = new Date(); return { ini: ymd(new Date(h.getFullYear(), h.getMonth(), 1)), fim: ymd(h) } } },
+  { label: "Mês passado", get: () => { const h = new Date(); return { ini: ymd(new Date(h.getFullYear(), h.getMonth() - 1, 1)), fim: ymd(new Date(h.getFullYear(), h.getMonth(), 0)) } } },
+  { label: "Últimos 3 meses", get: () => { const h = new Date(); const ini = new Date(h); ini.setMonth(ini.getMonth() - 3); return { ini: ymd(ini), fim: ymd(h) } } },
+  { label: "Últimos 12 meses", get: () => { const h = new Date(); const ini = new Date(h); ini.setFullYear(ini.getFullYear() - 1); return { ini: ymd(ini), fim: ymd(h) } } },
+  { label: "Todos", get: () => ({ ini: "", fim: "" }) },
+]
 
 export default function FechamentoPage() {
   const { leads, corretores, userName } = useLeads()
   const [loading, setLoading] = useState(true)
   const [aba, setAba] = useState<Aba>("fechamentos")
-  const [mes, setMes] = useState("todos")
+  const [dataInicio, setDataInicio] = useState("")
+  const [dataFim, setDataFim] = useState("")
   const [corretor, setCorretor] = useState("todos")
   const [buscaRef, setBuscaRef] = useState("")
 
@@ -40,12 +70,6 @@ export default function FechamentoPage() {
     return { fechados, negociando }
   }, [leads])
 
-  const meses = useMemo(() => {
-    const lista = aba === "fechamentos" ? base.fechados : base.negociando
-    const set = new Set(lista.map((l) => mesKey(dataEvento(l, aba))))
-    return Array.from(set).sort().reverse()
-  }, [aba, base])
-
   const comRef = useMemo(() => {
     const lista = aba === "fechamentos" ? base.fechados : base.negociando
     const q = buscaRef.trim().toLowerCase()
@@ -59,12 +83,20 @@ export default function FechamentoPage() {
     })
   }, [aba, base, buscaRef])
 
+  const noPeriodo = useMemo(() => {
+    const ini = dataInicio ? new Date(dataInicio + "T00:00:00").getTime() : -Infinity
+    const fim = dataFim ? new Date(dataFim + "T23:59:59.999").getTime() : Infinity
+    return comRef.filter((l) => {
+      const t = new Date(dataEvento(l, aba)).getTime()
+      return t >= ini && t <= fim
+    })
+  }, [comRef, aba, dataInicio, dataFim])
+
   const filtrados = useMemo(() => {
-    return comRef
+    return noPeriodo
       .filter((l) => corretor === "todos" || l.corretorId === corretor)
-      .filter((l) => mes === "todos" || mesKey(dataEvento(l, aba)) === mes)
       .sort((a, b) => (dataEvento(b, aba) > dataEvento(a, aba) ? 1 : -1))
-  }, [comRef, corretor, mes, aba])
+  }, [noPeriodo, corretor, aba])
 
   const kpis = useMemo(() => {
     const qtd = filtrados.length
@@ -78,7 +110,7 @@ export default function FechamentoPage() {
 
   const porMes = useMemo(() => {
     const m = new Map<string, { key: string; total: number; qtd: number }>()
-    for (const l of comRef) {
+    for (const l of noPeriodo) {
       if (corretor !== "todos" && l.corretorId !== corretor) continue
       const k = mesKey(dataEvento(l, aba))
       const e = m.get(k) ?? { key: k, total: 0, qtd: 0 }
@@ -87,19 +119,19 @@ export default function FechamentoPage() {
       m.set(k, e)
     }
     return Array.from(m.values()).sort((a, b) => (a.key > b.key ? 1 : -1)).map((e) => ({ ...e, label: fmtMes(e.key) }))
-  }, [comRef, corretor, aba])
+  }, [noPeriodo, corretor, aba])
 
   const porCorretor = useMemo(() => {
-    const max = Math.max(...filtrados.map((l) => l.valorNegociacao ?? 0).concat([0]))
+    const max = Math.max(...noPeriodo.map((l) => l.valorNegociacao ?? 0).concat([0]))
     return corretores
       .map((c) => {
-        const lista = filtrados.filter((l) => l.corretorId === c.id)
+        const lista = noPeriodo.filter((l) => l.corretorId === c.id)
         const total = lista.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
         return { nome: c.nome.split(" ")[0], total, qtd: lista.length, pct: max ? Math.round((total / max) * 100) : 0 }
       })
       .filter((r) => r.qtd > 0)
       .sort((a, b) => b.total - a.total)
-  }, [filtrados, corretores])
+  }, [noPeriodo, corretores])
 
   const cor = aba === "fechamentos" ? "#16a34a" : "#b22222"
   const corLabel = aba === "fechamentos" ? "Fechado" : "Negociando"
@@ -123,7 +155,7 @@ export default function FechamentoPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold">Fechamentos</h1>
-          <p className="text-sm text-muted-foreground">Fechamentos e negociações mês a mês, por corretor e referência.</p>
+          <p className="text-sm text-muted-foreground">Fechamentos e negociações por período, corretor e referência.</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setAba("fechamentos")} className={tab(aba === "fechamentos")}>Fechamentos</button>
@@ -132,21 +164,38 @@ export default function FechamentoPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={mes} onChange={(e) => setMes(e.target.value)} aria-label="Filtrar por mês" className="w-44">
-          <option value="todos">Todos os meses</option>
-          {meses.map((m) => <option key={m} value={m}>{fmtMes(m)}</option>)}
-        </Select>
-        <Select value={corretor} onChange={(e) => setCorretor(e.target.value)} aria-label="Filtrar por corretor" className="w-52">
-          <option value="todos">Todos os corretores</option>
-          {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-        </Select>
-        <input
-          value={buscaRef}
-          onChange={(e) => setBuscaRef(e.target.value)}
-          placeholder="Buscar por ref ou cliente..."
-          className="w-60 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-        />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground">Período:</span>
+          {PRESETS.map((p) => (
+            <button key={p.label} onClick={() => { const r = p.get(); setDataInicio(r.ini); setDataFim(r.fim) }}
+              className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium transition hover:border-primary hover:text-primary">
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">De</span>
+            <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Até</span>
+            <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
+          </label>
+          <Select value={corretor} onChange={(e) => setCorretor(e.target.value)} aria-label="Filtrar por corretor" className="w-52">
+            <option value="todos">Todos os corretores</option>
+            {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </Select>
+          <input
+            value={buscaRef}
+            onChange={(e) => setBuscaRef(e.target.value)}
+            placeholder="Buscar por ref ou cliente..."
+            className="w-60 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+          />
+        </div>
       </div>
 
       {/* KPIs */}
@@ -205,7 +254,7 @@ export default function FechamentoPage() {
       <Card>
         <CardHeader className="pb-0">
           <CardTitle>Detalhamento</CardTitle>
-          <p className="text-xs text-muted-foreground">{mes === "todos" ? "Todos os meses" : fmtMes(mes)} · {filtrados.length} registro(s)</p>
+          <p className="text-xs text-muted-foreground">{fmtRange(dataInicio, dataFim)} · {filtrados.length} registro(s)</p>
         </CardHeader>
         <CardContent className="pt-4">
           {filtrados.length === 0 ? (
