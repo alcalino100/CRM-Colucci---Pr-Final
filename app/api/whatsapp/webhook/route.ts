@@ -19,6 +19,30 @@ const BLOCKED_NUMBERS = new Set(
 )
 const isBlocked = (telefone: string) => BLOCKED_NUMBERS.has(telefone)
 
+// Nomes internos que NUNCA podem virar lead (ex.: esposa/parentes de corretores).
+// Configurável via WHATSAPP_BLOCKED_NAMES (separado por vírgula). Comparação normalizada
+// (sem acentos/emoji) — "Fran 🌹" e "Fran" são tratados como o mesmo nome.
+function normalizeName(v: string): string {
+  return (v || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+const BLOCKED_NAMES = new Set(
+  (process.env.WHATSAPP_BLOCKED_NAMES || "ketrine cristiane,fran")
+    .split(",")
+    .map((s) => normalizeName(s))
+    .filter(Boolean)
+)
+function isBlockedName(nome: string): boolean {
+  const n = normalizeName(nome)
+  if (!n) return false
+  return Array.from(BLOCKED_NAMES).some((b) => n === b || n.startsWith(`${b} `))
+}
+
 function getInstanceName(payload: any): string | null {
   return payload?.instance ?? payload?.instanceName ?? payload?.data?.instance ?? null
 }
@@ -126,6 +150,8 @@ async function handleMessageUpsert(payload: any) {
   // Números internos bloqueados: ignora completamente (sem lead, sem mensagem, sem notificação)
   if (isBlocked(telefone)) return
   const nome = msg?.pushName || telefone
+  // Nomes internos (esposa/parentes de corretores): ignora completamente — sem lead, sem mensagem, sem notificação
+  if (isBlockedName(nome)) return
   const corpo =
     msg?.message?.conversation ??
     msg?.message?.extendedTextMessage?.text ??
