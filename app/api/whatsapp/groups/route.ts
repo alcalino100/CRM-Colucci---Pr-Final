@@ -27,11 +27,11 @@ async function fetchGroups(cfg: { url: string; key: string }, instanceName: stri
     const rot = rota.replace(cfg.url, "").replace(instanceName, "{instance}")
     try {
       const res = await fetch(rota, { headers: { apikey: cfg.key } })
-      const txt = (await res.text().catch(() => "")).slice(0, 400)
-      detalhes.push({ rota: rot, status: res.status, corpo: txt })
+      const full = await res.text().catch(() => "")
+      detalhes.push({ rota: rot, status: res.status, corpo: full.slice(0, 400) })
       let parsed: any = null
       try {
-        parsed = JSON.parse(txt)
+        parsed = JSON.parse(full)
       } catch {
         parsed = null
       }
