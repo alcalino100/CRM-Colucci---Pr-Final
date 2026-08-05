@@ -81,6 +81,8 @@ export interface Lead {
   criadoEm: string
   atualizadoEm: string
   arquivadoEm?: string
+  fechadoEm?: string
+  negociandoEm?: string
   interacoes: Interaction[]
 }
 

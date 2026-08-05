@@ -92,6 +92,8 @@ function rowToLead(r: any): Lead {
     metaAdsetId: r.meta_adset_id ?? undefined,
     metaAdId: r.meta_ad_id ?? undefined,
     arquivadoEm: r.arquivado_em ?? undefined,
+    fechadoEm: r.fechado_em ?? undefined,
+    negociandoEm: r.negociando_em ?? undefined,
     origem: (r.origem ?? "Outro") as Origem,
     observacoes: r.observacoes ?? "",
     status: normalizeStatus(r.status ?? "novo"),
@@ -124,6 +126,8 @@ function leadPatchToRow(p: Partial<Lead>): Record<string, any> {
   if (p.corretorId !== undefined) row.corretor_id = p.corretorId || null
   if (p.gestorResponsavel !== undefined) row.gestor_responsavel = p.gestorResponsavel || null
   if (p.arquivadoEm !== undefined) row.arquivado_em = p.arquivadoEm || null
+  if (p.fechadoEm !== undefined) row.fechado_em = p.fechadoEm || null
+  if (p.negociandoEm !== undefined) row.negociando_em = p.negociandoEm || null
   return row
 }
 
@@ -420,12 +424,19 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   }
 
   const updateLead: Store["updateLead"] = async (id, patch) => {
-    if (patch.telefone !== undefined) {
+    const agora = new Date().toISOString()
+    const row = leadPatchToRow(patch)
+    // Marca a data de fechamento / de negociação quando o lead ENTRAR nessas etapas
+    if (patch.status === "fechado" && patch.fechadoEm === undefined) row.fechado_em = agora
+    if (patch.status === "negociando" && patch.negociandoEm === undefined) row.negociando_em = agora
+    row.atualizado_em = agora
+    let { error } = await supabase.from("leads").update(row).eq("id", id)
+    // Colunas fechado_em/negociando_em ainda não criadas (script 011 pendente): tenta sem elas
+    if (error && String(error.message).includes("does not exist")) {
+      delete row.fechado_em
+      delete row.negociando_em
+      ;({ error } = await supabase.from("leads").update(row).eq("id", id))
     }
-    const { error } = await supabase
-      .from("leads")
-      .update({ ...leadPatchToRow(patch), atualizado_em: new Date().toISOString() })
-      .eq("id", id)
     if (error) {
       return { ok: false, error: "Não foi possível salvar as alterações. Tente novamente." }
     }
