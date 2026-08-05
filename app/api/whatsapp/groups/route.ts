@@ -16,18 +16,39 @@ function autorizado(req: Request): boolean {
   return auth === `Bearer ${secret}` || qs === secret
 }
 
-async function fetchGroups(cfg: { url: string; key: string }, instanceName: string) {
-  const res = await fetch(`${cfg.url}/group/fetchInstances/${encodeURIComponent(instanceName)}`, {
-    headers: { apikey: cfg.key },
-  })
-  const json = await res.json().catch(() => null)
-  const arr = Array.isArray(json) ? json : Array.isArray(json?.groups) ? json.groups : Array.isArray(json?.data) ? json.data : []
-  return (arr ?? [])
-    .map((g: any) => ({
-      id: g?.id ?? g?.jid ?? null,
-      subject: g?.subject ?? g?.name ?? "—",
-    }))
-    .filter((g: any) => g.id)
+async function fetchGroups(cfg: { url: string; key: string }, instanceName: string): Promise<{ grupos: any[]; raw: unknown }> {
+  const rotas = [
+    `${cfg.url}/group/fetchInstances/${encodeURIComponent(instanceName)}`,
+    `${cfg.url}/group/fetchAllInstances/${encodeURIComponent(instanceName)}`,
+    `${cfg.url}/chat/findInstances/${encodeURIComponent(instanceName)}?isGroup=true`,
+  ]
+  for (const rota of rotas) {
+    try {
+      const res = await fetch(rota, { headers: { apikey: cfg.key } })
+      if (!res.ok) continue
+      const json = await res.json().catch(() => null)
+      if (json == null) continue
+      const arr = Array.isArray(json)
+        ? json
+        : Array.isArray(json?.groups)
+          ? json.groups
+          : Array.isArray(json?.data)
+            ? json.data
+            : null
+      if (Array.isArray(arr)) {
+        const grupos = arr
+          .map((g: any) => ({
+            id: g?.id ?? g?.jid ?? g?.remoteJid ?? null,
+            subject: g?.subject ?? g?.name ?? g?.title ?? "—",
+          }))
+          .filter((g: any) => g.id)
+        if (grupos.length) return { grupos, raw: json }
+      }
+    } catch {
+      /* tenta a próxima rota */
+    }
+  }
+  return { grupos: [], raw: null }
 }
 
 export async function GET(request: Request) {
@@ -37,8 +58,8 @@ export async function GET(request: Request) {
   const instanceName = new URL(request.url).searchParams.get("instanceName")
   if (!instanceName) return NextResponse.json({ erro: "instanceName é obrigatório" }, { status: 400 })
   try {
-    const grupos = await fetchGroups(cfg, instanceName)
-    return NextResponse.json({ ok: true, total: grupos.length, grupos })
+    const { grupos, raw } = await fetchGroups(cfg, instanceName)
+    return NextResponse.json({ ok: true, total: grupos.length, grupos, raw })
   } catch (err) {
     return NextResponse.json({ ok: false, erro: (err as Error).message }, { status: 502 })
   }
