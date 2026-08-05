@@ -40,6 +40,8 @@ async function handle(req: Request, preview: boolean, body: any = {}) {
   const dia = Number(body.dia ?? url.searchParams.get("dia") ?? 15)
   const excluir = String(body.excluir ?? url.searchParams.get("excluir") ?? "moradas")
     .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+  const idsLimite = String(body.ids ?? url.searchParams.get("ids") ?? "")
+    .split(",").map((s) => s.trim()).filter(Boolean)
 
   if (!/^\d{4}-\d{2}$/.test(mes)) return NextResponse.json({ erro: "mes inválido (use YYYY-MM)" }, { status: 400 })
   const alvo = `${mes}-${String(dia).padStart(2, "0")}T12:00:00Z`
@@ -53,6 +55,7 @@ async function handle(req: Request, preview: boolean, body: any = {}) {
     if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
 
     const alvoLista = (data ?? []).filter((l) => {
+      if (idsLimite.length && !idsLimite.includes(l.id)) return false
       const n = String(l.nome ?? "").toLowerCase()
       return !excluir.some((e) => n.includes(e))
     })
