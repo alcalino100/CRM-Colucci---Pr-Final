@@ -218,6 +218,7 @@ export function KanbanBoard({
         lead_id: closeLead.id,
         telefone: closeLead.telefone,
         nome: closeLead.nome,
+        email: closeLead.email,
         valor: closeLead.valorNegociacao,
         corretor_id: closeLead.corretorId,
         campanha_id: closeLead.metaCampaignId,

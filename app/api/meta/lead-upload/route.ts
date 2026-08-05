@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   const { data: lead, error: le } = await supabase
     .from("leads")
-    .select("id,nome,telefone,valor_proposta,corretor_id,meta_campaign_id,meta_adset_id,meta_ad_id,status,criado_em,atualizado_em")
+    .select("id,nome,telefone,email,valor_proposta,corretor_id,meta_campaign_id,meta_adset_id,meta_ad_id,status,criado_em,atualizado_em")
     .eq("id", lead_id)
     .maybeSingle()
   if (le) return NextResponse.json({ ok: false, erro: le.message }, { status: 500 })
@@ -54,6 +54,7 @@ export async function POST(req: Request) {
     lead_id: lead.id,
     telefone: lead.telefone,
     nome: lead.nome,
+    email: lead.email,
     valor: lead.valor_proposta,
     corretor_id: lead.corretor_id,
     campanha_id: lead.meta_campaign_id,

@@ -25,29 +25,52 @@ export interface PurchaseEventInput {
   lead_id: string
   telefone: string
   nome?: string | null
+  email?: string | null
   valor?: number | string | null
   corretor_id?: string | null
   campanha_id?: string | null
   adset_id?: string | null
   ad_id?: string | null
   event_time?: number
+  // Campos de correspondência de eventos (Melhorias do Meta Ads):
+  external_id?: string | null // não vai em hash (consistente entre envios)
+  fbc?: string | null // _fbc (identificação de clique)
+  fbp?: string | null // _fbp (identificação do navegador)
+  ip?: string | null // client_ip_address
+  ua?: string | null // client_user_agent
+  zip?: string | null // zp (código postal) — hash
+  city?: string | null // ct (cidade) — hash
+  state?: string | null // st (estado) — hash
+  birthdate?: string | null // db (data de nascimento) — hash
 }
 
 export function buildPurchaseEvent(input: PurchaseEventInput) {
   const eventTime = input.event_time ?? Math.floor(Date.now() / 1000)
   const phoneDigits = String(input.telefone).replace(/\D/g, "")
   const nomePartes = String(input.nome ?? "").trim().split(/\s+/)
-  return {
+  const userData: Record<string, any> = {
+    ph: [hashMetaValue(phoneDigits)],
+    fn: nomePartes[0] ? [hashMetaValue(nomePartes[0])] : undefined,
+    ln: nomePartes.length > 1 ? [hashMetaValue(nomePartes.slice(1).join(" "))] : undefined,
+  }
+  // Cidade/UF/CEP fixos (Araçatuba-SP) — usados como identificadores de correspondência
+  // enquanto o CRM não captura o endereço real do comprador.
+  if ((input.city ?? "").trim()) userData.ct = [hashMetaValue(input.city)]
+  else userData.ct = [hashMetaValue("Araçatuba")]
+  if ((input.state ?? "").trim()) userData.st = [hashMetaValue(input.state)]
+  else userData.st = [hashMetaValue("SP")]
+  if ((input.zip ?? "").trim()) userData.zp = [hashMetaValue(input.zip)]
+  else userData.zp = [hashMetaValue("16010-000")]
+  if (input.birthdate?.trim()) userData.db = [hashMetaValue(input.birthdate)]
+  userData.external_id = input.external_id || input.lead_id
+
+  const event: Record<string, any> = {
     event_name: "Purchase",
     event_time: eventTime,
     event_id: `${input.lead_id}-${eventTime}`,
     action_source: "website",
     event_source_url: process.env.NEXT_PUBLIC_APP_URL || "https://crm-colucci-pre-final.vercel.app",
-    user_data: {
-      ph: [hashMetaValue(phoneDigits)],
-      fn: nomePartes[0] ? [hashMetaValue(nomePartes[0])] : undefined,
-      ln: nomePartes.length > 1 ? [hashMetaValue(nomePartes.slice(1).join(" "))] : undefined,
-    },
+    user_data: userData,
     custom_data: {
       currency: "BRL",
       value: typeof input.valor === "number" ? input.valor : Number.parseFloat(String(input.valor ?? "")) || 0,
@@ -58,6 +81,11 @@ export function buildPurchaseEvent(input: PurchaseEventInput) {
       ad_id: input.ad_id ?? null,
     },
   }
+  if (input.fbc?.trim()) event.fbc = input.fbc.trim()
+  if (input.fbp?.trim()) event.fbp = input.fbp.trim()
+  if (input.ip?.trim()) event.client_ip_address = input.ip.trim()
+  if (input.ua?.trim()) event.client_user_agent = input.ua.trim()
+  return event
 }
 
 export async function sendMetaEvents(token: string, pixelId: string, events: unknown[]): Promise<{ status: number; json: any }> {
