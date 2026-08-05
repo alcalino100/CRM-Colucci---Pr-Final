@@ -226,6 +226,17 @@ export function KanbanBoard({
         ad_id: closeLead.metaAdId,
       }),
     }).catch(() => {})
+    fetch("/api/whatsapp/notify-sale", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        nome: closeLead.nome,
+        valor: closeLead.valorNegociacao,
+        corretorNome: userName(closeLead.corretorId),
+        refFechamento: fRefs.trim(),
+      }),
+    }).catch(() => {})
   }
 
   async function handleAssumir() {

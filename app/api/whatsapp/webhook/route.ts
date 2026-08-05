@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { normalizePhone } from "@/lib/labels"
-import { mapConnectionState, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
+import { mapConnectionState, notifyDisconnection, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -31,10 +31,22 @@ async function handleConnectionUpdate(payload: any) {
   const numeroRaw = payload?.data?.wuid ?? payload?.data?.number ?? payload?.wuid ?? null
   const numero = numeroRaw ? onlyDigits(String(numeroRaw).split("@")[0]) : null
 
+  // Estado anterior para detectar a transição (evita spam de alertas de desconexão)
+  const { data: anterior } = await wsupabase
+    .from("whatsapp_instancias")
+    .select("status")
+    .eq("instance_name", instanceName)
+    .maybeSingle()
+
   const patch: Record<string, unknown> = { status, atualizado_em: new Date().toISOString() }
   if (status === "conectado" && numero) patch.numero = numero
   if (status === "conectado") patch.qr_code = null
   await wsupabase.from("whatsapp_instancias").update(patch).eq("instance_name", instanceName)
+
+  // Instância que estava conectada e caiu: avisa o gestor via WhatsApp
+  if (status === "desconectado" && anterior?.status === "conectado") {
+    void notifyDisconnection(instanceName)
+  }
 }
 
 // Detecta se a mensagem nasceu de um clique em anúncio (Click-to-WhatsApp).

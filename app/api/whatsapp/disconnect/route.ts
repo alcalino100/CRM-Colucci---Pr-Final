@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { evolutionConfig, wsupabase } from "@/lib/whatsapp/server"
+import { evolutionConfig, notifyDisconnection, wsupabase } from "@/lib/whatsapp/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -47,6 +47,9 @@ export async function POST(request: Request) {
     .from("whatsapp_instancias")
     .update({ status: "desconectado", numero: null, qr_code: null, atualizado_em: new Date().toISOString() })
     .eq("instance_name", instanceName)
+
+  // Avisa o gestor (best-effort) que a instância foi desconectada
+  void notifyDisconnection(instanceName)
 
   if (evolutionErro) return NextResponse.json({ ok: true, status: "desconectado", aviso: evolutionErro }, { status: 200 })
   return NextResponse.json({ ok: true, status: "desconectado" })
