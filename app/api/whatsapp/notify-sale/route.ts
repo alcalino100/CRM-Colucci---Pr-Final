@@ -23,14 +23,14 @@ export async function POST(request: Request) {
   if (!nome) return NextResponse.json({ ok: false, erro: "nome é obrigatório" })
 
   const texto = [
-    "Venda fechada!",
+    "🎉 VENDA FECHADA! 🎉",
     "",
-    `Cliente: ${nome}`,
-    `Valor: ${brl(valor)}`,
-    `Corretor: ${corretorNome ?? "—"}`,
-    `Referência: ${refFechamento ?? "—"}`,
+    `👤 Cliente: ${nome}`,
+    `💰 Valor: ${brl(valor)}`,
+    `🧑‍💼 Corretor: ${corretorNome ?? "—"}`,
+    `🏷️ Ref: ${refFechamento ?? "—"}`,
   ].join("\n")
 
-  const res = await notifyGestorWhatsApp(texto, "grupo")
+  const res = await notifyGestorWhatsApp(texto, "todos")
   return NextResponse.json({ ok: res.ok, erro: res.erro ?? null })
 }

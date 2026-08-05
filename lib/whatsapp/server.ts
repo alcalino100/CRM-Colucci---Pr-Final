@@ -117,12 +117,19 @@ export async function sendWhatsAppText(instanceName: string, number: string, tex
   }
 }
 
-// Avisa o gestor via WhatsApp. destino "grupo" cai para o número direto quando não há grupo configurado.
-export async function notifyGestorWhatsApp(text: string, destino: "numero" | "grupo" = "numero"): Promise<{ ok: boolean; erro?: string }> {
+// Avisa o gestor via WhatsApp.
+// destino "numero" = só o número do gestor; "grupo" = destino secundário (grupo/contato) com fallback;
+// "todos" = envia para o gestor E para o destino secundário (ex.: Pati).
+export async function notifyGestorWhatsApp(text: string, destino: "numero" | "grupo" | "todos" = "numero"): Promise<{ ok: boolean; erro?: string }> {
   const alvo = await resolveNotifyTarget()
   if (!alvo) return { ok: false, erro: "Instância do gestor não encontrada (conecte o WhatsApp dele no CRM)." }
-  const para = destino === "grupo" ? alvo.grupo ?? alvo.numero : alvo.numero
-  return sendWhatsAppText(alvo.instanceName, para, text)
+  let destinos: string[]
+  if (destino === "numero") destinos = [alvo.numero]
+  else if (destino === "grupo") destinos = [alvo.grupo ?? alvo.numero]
+  else destinos = Array.from(new Set([alvo.numero, ...(alvo.grupo ? [alvo.grupo] : [])]))
+  const resultados = await Promise.all(destinos.map((d) => sendWhatsAppText(alvo.instanceName, d, text)))
+  const erros = resultados.filter((r) => !r.ok).map((r) => r.erro ?? "erro")
+  return { ok: erros.length === 0, erro: erros.length ? erros.join("; ") : undefined }
 }
 
 // Avisa o gestor que uma instância (de um corretor) caiu + registra no CRM.
@@ -139,7 +146,16 @@ export async function notifyDisconnection(instanceName: string): Promise<void> {
       if (corretor?.nome) nome = corretor.nome
     }
     const horario = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
-    await notifyGestorWhatsApp(`Alerta: WhatsApp desconectado - ${nome} (${instanceName}) - ${horario}`, "numero")
+    const texto = [
+      "🚨🔴 ALERTA: WHATSAPP DESCONECTADO 🔴🚨",
+      "",
+      `📵 Corretor: ${nome}`,
+      `📱 Instância: ${instanceName}`,
+      `🕒 ${horario}`,
+      "",
+      "⚠️ Providencie a reconexão o quanto antes!",
+    ].join("\n")
+    await notifyGestorWhatsApp(texto, "todos")
     await wsupabase.from("notificacoes").insert({
       mensagem: `WhatsApp de ${nome} foi desconectado (${instanceName}).`,
       tipo: "whatsapp_desconectado",

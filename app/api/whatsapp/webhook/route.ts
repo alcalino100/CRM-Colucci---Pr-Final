@@ -9,10 +9,10 @@ export const maxDuration = 30
 // Sempre responde 200 para não interromper o fluxo da Evolution
 const ok = () => NextResponse.json({ received: true })
 
-// Números internos que NUNCA podem virar lead (ex.: setor de vendas da empresa).
+// Números internos que NUNCA podem virar lead (ex.: setor de vendas da empresa e o WhatsApp do gestor).
 // Configurável via WHATSAPP_BLOCKED_NUMBERS (separado por vírgula). Comparação só por dígitos.
 const BLOCKED_NUMBERS = new Set(
-  (process.env.WHATSAPP_BLOCKED_NUMBERS || "5518991976332")
+  (process.env.WHATSAPP_BLOCKED_NUMBERS || "5518991976332,5518996647087")
     .split(",")
     .map((s) => s.trim().replace(/\D/g, ""))
     .filter(Boolean)
