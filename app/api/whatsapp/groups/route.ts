@@ -18,8 +18,8 @@ function autorizado(req: Request): boolean {
 
 async function fetchGroups(cfg: { url: string; key: string }, instanceName: string): Promise<{ grupos: any[]; detalhes: any[] }> {
   const rotas = [
+    `${cfg.url}/group/fetchAllGroups/${encodeURIComponent(instanceName)}?getParticipants=false`,
     `${cfg.url}/group/fetchInstances/${encodeURIComponent(instanceName)}`,
-    `${cfg.url}/group/fetchAllInstances/${encodeURIComponent(instanceName)}`,
     `${cfg.url}/chat/findInstances/${encodeURIComponent(instanceName)}?isGroup=true`,
   ]
   const detalhes: any[] = []
