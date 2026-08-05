@@ -38,6 +38,7 @@ export function KanbanBoard({
   const [assumirDialog, setAssumirDialog] = useState<Lead | null>(null)
   const [uploadMeta, setUploadMeta] = useState<Lead | null>(null)
   const [archiveLead, setArchiveLead] = useState<Lead | null>(null)
+  const [desarquivarLead, setDesarquivarLead] = useState<Lead | null>(null)
   const [delLead, setDelLead] = useState<Lead | null>(null)
   const [delMotivo, setDelMotivo] = useState("")
   const [delDetalhe, setDelDetalhe] = useState("")
@@ -303,6 +304,27 @@ export function KanbanBoard({
     toast("Lead arquivado.")
   }
 
+  async function handleDesarquivar() {
+    if (!desarquivarLead || !user || submitting) return
+    if (user.role !== "gestor") {
+      setDesarquivarLead(null)
+      return
+    }
+    setSubmitting(true)
+    const alvo = desarquivarLead
+    await updateLead(alvo.id, { arquivadoEm: null })
+    logAudit({
+      leadId: alvo.id,
+      leadNome: alvo.nome,
+      usuarioNome: userName(user.id),
+      tipo: "edicao",
+      descricao: `Desarquivado por ${userName(user.id)}${alvo.refFechamento ? ` — Ref: ${alvo.refFechamento}` : ""}`,
+    })
+    setDesarquivarLead(null)
+    setSubmitting(false)
+    toast("Lead desarquivado.")
+  }
+
   const q = query.trim().toLowerCase()
   const qDigits = normalizePhone(query)
   const matchesQuery = (l: Lead) => {
@@ -435,6 +457,7 @@ export function KanbanBoard({
                                 onAssumir={(item) => setAssumirDialog(item)}
                                 onEnviarMeta={(item) => setUploadMeta(item)}
                                 onArquivar={(item) => setArchiveLead(item)}
+                                onDesarquivar={(item) => setDesarquivarLead(item)}
                               />
                             </div>
                           )}
@@ -599,6 +622,26 @@ export function KanbanBoard({
             <Button type="button" variant="outline" onClick={() => setArchiveLead(null)} disabled={submitting}>Cancelar</Button>
             <Button type="button" onClick={handleArquivar} disabled={submitting}>
               {submitting ? "Arquivando…" : "Arquivar"}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={!!desarquivarLead} onClose={() => (!submitting ? setDesarquivarLead(null) : undefined)} title="Desarquivar Lead">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Lead: <span className="font-medium text-foreground">{desarquivarLead?.nome}</span>
+            {desarquivarLead && desarquivarLead.corretorId && (
+              <> — Corretor: <span className="font-medium text-foreground">{userName(desarquivarLead.corretorId)}</span></>
+            )}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            O lead voltará para o quadro (etapa: <strong className="text-foreground">{desarquivarLead ? STATUS_LABEL[desarquivarLead.status] : ""}</strong>).
+          </p>
+          <div className="mt-1 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setDesarquivarLead(null)} disabled={submitting}>Cancelar</Button>
+            <Button type="button" onClick={handleDesarquivar} disabled={submitting}>
+              {submitting ? "Desarquivando…" : "Desarquivar"}
             </Button>
           </div>
         </div>
