@@ -16,24 +16,32 @@ function autorizado(req: Request): boolean {
   return auth === `Bearer ${secret}` || qs === secret
 }
 
-async function fetchGroups(cfg: { url: string; key: string }, instanceName: string): Promise<{ grupos: any[]; raw: unknown }> {
+async function fetchGroups(cfg: { url: string; key: string }, instanceName: string): Promise<{ grupos: any[]; detalhes: any[] }> {
   const rotas = [
     `${cfg.url}/group/fetchInstances/${encodeURIComponent(instanceName)}`,
     `${cfg.url}/group/fetchAllInstances/${encodeURIComponent(instanceName)}`,
     `${cfg.url}/chat/findInstances/${encodeURIComponent(instanceName)}?isGroup=true`,
   ]
+  const detalhes: any[] = []
   for (const rota of rotas) {
+    const rot = rota.replace(cfg.url, "").replace(instanceName, "{instance}")
     try {
       const res = await fetch(rota, { headers: { apikey: cfg.key } })
-      if (!res.ok) continue
-      const json = await res.json().catch(() => null)
-      if (json == null) continue
-      const arr = Array.isArray(json)
-        ? json
-        : Array.isArray(json?.groups)
-          ? json.groups
-          : Array.isArray(json?.data)
-            ? json.data
+      const txt = (await res.text().catch(() => "")).slice(0, 400)
+      detalhes.push({ rota: rot, status: res.status, corpo: txt })
+      let parsed: any = null
+      try {
+        parsed = JSON.parse(txt)
+      } catch {
+        parsed = null
+      }
+      if (parsed == null) continue
+      const arr = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.groups)
+          ? parsed.groups
+          : Array.isArray(parsed?.data)
+            ? parsed.data
             : null
       if (Array.isArray(arr)) {
         const grupos = arr
@@ -42,13 +50,13 @@ async function fetchGroups(cfg: { url: string; key: string }, instanceName: stri
             subject: g?.subject ?? g?.name ?? g?.title ?? "—",
           }))
           .filter((g: any) => g.id)
-        if (grupos.length) return { grupos, raw: json }
+        if (grupos.length) return { grupos, detalhes }
       }
     } catch {
-      /* tenta a próxima rota */
+      detalhes.push({ rota: rot, erro: "fetch falhou" })
     }
   }
-  return { grupos: [], raw: null }
+  return { grupos: [], detalhes }
 }
 
 export async function GET(request: Request) {
@@ -58,8 +66,8 @@ export async function GET(request: Request) {
   const instanceName = new URL(request.url).searchParams.get("instanceName")
   if (!instanceName) return NextResponse.json({ erro: "instanceName é obrigatório" }, { status: 400 })
   try {
-    const { grupos, raw } = await fetchGroups(cfg, instanceName)
-    return NextResponse.json({ ok: true, total: grupos.length, grupos, raw })
+    const { grupos, detalhes } = await fetchGroups(cfg, instanceName)
+    return NextResponse.json({ ok: true, total: grupos.length, grupos, detalhes })
   } catch (err) {
     return NextResponse.json({ ok: false, erro: (err as Error).message }, { status: 502 })
   }
