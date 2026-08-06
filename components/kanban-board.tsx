@@ -235,6 +235,11 @@ export function KanbanBoard({
         campanha_id: closeLead.metaCampaignId,
         adset_id: closeLead.metaAdsetId,
         ad_id: closeLead.metaAdId,
+        utm_campaign: closeLead.utmCampaign,
+        utm_adset: closeLead.utmAdset,
+        utm_ad: closeLead.utmAd,
+        fbc: closeLead.fbc,
+        fbp: closeLead.fbp,
       }),
     }).catch(() => {})
     fetch("/api/whatsapp/notify-sale", {

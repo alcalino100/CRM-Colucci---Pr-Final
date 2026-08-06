@@ -72,6 +72,11 @@ export interface Lead {
   metaCampaignId?: string
   metaAdsetId?: string
   metaAdId?: string
+  utmCampaign?: string
+  utmAdset?: string
+  utmAd?: string
+  fbc?: string
+  fbp?: string
   origem: Origem
   observacoes: string
   status: LeadStatus

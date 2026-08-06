@@ -31,6 +31,10 @@ export interface PurchaseEventInput {
   campanha_id?: string | null
   adset_id?: string | null
   ad_id?: string | null
+  // Ponte de rastreio (/r): origem real do lead no clique do anúncio
+  utm_campaign?: string | null
+  utm_adset?: string | null
+  utm_ad?: string | null
   event_time?: number
   // Campos de correspondência de eventos (Melhorias do Meta Ads):
   external_id?: string | null // não vai em hash (consistente entre envios)
@@ -79,6 +83,9 @@ export function buildPurchaseEvent(input: PurchaseEventInput) {
       campaign_id: input.campanha_id ?? null,
       adset_id: input.adset_id ?? null,
       ad_id: input.ad_id ?? null,
+      utm_campaign: input.utm_campaign ?? null,
+      utm_adset: input.utm_adset ?? null,
+      utm_ad: input.utm_ad ?? null,
     },
   }
   if (input.fbc?.trim()) event.fbc = input.fbc.trim()

@@ -91,6 +91,11 @@ function rowToLead(r: any): Lead {
     metaCampaignId: r.meta_campaign_id ?? undefined,
     metaAdsetId: r.meta_adset_id ?? undefined,
     metaAdId: r.meta_ad_id ?? undefined,
+    utmCampaign: r.utm_campaign ?? undefined,
+    utmAdset: r.utm_adset ?? undefined,
+    utmAd: r.utm_ad ?? undefined,
+    fbc: r.fbc ?? undefined,
+    fbp: r.fbp ?? undefined,
     arquivadoEm: r.arquivado_em ?? undefined,
     fechadoEm: r.fechado_em ?? undefined,
     negociandoEm: r.negociando_em ?? undefined,
@@ -120,6 +125,11 @@ function leadPatchToRow(p: Partial<Lead>): Record<string, any> {
   if (p.metaCampaignId !== undefined) row.meta_campaign_id = p.metaCampaignId || null
   if (p.metaAdsetId !== undefined) row.meta_adset_id = p.metaAdsetId || null
   if (p.metaAdId !== undefined) row.meta_ad_id = p.metaAdId || null
+  if (p.utmCampaign !== undefined) row.utm_campaign = p.utmCampaign || null
+  if (p.utmAdset !== undefined) row.utm_adset = p.utmAdset || null
+  if (p.utmAd !== undefined) row.utm_ad = p.utmAd || null
+  if (p.fbc !== undefined) row.fbc = p.fbc || null
+  if (p.fbp !== undefined) row.fbp = p.fbp || null
   if (p.origem !== undefined) row.origem = p.origem
   if (p.observacoes !== undefined) row.observacoes = p.observacoes
   if (p.status !== undefined) row.status = p.status
@@ -433,11 +443,16 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (patch.status === "negociando" && patch.negociandoEm === undefined) row.negociando_em = agora
     row.atualizado_em = agora
     let { error } = await supabase.from("leads").update(row).eq("id", id)
-    // Colunas fechado_em/negociando_em/valor_comissao ainda não criadas (script 011/012 pendente): tenta sem elas
+    // Colunas fechado_em/negociando_em/valor_comissao/utm/fbc ainda não criadas (script 011/012/013 pendente): tenta sem elas
     if (error && String(error.message).includes("does not exist")) {
       delete row.fechado_em
       delete row.negociando_em
       delete row.valor_comissao
+      delete row.utm_campaign
+      delete row.utm_adset
+      delete row.utm_ad
+      delete row.fbc
+      delete row.fbp
       ;({ error } = await supabase.from("leads").update(row).eq("id", id))
     }
     if (error) {

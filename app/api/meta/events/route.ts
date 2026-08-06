@@ -16,17 +16,24 @@ export async function POST(req: Request) {
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: "body JSON inválido" }, { status: 400 }) }
 
-  const { lead_id, telefone, nome, email, valor, corretor_id, campanha_id, adset_id, ad_id } = body
+  const { lead_id, telefone, nome, email, valor, corretor_id, campanha_id, adset_id, ad_id, utm_campaign, utm_adset, utm_ad, fbc, fbp } = body
   if (!lead_id || !telefone) return NextResponse.json({ error: "lead_id e telefone são obrigatórios" }, { status: 400 })
 
-  // Identificadores de correspondência de eventos capturados na requisição (mesmo dispositivo do envio).
+  // Identificadores de correspondência de eventos. Prioridade: dados reais capturados na
+  // ponte de rastreio (/r, do dispositivo do lead); fallback: cabeçalhos da própria requisição.
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip")?.trim() || null
   const ua = req.headers.get("user-agent") || null
   const cookieHeader = req.headers.get("cookie") || ""
-  const fbc = /(?:^|;\s*)_fbc=([^;]+)/.exec(cookieHeader)?.[1] || null
-  const fbp = /(?:^|;\s*)_fbp=([^;]+)/.exec(cookieHeader)?.[1] || null
+  const fbcReq = /(?:^|;\s*)_fbc=([^;]+)/.exec(cookieHeader)?.[1] || null
+  const fbpReq = /(?:^|;\s*)_fbp=([^;]+)/.exec(cookieHeader)?.[1] || null
 
-  const event = buildPurchaseEvent({ lead_id, telefone, nome, email, valor, corretor_id, campanha_id, adset_id, ad_id, ip, ua, fbc, fbp })
+  const event = buildPurchaseEvent({
+    lead_id, telefone, nome, email, valor, corretor_id, campanha_id, adset_id, ad_id,
+    utm_campaign, utm_adset, utm_ad,
+    ip, ua,
+    fbc: fbc ?? fbcReq ?? null,
+    fbp: fbp ?? fbpReq ?? null,
+  })
   const pixelId = metaPixelId()
 
   try {

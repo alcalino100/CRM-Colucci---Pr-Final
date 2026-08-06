@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   const { data: lead, error: le } = await supabase
     .from("leads")
-    .select("id,nome,telefone,email,valor_proposta,corretor_id,meta_campaign_id,meta_adset_id,meta_ad_id,status,criado_em,atualizado_em")
+    .select("id,nome,telefone,email,valor_proposta,corretor_id,meta_campaign_id,meta_adset_id,meta_ad_id,utm_campaign,utm_adset,utm_ad,fbc,fbp,client_ip,client_ua,status,criado_em,atualizado_em")
     .eq("id", lead_id)
     .maybeSingle()
   if (le) return NextResponse.json({ ok: false, erro: le.message }, { status: 500 })
@@ -60,6 +60,13 @@ export async function POST(req: Request) {
     campanha_id: lead.meta_campaign_id,
     adset_id: lead.meta_adset_id,
     ad_id: lead.meta_ad_id,
+    utm_campaign: lead.utm_campaign,
+    utm_adset: lead.utm_adset,
+    utm_ad: lead.utm_ad,
+    fbc: lead.fbc,
+    fbp: lead.fbp,
+    ip: lead.client_ip,
+    ua: lead.client_ua,
     event_time: Math.floor(new Date(lead.atualizado_em || lead.criado_em || new Date().toISOString()).getTime() / 1000),
   })
 

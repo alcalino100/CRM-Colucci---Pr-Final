@@ -42,7 +42,7 @@ export async function GET(req: Request) {
 
     const { data: leads, error } = await supabase
       .from("leads")
-      .select("id,nome,telefone,email,valor_proposta,corretor_id,meta_campaign_id,meta_adset_id,meta_ad_id,atualizado_em,criado_em")
+      .select("id,nome,telefone,email,valor_proposta,corretor_id,meta_campaign_id,meta_adset_id,meta_ad_id,utm_campaign,utm_adset,utm_ad,fbc,fbp,client_ip,client_ua,atualizado_em,criado_em")
       .eq("status", "fechado")
 
     if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
@@ -71,6 +71,13 @@ export async function GET(req: Request) {
           campanha_id: l.meta_campaign_id,
           adset_id: l.meta_adset_id,
           ad_id: l.meta_ad_id,
+          utm_campaign: l.utm_campaign,
+          utm_adset: l.utm_adset,
+          utm_ad: l.utm_ad,
+          fbc: l.fbc,
+          fbp: l.fbp,
+          ip: l.client_ip,
+          ua: l.client_ua,
           event_time: usarAgora
             ? Math.floor(Date.now() / 1000)
             : Math.floor(new Date(l.atualizado_em || l.criado_em || new Date().toISOString()).getTime() / 1000),

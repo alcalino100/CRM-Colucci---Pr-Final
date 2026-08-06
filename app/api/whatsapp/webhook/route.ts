@@ -158,6 +158,18 @@ async function handleMessageUpsert(payload: any) {
     msg?.message?.extendedTextMessage?.text ??
     "[mídia]"
 
+  // Código de rastreio (ponte /r): o texto pré-preenchido termina com "Código: XXXXXXXX".
+  // Mesmo sem contexto CTWA da Meta, o código casa o clique com o lead.
+  const codigo = /(?:codigo|código)[:.\s-]*([A-Z0-9]{6,10})\s*[.!]?\s*$/i.exec(corpo.trim())?.[1] ?? null
+  const { data: clique } = codigo
+    ? await wsupabase
+        .from("rastreio_cliques")
+        .select("*")
+        .eq("click_id", codigo)
+        .gt("expira_em", new Date().toISOString())
+        .maybeSingle()
+    : { data: null }
+
   // Descobre o corretor dono da instância
   const { data: inst } = await wsupabase
     .from("whatsapp_instancias")
@@ -168,9 +180,10 @@ async function handleMessageUpsert(payload: any) {
   if (!corretorId) return
 
   const { veioDeAnuncio, anuncioId, anuncioTitulo } = detectAd(msg, corpo)
+  const veioDeAnuncioEfetivo = veioDeAnuncio || !!clique
 
   // Mensagem orgânica: só registra para referência, não cria lead nem notifica.
-  if (!veioDeAnuncio) {
+  if (!veioDeAnuncioEfetivo) {
     await wsupabase.from("whatsapp_mensagens").insert({
       instance_name: instanceName,
       telefone,
@@ -182,11 +195,12 @@ async function handleMessageUpsert(payload: any) {
     return
   }
 
-  // A partir daqui: mensagem confirmadamente vinda de anúncio (Click-to-WhatsApp).
-  // Busca informações de rastreamento Meta a partir do anúncio detectado
-  let metaCampaignId: string | null = null
-  let metaAdsetId: string | null = null
-  let metaAdId: string | null = anuncioId
+  // A partir daqui: mensagem confirmadamente vinda de anúncio (Click-to-WhatsApp ou ponte /r).
+  // Busca informações de rastreamento Meta a partir do anúncio detectado.
+  // Prioridade: contexto CTWA (anuncioId) > dados da ponte de rastreio (clique) > null.
+  let metaCampaignId: string | null = clique?.meta_campaign_id ?? null
+  let metaAdsetId: string | null = clique?.meta_adset_id ?? null
+  let metaAdId: string | null = anuncioId ?? clique?.meta_ad_id ?? null
   let nomeAnuncio: string | null = null
   let nomeCampanha: string | null = null
   let nomeConjunto: string | null = null
@@ -233,6 +247,19 @@ async function handleMessageUpsert(payload: any) {
   const mesmoCorretor = existente && existente.corretor_id === corretorId
   let leadId: string | null = mesmoCorretor ? existente.id : null
 
+  // Lead já existente: enriquece com o rastreio do clique (utm/fbc/fbp)
+  if (mesmoCorretor && clique) {
+    await wsupabase.from("leads").update({
+      utm_campaign: clique.utm_campaign ?? null,
+      utm_adset: clique.utm_adset ?? null,
+      utm_ad: clique.utm_ad ?? null,
+      fbc: clique.fbc ?? null,
+      fbp: clique.fbp ?? null,
+      client_ip: clique.ip ?? null,
+      client_ua: clique.user_agent ?? null,
+    }).eq("id", existente.id)
+  }
+
   if (!mesmoCorretor) {
     // Cria lead para o corretor que recebeu o clique — mesmo que o telefone já exista para outro corretor.
     // Assim o lead do tráfego nunca fica "invisível" para quem recebeu a mensagem.
@@ -240,28 +267,48 @@ async function handleMessageUpsert(payload: any) {
     if (nomeAnuncio || anuncioTitulo) partesObs.push(`Anúncio: ${nomeAnuncio || anuncioTitulo}`)
     if (nomeCampanha) partesObs.push(`Campanha: ${nomeCampanha}`)
     if (nomeConjunto) partesObs.push(`Conjunto: ${nomeConjunto}`)
+    if (clique?.utm_campaign) partesObs.push(`UTM campanha: ${clique.utm_campaign}`)
+    if (clique?.utm_adset) partesObs.push(`UTM conjunto: ${clique.utm_adset}`)
     const obs = partesObs.join("\n")
     // Se o anúncio não carregou contexto (detecção por conteúdo), tenta extrair o Ref. do imóvel do texto
     const referenciaExtraida = !anuncioId ? (corpo.match(/ref[.:]?\s*(\d{3,})/i)?.[1] ?? "") : ""
-    const { data: novo, error } = await wsupabase
+    const baseLead = {
+      nome,
+      telefone,
+      email: "",
+      referencia_imovel: referenciaExtraida,
+      referencias: referenciaExtraida ? [referenciaExtraida] : [],
+      temperatura: "morno",
+      origem: "Tráfego Pago",
+      observacoes: obs,
+      status: "novo",
+      corretor_id: corretorId,
+      meta_campaign_id: metaCampaignId,
+      meta_adset_id: metaAdsetId,
+      meta_ad_id: metaAdId,
+    }
+    const rastreioLead = {
+      utm_campaign: clique?.utm_campaign ?? null,
+      utm_adset: clique?.utm_adset ?? null,
+      utm_ad: clique?.utm_ad ?? null,
+      fbc: clique?.fbc ?? null,
+      fbp: clique?.fbp ?? null,
+      client_ip: clique?.ip ?? null,
+      client_ua: clique?.user_agent ?? null,
+    }
+    // Colunas de rastreio dependem da migration 013: se ainda não existirem, insere sem elas
+    let { data: novo, error } = await wsupabase
       .from("leads")
-      .insert({
-        nome,
-        telefone,
-        email: "",
-        referencia_imovel: referenciaExtraida,
-        referencias: referenciaExtraida ? [referenciaExtraida] : [],
-        temperatura: "morno",
-        origem: "Tráfego Pago",
-        observacoes: obs,
-        status: "novo",
-        corretor_id: corretorId,
-        meta_campaign_id: metaCampaignId,
-        meta_adset_id: metaAdsetId,
-        meta_ad_id: metaAdId,
-      })
+      .insert({ ...baseLead, ...rastreioLead })
       .select("id")
       .maybeSingle()
+    if (error && String(error.message).includes("does not exist")) {
+      ;({ data: novo, error } = await wsupabase
+        .from("leads")
+        .insert(baseLead)
+        .select("id")
+        .maybeSingle())
+    }
     if (error) {
       // Corrida: telefone inserido em paralelo — trata como existente
       const { data: candidatos2 } = await wsupabase.from("leads").select("id, telefone, corretor_id, status")
@@ -297,6 +344,15 @@ async function handleMessageUpsert(payload: any) {
         })
       }
     }
+  }
+
+  // Marca o clique como consumido e liga ao lead criado/encontrado
+  if (clique) {
+    await wsupabase.from("rastreio_cliques").update({
+      telefone,
+      lead_id: leadId,
+      consumido: true,
+    }).eq("id", clique.id)
   }
 
   // Registra a mensagem recebida (com contexto do anúncio)
