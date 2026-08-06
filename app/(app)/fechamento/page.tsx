@@ -300,6 +300,7 @@ export default function FechamentoPage() {
                     <th className="py-2 pr-3">Data</th>
                     <th className="py-2 pr-3">Cliente</th>
                     <th className="py-2 pr-3">Referência</th>
+                    <th className="py-2 pr-3">Tipo</th>
                     <th className="py-2 pr-3">Corretor</th>
                     <th className="py-2 pr-3 text-right">Valor</th>
                     <th className="py-2 pr-3">Status</th>
@@ -326,6 +327,7 @@ export default function FechamentoPage() {
                         </span>
                       </td>
                       <td className="py-2.5 pr-3">{aba === "fechamentos" ? (l.refFechamento || refsTexto(l)) : (l.refProposta || refsTexto(l)) || "—"}</td>
+                      <td className="py-2.5 pr-3">{aba === "fechamentos" ? (l.tipoImovelVendido || "—") : "—"}</td>
                       <td className="py-2.5 pr-3">{userName(l.corretorId)}</td>
                       <td className="py-2.5 pr-3 text-right font-display font-bold text-primary">{brl(l.valorNegociacao)}</td>
                       <td className="py-2.5 pr-3"><Badge variant={aba === "fechamentos" ? "green" : "accent"}>{corLabel}</Badge></td>
@@ -357,7 +359,7 @@ export default function FechamentoPage() {
                     </tr>
                   ))}
                   <tr className="border-t-2 border-border bg-muted/40">
-                    <td colSpan={6} className="py-2.5 pr-3 text-right font-semibold">Total de comissões</td>
+                    <td colSpan={7} className="py-2.5 pr-3 text-right font-semibold">Total de comissões</td>
                     <td className="py-2.5 pr-3 text-right font-display text-base font-bold text-primary">{brl(kpis.totalComissao)}</td>
                   </tr>
                 </tbody>

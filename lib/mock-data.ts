@@ -69,6 +69,7 @@ export interface Lead {
   temperatura: Temperatura
   refProposta?: string
   refFechamento?: string
+  tipoImovelVendido?: string
   metaCampaignId?: string
   metaAdsetId?: string
   metaAdId?: string

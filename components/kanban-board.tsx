@@ -14,6 +14,17 @@ import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATU
 import { type Lead, type LeadStatus, type Temperatura } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
+const TIPO_IMOVEL_VENDIDO = [
+  "asa",
+  "casa em condomínio fechado",
+  "apartamento",
+  "terreno",
+  "terreno em condomínio fechado",
+  "comercial casa",
+  "comercial - casa",
+  "comercial - barracão",
+]
+
 export function KanbanBoard({
   leads,
   showCorretor = false,
@@ -51,6 +62,14 @@ export function KanbanBoard({
   const canManage = (lead: Lead) => isGestor || lead.corretorId === currentCorretorId
   function handleEditSubmit(v: LeadFormValues) {
     if (!editLead) return
+    if (v.status === "fechado" && editLead.status !== "fechado") {
+      // Fechamento só é gravado pelo fluxo obrigatório (REF + tipo do imóvel vendido)
+      setFRefs(editLead.refFechamento || refsTexto(editLead))
+      setFTipo(editLead.tipoImovelVendido ?? "")
+      setCloseLead(editLead)
+      setEditLead(null)
+      return
+    }
     setSubmitting(true)
     const fields: (keyof LeadFormValues)[] = ["nome", "telefone", "email", "imovelRef", "origem", "observacoes", "status", "valorNegociacao", "corretorId", "temperatura"]
     for (const f of fields) {
@@ -117,6 +136,7 @@ export function KanbanBoard({
   const [pObs, setPObs] = useState("")
   // fechamento form
   const [fRefs, setFRefs] = useState("")
+  const [fTipo, setFTipo] = useState("")
 
   function onDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result
@@ -129,8 +149,9 @@ export function KanbanBoard({
 
   function moveLead(lead: Lead, newStatus: LeadStatus) {
     if (newStatus === "fechado") {
-      // status só é gravado após confirmar a referência do fechamento
+      // status só é gravado após confirmar a referência e o tipo do imóvel vendido
       setFRefs(refsTexto(lead))
+      setFTipo(lead.tipoImovelVendido ?? "")
       setCloseLead(lead)
       return
     }
@@ -213,9 +234,13 @@ export function KanbanBoard({
       toast("Informe a(s) referência(s) do fechamento.", "error")
       return
     }
-    updateLead(closeLead.id, { status: "fechado", refFechamento: fRefs.trim() })
-    logAudit({ leadId: closeLead.id, leadNome: closeLead.nome, usuarioNome, tipo: "fechamento", descricao: `Fechamento realizado por ${userName(closeLead.corretorId)} — ${brl(closeLead.valorNegociacao)}`, referencias: fRefs.trim() })
-    notify(`Fechamento realizado: ${closeLead.nome} — Ref: ${fRefs.trim()} — ${brl(closeLead.valorNegociacao)} por ${userName(closeLead.corretorId)}`, { tipo: "fechamento", paraRole: "gestor", leadId: closeLead.id })
+    if (!fTipo) {
+      toast("Selecione o tipo do imóvel vendido.", "error")
+      return
+    }
+    updateLead(closeLead.id, { status: "fechado", refFechamento: fRefs.trim(), tipoImovelVendido: fTipo })
+    logAudit({ leadId: closeLead.id, leadNome: closeLead.nome, usuarioNome, tipo: "fechamento", descricao: `Fechamento realizado por ${userName(closeLead.corretorId)} — ${brl(closeLead.valorNegociacao)} — Tipo: ${fTipo}`, referencias: fRefs.trim() })
+    notify(`Fechamento realizado: ${closeLead.nome} — Ref: ${fRefs.trim()} — ${fTipo} — ${brl(closeLead.valorNegociacao)} por ${userName(closeLead.corretorId)}`, { tipo: "fechamento", paraRole: "gestor", leadId: closeLead.id })
     if (closeLead.corretorId) {
       notify(`Parabéns! Fechamento registrado no lead ${closeLead.nome}`, { tipo: "fechamento", paraUsuarioId: closeLead.corretorId, leadId: closeLead.id })
     }
@@ -566,6 +591,13 @@ export function KanbanBoard({
           <div className="flex flex-col gap-1">
             <Label htmlFor="fr">Referência(s) do fechamento *</Label>
             <Input id="fr" value={fRefs} onChange={(e) => setFRefs(e.target.value)} placeholder="Ex: AP-1006" required />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="ftipo">Tipo do imóvel vendido *</Label>
+            <Select id="ftipo" value={fTipo} onChange={(e) => setFTipo(e.target.value)} aria-label="Tipo do imóvel vendido" required>
+              <option value="">Selecione...</option>
+              {TIPO_IMOVEL_VENDIDO.map((t) => <option key={t} value={t}>{t}</option>)}
+            </Select>
           </div>
           <div className="mt-1 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setCloseLead(null)}>Cancelar</Button>

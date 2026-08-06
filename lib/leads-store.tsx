@@ -88,6 +88,7 @@ function rowToLead(r: any): Lead {
     temperatura: (r.temperatura ?? "morno") as Temperatura,
     refProposta: r.ref_proposta ?? undefined,
     refFechamento: r.ref_fechamento ?? undefined,
+    tipoImovelVendido: r.tipo_imovel_vendido ?? undefined,
     metaCampaignId: r.meta_campaign_id ?? undefined,
     metaAdsetId: r.meta_adset_id ?? undefined,
     metaAdId: r.meta_ad_id ?? undefined,
@@ -122,6 +123,7 @@ function leadPatchToRow(p: Partial<Lead>): Record<string, any> {
   if (p.temperatura !== undefined) row.temperatura = p.temperatura
   if (p.refProposta !== undefined) row.ref_proposta = p.refProposta
   if (p.refFechamento !== undefined) row.ref_fechamento = p.refFechamento
+  if (p.tipoImovelVendido !== undefined) row.tipo_imovel_vendido = p.tipoImovelVendido || null
   if (p.metaCampaignId !== undefined) row.meta_campaign_id = p.metaCampaignId || null
   if (p.metaAdsetId !== undefined) row.meta_adset_id = p.metaAdsetId || null
   if (p.metaAdId !== undefined) row.meta_ad_id = p.metaAdId || null
@@ -453,6 +455,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       delete row.utm_ad
       delete row.fbc
       delete row.fbp
+      delete row.tipo_imovel_vendido
       ;({ error } = await supabase.from("leads").update(row).eq("id", id))
     }
     if (error) {
