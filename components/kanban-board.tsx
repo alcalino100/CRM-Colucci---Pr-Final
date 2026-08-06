@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
 import { LeadCard } from "@/components/lead-card"
 import { LeadForm, type LeadFormValues } from "@/components/lead-form"
+import { useSaleCelebration } from "@/components/sale-celebration"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
 import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, normalizePhone, refsTexto } from "@/lib/labels"
@@ -41,6 +42,7 @@ export function KanbanBoard({
   const { user } = useAuth()
   const router = useRouter()
   const toast = useToast()
+  const celebrate = useSaleCelebration()
   const [visitLead, setVisitLead] = useState<Lead | null>(null)
   const [propLead, setPropLead] = useState<Lead | null>(null)
   const [closeLead, setCloseLead] = useState<Lead | null>(null)
@@ -239,11 +241,13 @@ export function KanbanBoard({
     }
     updateLead(closeLead.id, { status: "fechado", refFechamento: fRefs.trim(), tipoImovelVendido: fTipo })
     logAudit({ leadId: closeLead.id, leadNome: closeLead.nome, usuarioNome, tipo: "fechamento", descricao: `Fechamento realizado por ${userName(closeLead.corretorId)} — ${brl(closeLead.valorNegociacao)} — Tipo: ${fTipo}`, referencias: fRefs.trim() })
-    notify(`Fechamento realizado: ${closeLead.nome} — Ref: ${fRefs.trim()} — ${fTipo} — ${brl(closeLead.valorNegociacao)} por ${userName(closeLead.corretorId)}`, { tipo: "fechamento", paraRole: "gestor", leadId: closeLead.id })
-    if (closeLead.corretorId) {
-      notify(`Parabéns! Fechamento registrado no lead ${closeLead.nome}`, { tipo: "fechamento", paraUsuarioId: closeLead.corretorId, leadId: closeLead.id })
-    }
-    toast("Fechamento registrado.")
+    celebrate({
+      nome: closeLead.nome,
+      valor: closeLead.valorNegociacao,
+      ref: fRefs.trim(),
+      tipo: fTipo,
+      corretor: userName(closeLead.corretorId),
+    })
     setCloseLead(null)
     fetch("/api/meta/events", {
       method: "POST",

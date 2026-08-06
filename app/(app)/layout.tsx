@@ -10,6 +10,7 @@ import { ToastProvider } from "@/components/ui/primitives"
 import { LeadsProvider, useLeads } from "@/lib/leads-store"
 import { ColucciLogo } from "@/components/colucci-logo"
 import { NotificationBell } from "@/components/notification-bell"
+import { SaleCelebrationProvider } from "@/components/sale-celebration"
 import { cn } from "@/lib/utils"
 
 // Mostra a foto de perfil (se houver) ou as iniciais. Precisa estar dentro do LeadsProvider.
@@ -93,6 +94,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <ToastProvider>
+      <SaleCelebrationProvider>
       <LeadsProvider>
       <div className="flex min-h-screen bg-background">
         {/* Sidebar desktop */}
@@ -140,6 +142,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       </LeadsProvider>
+      </SaleCelebrationProvider>
     </ToastProvider>
   )
 }
