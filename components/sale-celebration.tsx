@@ -1,8 +1,9 @@
 "use client"
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { Sparkles, X } from "lucide-react"
 import { brl } from "@/lib/labels"
+import { supabase } from "@/lib/supabase/client"
 
 export type SaleInfo = {
   nome: string
@@ -24,6 +25,9 @@ const FLY_EMOJIS = ["🎉", "💰", "🏠", "🎊", "🥳", "💸", "🔑", "�
 
 const DURATION = 6500
 
+// Identifica esta aba do navegador para não celebrar o próprio broadcast em dobro
+export const SESSION_ID = Math.random().toString(36).slice(2)
+
 export function SaleCelebrationProvider({ children }: { children: React.ReactNode }) {
   const [list, setList] = useState<Active[]>([])
   const idRef = useRef(0)
@@ -33,6 +37,20 @@ export function SaleCelebrationProvider({ children }: { children: React.ReactNod
     setList((prev) => [...prev.slice(-2), { ...info, id }])
     setTimeout(() => setList((prev) => prev.filter((x) => x.id !== id)), DURATION)
   }, [])
+
+  useEffect(() => {
+    const canal = supabase
+      .channel("crm-celebracoes")
+      .on("broadcast", { event: "sale" }, (msg) => {
+        const p = msg.payload as SaleInfo & { session?: string }
+        if (!p?.nome || p.session === SESSION_ID) return
+        celebrate({ nome: p.nome, valor: p.valor, ref: p.ref, tipo: p.tipo, corretor: p.corretor })
+      })
+      .subscribe()
+    return () => {
+      supabase.removeChannel(canal)
+    }
+  }, [celebrate])
 
   return (
     <TriggerCtx.Provider value={celebrate}>

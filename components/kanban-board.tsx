@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
 import { LeadCard } from "@/components/lead-card"
 import { LeadForm, type LeadFormValues } from "@/components/lead-form"
-import { useSaleCelebration } from "@/components/sale-celebration"
+import { useSaleCelebration, SESSION_ID } from "@/components/sale-celebration"
+import { supabase } from "@/lib/supabase/client"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
 import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, normalizePhone, refsTexto } from "@/lib/labels"
@@ -248,6 +249,22 @@ export function KanbanBoard({
       tipo: fTipo,
       corretor: userName(closeLead.corretorId),
     })
+    // Transmite em tempo real para o corretor do lead e para os gestores
+    supabase
+      .channel("crm-celebracoes")
+      .send({
+        type: "broadcast",
+        event: "sale",
+        payload: {
+          nome: closeLead.nome,
+          valor: closeLead.valorNegociacao,
+          ref: fRefs.trim(),
+          tipo: fTipo,
+          corretor: userName(closeLead.corretorId),
+          session: SESSION_ID,
+        },
+      })
+      .then(() => {})
     setCloseLead(null)
     fetch("/api/meta/events", {
       method: "POST",
