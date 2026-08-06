@@ -42,7 +42,10 @@ export async function GET(req: Request) {
       const { data } = await wsupabase.from("usuarios").select("id, nome").ilike("nome", `%${corretorParam}%`).maybeSingle()
       usuario = data
     }
-    if (!usuario) return NextResponse.json({ ok: false, erro: `Corretor "${corretorParam}" não encontrado` }, { status: 404 })
+    if (!usuario) {
+      const { data: sugs } = await wsupabase.from("usuarios").select("id, nome, role").limit(50)
+      return NextResponse.json({ ok: false, erro: `Corretor "${corretorParam}" não encontrado`, sugestoes: (sugs ?? []).map((s) => ({ id: s.id, nome: s.nome, role: s.role })) }, { status: 404 })
+    }
     const uid = usuario.id
 
     // Campanhas do corretor
