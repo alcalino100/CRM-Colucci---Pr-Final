@@ -142,7 +142,7 @@ export async function GET(req: Request) {
       const cr = url.searchParams.get("id")!
       body = mock
         ? mockCreative(cr)
-        : (await metaGetAll(`${BASE}/${cr}?fields=id,title,body,object_type,call_to_action_type,image_url,thumbnail_url,video_id,link_description&access_token=${token}`))[0]
+        : (await metaGetAll(`${BASE}/${cr}?fields=id,name,object_type,effective_object_story_id,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,contextual_multi_ads&access_token=${token}`))[0]
     } else if (op === "ad_enh") {
       // Aprimoramentos reais aplicados no anúncio (creative_features_spec do nó do anúncio)
       const id = url.searchParams.get("id")!
@@ -186,7 +186,7 @@ export async function POST(req: Request) {
   const op = url.searchParams.get("op")
   const { token } = await resolveToken()
   if (!token) return NextResponse.json({ error: "sem token (env META_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN)" }, { status: 401 })
-  if (op !== "set_budget" && op !== "link_pixel" && op !== "set_pixel" && op !== "remove_pixel" && op !== "set_enhancements") return NextResponse.json({ error: "op inválida (use op=set_budget, op=link_pixel, op=set_pixel, op=remove_pixel ou op=set_enhancements)" }, { status: 400 })
+  if (op !== "set_budget" && op !== "link_pixel" && op !== "set_pixel" && op !== "remove_pixel" && op !== "set_enhancements" && op !== "set_creative") return NextResponse.json({ error: "op inválida (use op=set_budget, op=link_pixel, op=set_pixel, op=remove_pixel, op=set_enhancements ou op=set_creative)" }, { status: 400 })
 
   try {
     let body: any
@@ -215,6 +215,21 @@ export async function POST(req: Request) {
         })
         j = await r.json()
       }
+      if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
+      return NextResponse.json({ ok: true, ad_id: adId, meta: j })
+    }
+    if (op === "set_creative") {
+      // Atualiza o criativo de um anúncio existente passando o objeto creative completo
+      // (mesma forma do Ads Manager/API: creative={ object_story_spec, degrees_of_freedom_spec, ... }).
+      // É a forma correta de editar aprimoramentos (Enhance CTA) num anúncio já publicado.
+      const adId: string | undefined = body.ad_id
+      const creative: any = body.creative
+      if (!adId || !creative || typeof creative !== "object") return NextResponse.json({ error: "informe ad_id e creative (objeto completo)" }, { status: 400 })
+      const r = await fetch(`${BASE}/${adId}`, {
+        method: "POST",
+        body: new URLSearchParams({ access_token: token, creative: JSON.stringify(creative) }),
+      })
+      const j: any = await r.json()
       if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
       return NextResponse.json({ ok: true, ad_id: adId, meta: j })
     }
