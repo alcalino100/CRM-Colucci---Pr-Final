@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { normalizePhone } from "@/lib/labels"
 import { mapConnectionState, notifyDisconnection, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
+import { enviarLeadCapi } from "@/lib/meta/capi"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -332,6 +333,32 @@ async function handleMessageUpsert(payload: any) {
         para_role: "gestor",
         lead_id: leadId,
       })
+      // Envia o evento Lead (CAPI) com os identificadores capturados na ponte de rastreio.
+      // Melhora a "match quality" e atribui o lead à campanha/conjunto real. Best-effort.
+      if (leadId) {
+        try {
+          await enviarLeadCapi({
+            lead_id: leadId,
+            telefone,
+            nome,
+            email: "",
+            valor: 0,
+            corretor_id: corretorId,
+            campanha_id: metaCampaignId,
+            adset_id: metaAdsetId,
+            ad_id: metaAdId,
+            utm_campaign: clique?.utm_campaign ?? null,
+            utm_adset: clique?.utm_adset ?? null,
+            utm_ad: clique?.utm_ad ?? null,
+            fbc: clique?.fbc ?? null,
+            fbp: clique?.fbp ?? null,
+            ip: clique?.ip ?? null,
+            ua: clique?.user_agent ?? null,
+          })
+        } catch {
+          // nunca derruba o processamento do webhook
+        }
+      }
       // Telefone já cadastrado para outro corretor: avisa o gestor, mas o lead do clique é de quem recebeu
       if (existente && existente.corretor_id && existente.corretor_id !== corretorId) {
         const { data: dono } = await wsupabase.from("usuarios").select("nome").eq("id", existente.corretor_id).maybeSingle()

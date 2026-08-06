@@ -49,6 +49,14 @@ export interface PurchaseEventInput {
 }
 
 export function buildPurchaseEvent(input: PurchaseEventInput) {
+  return buildEventCore("Purchase", input)
+}
+
+export function buildLeadEvent(input: PurchaseEventInput) {
+  return buildEventCore("Lead", input)
+}
+
+function buildEventCore(eventName: "Purchase" | "Lead", input: PurchaseEventInput) {
   const eventTime = input.event_time ?? Math.floor(Date.now() / 1000)
   const phoneDigits = String(input.telefone).replace(/\D/g, "")
   const nomePartes = String(input.nome ?? "").trim().split(/\s+/)
@@ -68,31 +76,84 @@ export function buildPurchaseEvent(input: PurchaseEventInput) {
   if (input.birthdate?.trim()) userData.db = [hashMetaValue(input.birthdate)]
   userData.external_id = input.external_id || input.lead_id
 
+  const customData: Record<string, any> = {
+    lead_id: input.lead_id,
+    corretor_id: input.corretor_id ?? null,
+    campaign_id: input.campanha_id ?? null,
+    adset_id: input.adset_id ?? null,
+    ad_id: input.ad_id ?? null,
+    utm_campaign: input.utm_campaign ?? null,
+    utm_adset: input.utm_adset ?? null,
+    utm_ad: input.utm_ad ?? null,
+  }
+  if (eventName === "Purchase") {
+    customData.currency = "BRL"
+    customData.value = typeof input.valor === "number" ? input.valor : Number.parseFloat(String(input.valor ?? "")) || 0
+  }
+
   const event: Record<string, any> = {
-    event_name: "Purchase",
+    event_name: eventName,
     event_time: eventTime,
-    event_id: `${input.lead_id}-${eventTime}`,
+    event_id: eventName === "Lead" ? `lead-${input.lead_id}-${eventTime}` : `${input.lead_id}-${eventTime}`,
     action_source: "website",
     event_source_url: process.env.NEXT_PUBLIC_APP_URL || "https://crm-colucci-pre-final.vercel.app",
     user_data: userData,
-    custom_data: {
-      currency: "BRL",
-      value: typeof input.valor === "number" ? input.valor : Number.parseFloat(String(input.valor ?? "")) || 0,
-      lead_id: input.lead_id,
-      corretor_id: input.corretor_id ?? null,
-      campaign_id: input.campanha_id ?? null,
-      adset_id: input.adset_id ?? null,
-      ad_id: input.ad_id ?? null,
-      utm_campaign: input.utm_campaign ?? null,
-      utm_adset: input.utm_adset ?? null,
-      utm_ad: input.utm_ad ?? null,
-    },
+    custom_data: customData,
   }
   if (input.fbc?.trim()) event.fbc = input.fbc.trim()
   if (input.fbp?.trim()) event.fbp = input.fbp.trim()
   if (input.ip?.trim()) event.client_ip_address = input.ip.trim()
   if (input.ua?.trim()) event.client_user_agent = input.ua.trim()
   return event
+}
+
+// Envia o evento Lead (CAPI) quando o lead chega no WhatsApp vindo de anúncio,
+// com os identificadores capturados na ponte de rastreio (/r). Best-effort.
+export async function enviarLeadCapi(input: PurchaseEventInput): Promise<{ ok: boolean; http?: number; erro?: string | null }> {
+  const token = resolveMetaToken()
+  if (!token) return { ok: false, erro: "sem token Meta" }
+  const pixel = metaPixelId()
+  try {
+    const event = buildLeadEvent({ ...input, event_time: input.event_time ?? Math.floor(Date.now() / 1000) })
+    const { status, json } = await sendMetaEvents(token, pixel, [event])
+    const ok = !json.error
+    await persistMetaEventLog({
+      origem: "lead_event",
+      event_id: event.event_id,
+      event_name: "Lead",
+      pixel_id: pixel,
+      lead_id: input.lead_id,
+      nome: input.nome,
+      telefone: input.telefone,
+      corretor_id: input.corretor_id,
+      campaign_id: input.campanha_id,
+      adset_id: input.adset_id,
+      ad_id: input.ad_id,
+      status: ok ? "enviado" : "erro",
+      http_status: status,
+      events_received: ok ? json.events_received : null,
+      meta_code: ok ? null : json.error?.code,
+      meta_message: ok ? null : json.error?.message,
+      event_time: event.event_time,
+    })
+    return { ok, http: status, erro: json.error?.message ?? null }
+  } catch (e: any) {
+    await persistMetaEventLog({
+      origem: "lead_event",
+      event_name: "Lead",
+      pixel_id: pixel,
+      lead_id: input.lead_id,
+      nome: input.nome,
+      telefone: input.telefone,
+      corretor_id: input.corretor_id,
+      campaign_id: input.campanha_id,
+      adset_id: input.adset_id,
+      ad_id: input.ad_id,
+      status: "erro",
+      meta_message: e.message,
+    })
+    return { ok: false, erro: e.message }
+  }
 }
 
 export async function sendMetaEvents(token: string, pixelId: string, events: unknown[]): Promise<{ status: number; json: any }> {

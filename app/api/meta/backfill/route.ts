@@ -48,11 +48,13 @@ export async function GET(req: Request) {
     if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
 
     // Leads já enviados anteriormente (tempo real + backfill), por lead_id.
+    // Considera só eventos Purchase (o Lead tem log próprio e não deve marcar o Purchase como enviado).
     let jaEnviados = new Set<string>()
     if (!force) {
       const { data: logs } = await supabase
         .from("meta_event_logs")
         .select("lead_id")
+        .eq("event_name", "Purchase")
         .not("lead_id", "is", null)
       for (const l of logs ?? []) if (l.lead_id) jaEnviados.add(String(l.lead_id))
     }
