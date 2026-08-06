@@ -183,3 +183,29 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ---- efeitos "brilhoso" ---- */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+.shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.55) 50%, transparent 65%);
+  transform: translateX(-130%);
+  animation: shine-sweep 7s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+@keyframes shine-sweep {
+  0%, 55% { transform: translateX(-130%); }
+  100% { transform: translateX(130%); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgb(178 34 34 / 0.3); }
+  50% { box-shadow: 0 0 22px rgb(178 34 34 / 0.55); }
+}
+.glow-pulse { animation: glow-pulse 3s ease-in-out infinite; }

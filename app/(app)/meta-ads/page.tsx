@@ -8,7 +8,7 @@ import { useMemo, useState } from "react"
 import useSWR from "swr"
 import {
   CircleDollarSign, Eye, MousePointerClick, Percent, Coins, BarChart3, Users, Target,
-  ChevronRight, Link2, TriangleAlert, ArrowUpRight, ArrowDownRight, Plug, RefreshCw, CalendarRange,
+  ChevronRight, Link2, TriangleAlert, ArrowUpRight, ArrowDownRight, Plug, RefreshCw, CalendarRange, Sparkles,
 } from "lucide-react"
 import {
   ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend,
@@ -209,17 +209,26 @@ function MetaAdsDashboard() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="relative flex flex-col gap-5">
+      {/* Aurora de fundo */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-32 left-1/2 h-[28rem] w-[44rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+        <div className="absolute right-[-7rem] top-44 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+        <div className="absolute bottom-[-9rem] left-[-5rem] h-80 w-80 rounded-full bg-secondary/10 blur-3xl" />
+      </div>
       {/* Cabeçalho */}
-      <header className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
-        <div aria-hidden className="pointer-events-none absolute -right-20 -top-28 size-72 rounded-full bg-primary/10 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-10 size-56 rounded-full bg-secondary/10 blur-3xl" />
+      <header className="shine relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+        <div aria-hidden className="pointer-events-none absolute -right-24 -top-32 size-80 rounded-full bg-primary/15 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-12 size-64 rounded-full bg-accent/15 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -top-16 right-1/3 size-40 rounded-full bg-secondary/10 blur-3xl" />
         <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary ring-1 ring-primary/10">
-              <BarChart3 className="size-3.5" /> Gestão de tráfego
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-primary/15 to-accent/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary ring-1 ring-primary/25 shadow-[0_0_14px_rgb(178_34_34/0.25)]">
+              <Sparkles className="size-3.5" /> Gestão de tráfego
             </span>
-            <h1 className="mt-2.5 font-display text-2xl font-bold tracking-tight sm:text-3xl">Meta Ads</h1>
+            <h1 className="mt-2.5 font-display text-2xl font-bold tracking-tight sm:text-3xl">
+              <span className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Meta Ads</span>
+            </h1>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground text-pretty">
               Performance das campanhas com dados da Meta Graph API e leads reais do CRM.
             </p>
@@ -227,13 +236,16 @@ function MetaAdsDashboard() {
           <div className="flex flex-wrap items-center gap-2">
             {status && (
               <Badge variant={status.connected ? "green" : "amber"} className="gap-1.5 px-3 py-1.5 shadow-sm">
-                <span className={cn("size-1.5 rounded-full", status.connected ? "bg-emerald-500" : "bg-amber-500")} />
+                <span className="relative flex size-2">
+                  <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-70", status.connected ? "bg-emerald-400" : "bg-amber-400")} />
+                  <span className={cn("relative inline-flex size-2 rounded-full", status.connected ? "bg-emerald-500" : "bg-amber-500")} />
+                </span>
                 <Plug className="size-3" />
                 {status.connected ? (status.source === "env" ? "Conectado (token)" : "Conectado") : "Modo demonstração"}
               </Badge>
             )}
             {!status?.connected && (
-              <a href="/api/meta/oauth/start" className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-b from-primary to-primary/90 px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:brightness-110">
+              <a href="/api/meta/oauth/start" className="shine inline-flex items-center gap-2 rounded-lg bg-gradient-to-b from-primary to-primary/90 px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-[0_8px_24px_-6px_rgb(178_34_34/0.5)] transition hover:shadow-[0_12px_30px_-4px_rgb(178_34_34/0.7)] hover:brightness-110">
                 <Link2 className="size-4" /> Conectar Meta Business
               </a>
             )}
@@ -368,9 +380,17 @@ function MetaAdsDashboard() {
                   <LineChart data={serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradGasto" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#b22222" stopOpacity={0.28} />
+                        <stop offset="0%" stopColor="#b22222" stopOpacity={0.32} />
                         <stop offset="100%" stopColor="#b22222" stopOpacity={0} />
                       </linearGradient>
+                      <filter id="glowGastoL" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="3.5" result="blur" />
+                        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                      </filter>
+                      <filter id="glowResultL" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="3" result="blur" />
+                        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                      </filter>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
                     <XAxis dataKey="dia" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
@@ -378,8 +398,10 @@ function MetaAdsDashboard() {
                     <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} width={34} tickLine={false} axisLine={false} />
                     <Tooltip content={<ChartTip />} cursor={{ stroke: "var(--color-border)" }} />
                     <Legend formatter={(v) => <span className="text-xs font-medium text-muted-foreground">{v}</span>} />
-                    <Area yAxisId="g" type="monotone" dataKey="gasto" name="Gasto (R$)" stroke="#b22222" strokeWidth={2.5} fill="url(#gradGasto)" dot={false} activeDot={{ r: 4, fill: "#b22222", strokeWidth: 2, stroke: "#fff" }} />
-                    <Line yAxisId="r" type="monotone" dataKey="resultados" name="Resultados" stroke="#64748b" strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: "#64748b", strokeWidth: 2, stroke: "#fff" }} />
+                    <Area yAxisId="g" type="monotone" dataKey="gasto" name="Gasto (R$)" stroke="#b22222" strokeWidth={2.5} fill="url(#gradGasto)" dot={false} activeDot={{ r: 5, fill: "#b22222", strokeWidth: 2, stroke: "#fff" }} />
+                    <Line yAxisId="g" type="monotone" dataKey="gasto" name="GastoGlow" stroke="#b22222" strokeWidth={7} strokeOpacity={0.22} dot={false} filter="url(#glowGastoL)" legendType="none" tooltipType="none" />
+                    <Line yAxisId="r" type="monotone" dataKey="resultados" name="Resultados" stroke="#64748b" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#64748b", strokeWidth: 2, stroke: "#fff" }} />
+                    <Line yAxisId="r" type="monotone" dataKey="resultados" name="ResultadosGlow" stroke="#64748b" strokeWidth={7} strokeOpacity={0.18} dot={false} filter="url(#glowResultL)" legendType="none" tooltipType="none" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -400,14 +422,22 @@ function MetaAdsDashboard() {
                         <stop offset="0%" stopColor="#c41e24" />
                         <stop offset="100%" stopColor="#b22222" />
                       </linearGradient>
+                      <filter id="glowBar" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="2.5" result="blur" />
+                        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                      </filter>
+                      <filter id="glowResultB" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="2" result="blur" />
+                        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                      </filter>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
                     <XAxis dataKey="nome" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} interval={0} angle={-12} height={48} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} width={54} tickLine={false} axisLine={false} />
                     <Tooltip content={<ChartTip />} cursor={{ fill: "var(--color-muted)", opacity: 0.4 }} />
                     <Legend formatter={(v) => <span className="text-xs font-medium text-muted-foreground">{v}</span>} />
-                    <Bar dataKey="gasto" name="Gasto (R$)" fill="url(#gradBar)" radius={[6, 6, 0, 0]} />
-                    <Bar dataKey="resultados" name="Resultados" fill="#64748b" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="gasto" name="Gasto (R$)" fill="url(#gradBar)" radius={[6, 6, 0, 0]} filter="url(#glowBar)" />
+                    <Bar dataKey="resultados" name="Resultados" fill="#64748b" radius={[6, 6, 0, 0]} filter="url(#glowResultB)" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -551,31 +581,38 @@ function Kpi({ icon: Icon, label, value, prev, cur, invert, accent }: { icon: an
   if (prev !== undefined && prev > 0) delta = ((cur - prev) / prev) * 100
   const positivo = delta !== null && (invert ? delta < 0 : delta > 0)
   return (
-    <Card className="group rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <CardContent className="p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
-            <p className="mt-1 truncate font-display text-xl font-bold tabular-nums tracking-tight md:text-2xl">{value}</p>
-            {delta !== null && (
-              <span className={cn(
-                "mt-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
-                positivo ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600",
-              )}>
-                {delta >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
-                {fmt(Math.abs(delta), 1)}% vs anterior
-              </span>
-            )}
+    <div className={cn(
+      "group rounded-2xl bg-gradient-to-b from-primary/20 via-primary/5 to-transparent p-px transition-all duration-300 hover:-translate-y-1 hover:from-primary/40",
+      accent && "from-accent/25 via-accent/5",
+    )}>
+      <Card className="h-full rounded-[calc(var(--radius-2xl)-1px)] transition-shadow duration-300 hover:shadow-[0_14px_36px_-10px_rgb(178_34_34/0.4)]">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
+              <p className="mt-1 truncate font-display text-xl font-bold tabular-nums tracking-tight md:text-2xl">{value}</p>
+              {delta !== null && (
+                <span className={cn(
+                  "mt-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+                  positivo ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600",
+                )}>
+                  {delta >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
+                  {fmt(Math.abs(delta), 1)}% vs anterior
+                </span>
+              )}
+            </div>
+            <div className={cn(
+              "shrink-0 rounded-xl p-2.5 ring-1 transition-all duration-300 group-hover:scale-110 group-hover:-rotate-3",
+              accent
+                ? "bg-accent/10 text-accent ring-accent/25 shadow-[0_0_18px_rgb(196_30_36/0.45)]"
+                : "bg-primary/10 text-primary ring-primary/25 shadow-[0_0_16px_rgb(178_34_34/0.35)]",
+            )}>
+              <Icon className="size-4.5" />
+            </div>
           </div>
-          <div className={cn(
-            "shrink-0 rounded-xl p-2.5 ring-1 transition-transform duration-200 group-hover:scale-105",
-            accent ? "bg-accent/10 text-accent ring-accent/10" : "bg-primary/10 text-primary ring-primary/10",
-          )}>
-            <Icon className="size-4.5" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
@@ -635,32 +672,34 @@ function CreativeCard({ ad, ins, adsetNome }: { ad: any; ins?: any; adsetNome: s
   const { data: cr } = useSWR(ad.creative?.id ? `/api/meta?op=creative&id=${ad.creative.id}` : null, fetcher)
   const res = ins ? resultados(ins) : 0
   return (
-    <div className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
-      <div className="relative">
-        {cr?.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={cr.image_url || "/placeholder.svg"} alt={`Criativo do anúncio ${ad.name}`} className="h-44 w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
-        ) : (
-          <Skeleton className="h-44 w-full rounded-none" />
-        )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent" aria-hidden="true" />
-        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-          <StatusBadge s={ad.effective_status} />
-          {cr?.object_type && <Badge variant="slate">{cr.object_type === "VIDEO" ? "Vídeo" : cr.object_type === "CAROUSEL" ? "Carrossel" : "Imagem"}</Badge>}
+    <div className="group rounded-2xl bg-gradient-to-b from-primary/15 via-primary/5 to-transparent p-px transition-all duration-300 hover:-translate-y-1 hover:from-primary/40">
+      <div className="flex h-full flex-col overflow-hidden rounded-[calc(var(--radius-2xl)-1px)] border border-border bg-card shadow-sm transition-shadow duration-300 hover:shadow-[0_16px_44px_-12px_rgb(178_34_34/0.4)]">
+        <div className="relative">
+          {cr?.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={cr.image_url || "/placeholder.svg"} alt={`Criativo do anúncio ${ad.name}`} className="h-44 w-full object-cover transition-all duration-300 group-hover:scale-[1.04]" />
+          ) : (
+            <Skeleton className="h-44 w-full rounded-none" />
+          )}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent" aria-hidden="true" />
+          <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+            <StatusBadge s={ad.effective_status} />
+            {cr?.object_type && <Badge variant="slate">{cr.object_type === "VIDEO" ? "Vídeo" : cr.object_type === "CAROUSEL" ? "Carrossel" : "Imagem"}</Badge>}
+          </div>
         </div>
-      </div>
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <p className="text-sm font-semibold text-pretty">{cr?.title ?? ad.name}</p>
-        {cr?.body && <p className="line-clamp-2 text-xs text-muted-foreground">{cr.body}</p>}
-        <p className="text-xs text-muted-foreground">Anúncio: {ad.name} · Conjunto: {adsetNome}</p>
-        {cr?.call_to_action_type && (
-          <span className="w-fit rounded-lg bg-primary/10 px-2 py-1 text-xs font-medium text-primary">{CTA_PT[cr.call_to_action_type] ?? cr.call_to_action_type}</span>
-        )}
-        <div className="mt-auto grid grid-cols-4 gap-1 border-t border-border pt-3 text-center tabular-nums">
-          <MiniMetric l="Gasto" v={brl(Number(ins?.spend ?? 0))} />
-          <MiniMetric l="Cliques" v={fmt(Number(ins?.clicks ?? 0))} />
-          <MiniMetric l="CTR" v={`${fmt(Number(ins?.ctr ?? 0), 2)}%`} />
-          <MiniMetric l="Result." v={fmt(res)} />
+        <div className="flex flex-1 flex-col gap-2 p-4">
+          <p className="text-sm font-semibold text-pretty">{cr?.title ?? ad.name}</p>
+          {cr?.body && <p className="line-clamp-2 text-xs text-muted-foreground">{cr.body}</p>}
+          <p className="text-xs text-muted-foreground">Anúncio: {ad.name} · Conjunto: {adsetNome}</p>
+          {cr?.call_to_action_type && (
+            <span className="w-fit rounded-lg bg-primary/10 px-2 py-1 text-xs font-medium text-primary shadow-[0_0_12px_rgb(178_34_34/0.25)]">{CTA_PT[cr.call_to_action_type] ?? cr.call_to_action_type}</span>
+          )}
+          <div className="mt-auto grid grid-cols-4 gap-1 border-t border-border pt-3 text-center tabular-nums">
+            <MiniMetric l="Gasto" v={brl(Number(ins?.spend ?? 0))} />
+            <MiniMetric l="Cliques" v={fmt(Number(ins?.clicks ?? 0))} />
+            <MiniMetric l="CTR" v={`${fmt(Number(ins?.ctr ?? 0), 2)}%`} />
+            <MiniMetric l="Result." v={fmt(res)} />
+          </div>
         </div>
       </div>
     </div>
