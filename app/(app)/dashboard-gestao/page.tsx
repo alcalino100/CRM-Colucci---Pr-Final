@@ -5,9 +5,11 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveCo
 import { Users, CalendarCheck, TrendingUp, CircleDollarSign } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { KanbanBoard } from "@/components/kanban-board"
 import { brl, fmtDate } from "@/lib/labels"
 import { ORIGENS, type Origem } from "@/lib/mock-data"
+import { cn } from "@/lib/utils"
 
 const COLORS = ["#b22222", "#54595f", "#c41e24", "#a1a1aa"]
 
@@ -69,10 +71,7 @@ export default function DashboardGestaoPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold">Dashboard de Gestão</h1>
-        <p className="text-sm text-muted-foreground">Visão geral da equipe, funil e propostas.</p>
-      </div>
+      <PageHeading title="Dashboard de Gestão" subtitle="Visão geral da equipe, funil e propostas." badge="Visão gerencial" />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -165,17 +164,27 @@ export default function DashboardGestaoPage() {
 
 function Kpi({ icon: Icon, label, value, accent }: { icon: any; label: string; value: string; accent?: boolean }) {
   return (
-    <Card>
-      <CardContent className="flex items-center gap-4 pt-5">
-        <div className={`flex size-11 items-center justify-center rounded-lg ${accent ? "bg-accent/15 text-accent" : "bg-primary/10 text-primary"}`}>
-          <Icon className="size-5" />
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="font-display text-xl font-bold">{value}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <div className={cn(
+      "group rounded-xl bg-gradient-to-b from-primary/20 via-primary/5 to-transparent p-px transition-all duration-300 hover:-translate-y-1 hover:from-primary/40",
+      accent && "from-accent/25 via-accent/5",
+    )}>
+      <Card className="h-full rounded-[calc(var(--radius-xl)-1px)]">
+        <CardContent className="flex h-full items-center gap-4 p-4 pt-5">
+          <div className={cn(
+            "flex size-11 shrink-0 items-center justify-center rounded-xl ring-1 transition-all duration-300 group-hover:scale-110 group-hover:-rotate-3",
+            accent
+              ? "bg-accent/10 text-accent ring-accent/25 shadow-[0_0_18px_rgb(196_30_36/0.45)]"
+              : "bg-primary/10 text-primary ring-primary/25 shadow-[0_0_16px_rgb(178_34_34/0.35)]",
+          )}>
+            <Icon className="size-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-xs text-muted-foreground">{label}</p>
+            <p className="truncate font-display text-xl font-bold tabular-nums">{value}</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 

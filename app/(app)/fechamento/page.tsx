@@ -6,8 +6,10 @@ import { Check, Coins, Handshake, Banknote, BadgeCheck, PieChart as PieIcon, Pen
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { brl, fmtDate, refsTexto } from "@/lib/labels"
 import type { Lead } from "@/lib/mock-data"
+import { cn } from "@/lib/utils"
 
 type Aba = "fechamentos" | "negociacoes"
 
@@ -182,10 +184,11 @@ export default function FechamentoPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold">Fechamentos</h1>
-          <p className="text-sm text-muted-foreground">Fechamentos e negociações por período, corretor e referência.</p>
-        </div>
+        <PageHeading
+          title="Fechamentos"
+          subtitle="Fechamentos e negociações por período, corretor e referência."
+          badge="Comissões e vendas"
+        />
         <div className="flex gap-2">
           <button onClick={() => setAba("fechamentos")} className={tab(aba === "fechamentos")}>Fechamentos</button>
           <button onClick={() => setAba("negociacoes")} className={tab(aba === "negociacoes")}>Negociações</button>
@@ -369,17 +372,27 @@ export default function FechamentoPage() {
 
 function Kpi({ icon: Icon, label, value, accent }: { icon: any; label: string; value: string; accent?: boolean }) {
   return (
-    <Card>
-      <CardContent className="flex items-center gap-4 pt-5">
-        <div className={`flex size-11 items-center justify-center rounded-lg ${accent ? "bg-accent/15 text-accent" : "bg-primary/10 text-primary"}`}>
-          <Icon className="size-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-xs text-muted-foreground">{label}</p>
-          <p className="truncate font-display text-xl font-bold">{value}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <div className={cn(
+      "group rounded-xl bg-gradient-to-b from-primary/20 via-primary/5 to-transparent p-px transition-all duration-300 hover:-translate-y-1 hover:from-primary/40",
+      accent && "from-accent/25 via-accent/5",
+    )}>
+      <Card className="h-full rounded-[calc(var(--radius-xl)-1px)]">
+        <CardContent className="flex h-full items-center gap-4 p-4 pt-5">
+          <div className={cn(
+            "flex size-11 shrink-0 items-center justify-center rounded-xl ring-1 transition-all duration-300 group-hover:scale-110 group-hover:-rotate-3",
+            accent
+              ? "bg-accent/10 text-accent ring-accent/25 shadow-[0_0_18px_rgb(196_30_36/0.45)]"
+              : "bg-primary/10 text-primary ring-primary/25 shadow-[0_0_16px_rgb(178_34_34/0.35)]",
+          )}>
+            <Icon className="size-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-xs text-muted-foreground">{label}</p>
+            <p className="truncate font-display text-xl font-bold tabular-nums">{value}</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 

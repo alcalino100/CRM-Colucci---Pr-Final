@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Badge, Card, Dialog, Input, Label, Select, Table, TD, TH, THead, TR, useToast } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ROLE_VARIANT } from "@/lib/labels"
 import type { Role, User } from "@/lib/mock-data"
 
@@ -66,10 +67,7 @@ export default function AcessosPage() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold">Gestão de Acessos</h1>
-          <p className="text-sm text-muted-foreground">Gerencie corretores e gestores da equipe.</p>
-        </div>
+        <PageHeading title="Gestão de Acessos" subtitle="Gerencie corretores e gestores da equipe." badge="Equipe" />
         <Button onClick={openNovo}><Plus className="size-4" /> Novo Usuário</Button>
       </div>
 

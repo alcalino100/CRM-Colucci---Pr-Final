@@ -33,8 +33,14 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-primary/95 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-card p-8 shadow-xl">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-primary/95 p-4">
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 right-1/4 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute bottom-[-6rem] left-1/4 h-72 w-72 rounded-full bg-accent/30 blur-3xl" />
+        <div className="absolute right-[-4rem] top-1/2 h-64 w-64 rounded-full bg-white/5 blur-3xl" />
+      </div>
+      <div className="shine relative w-full max-w-md rounded-2xl bg-card p-8 shadow-[0_24px_60px_-12px_rgb(0_0_0/0.4)]">
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent" />
         <div className="mb-8 flex flex-col items-center text-center">
           <img src="/logo-colucci.png" alt="Colucci Imóveis" className="mb-5 h-20 w-auto" />
           <p className="text-sm text-muted-foreground">Acesse sua conta para continuar</p>
@@ -61,7 +67,7 @@ export default function LoginPage() {
             <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           )}
 
-          <Button type="submit" disabled={loading} size="lg" className="mt-2 h-11 w-full">
+          <Button type="submit" disabled={loading} size="lg" className="shine mt-2 h-11 w-full shadow-[0_10px_28px_-8px_rgb(178_34_34/0.55)]">
             {loading ? <><Loader2 className="size-4 animate-spin" /> Entrando...</> : "Entrar"}
           </Button>
         </form>

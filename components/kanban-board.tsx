@@ -382,7 +382,8 @@ export function KanbanBoard({
 
   return (
     <>
-      <div className="mb-3 flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative mb-3 flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-primary/0 via-primary/70 to-primary/0" />
         <div className="relative w-full sm:max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -448,7 +449,7 @@ export function KanbanBoard({
               <Droppable droppableId={status} key={status}>
                 {(provided, snapshot) => (
                   <div className="flex w-72 flex-shrink-0 flex-col">
-                    <div className="mb-2 flex shrink-0 items-center justify-between rounded-t-xl border border-b-0 border-border bg-card px-3 py-2.5 shadow-sm" style={{ borderTopColor: STATUS_ACCENT[status], borderTopWidth: 3 }}>
+                    <div className="mb-2 flex shrink-0 items-center justify-between rounded-t-xl border border-b-0 border-border bg-card px-3 py-2.5 shadow-sm" style={{ borderTopColor: STATUS_ACCENT[status], borderTopWidth: 3, boxShadow: `0 6px 18px -8px ${STATUS_ACCENT[status]}66` }}>
                       <span className="flex items-center gap-2 font-display text-sm font-semibold">
                         <span className="size-2 rounded-full" style={{ backgroundColor: STATUS_ACCENT[status] }} aria-hidden />
                         {STATUS_LABEL[status]}

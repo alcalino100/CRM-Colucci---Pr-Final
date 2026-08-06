@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, useToast } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { WhatsappConnectionCard } from "@/components/whatsapp-connection-card"
 
 const MAX_AVATAR_BYTES = 300 * 1024 // limite p/ armazenar como data URL na tabela
@@ -89,10 +90,7 @@ export default function PerfilPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-      <div>
-        <h1 className="font-display text-2xl font-bold">Meu Perfil</h1>
-        <p className="text-sm text-muted-foreground">Gerencie sua foto de perfil e sua senha de acesso.</p>
-      </div>
+      <PageHeading title="Meu Perfil" subtitle="Gerencie sua foto de perfil e sua senha de acesso." badge="Conta" />
 
       <Card>
         <CardHeader>

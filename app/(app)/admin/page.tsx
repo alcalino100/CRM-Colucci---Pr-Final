@@ -8,6 +8,7 @@ import { useLeads } from "@/lib/leads-store"
 import { LeadForm, type LeadFormValues } from "@/components/lead-form"
 import { Button } from "@/components/ui/button"
 import { Badge, Card, CardHeader, CardTitle, Dialog, Input, Label, Select, Table, TD, TH, THead, TR, useToast } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { brl, fmtDate, PROP_LABEL, PROP_VARIANT, ROLE_VARIANT, STATUS_LABEL, STATUS_VARIANT } from "@/lib/labels"
 import { PROPERTIES, USERS, type Lead, type Property, type PropertyStatus, type Role, type User } from "@/lib/mock-data"
 
@@ -53,10 +54,7 @@ export default function AdminPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="font-display text-2xl font-bold">Administração</h1>
-        <p className="text-sm text-muted-foreground">Gestão de usuários, conferência de dados e imóveis.</p>
-      </div>
+      <PageHeading title="Administração" subtitle="Gestão de usuários, conferência de dados e imóveis." badge="Admin" />
 
       {/* Usuários */}
       <Card>

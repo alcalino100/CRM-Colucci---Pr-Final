@@ -5,8 +5,13 @@ import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /* Card */
-export function Card({ className, ...p }: React.ComponentProps<"div">) {
-  return <div className={cn("rounded-xl border border-border bg-card text-card-foreground shadow-sm", className)} {...p} />
+export function Card({ className, children, ...p }: React.ComponentProps<"div">) {
+  return (
+    <div className={cn("relative rounded-xl border border-border bg-card text-card-foreground shadow-sm", className)} {...p}>
+      {children}
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-primary/0 via-primary/70 to-primary/0" />
+    </div>
+  )
 }
 export function CardHeader({ className, ...p }: React.ComponentProps<"div">) {
   return <div className={cn("flex flex-col gap-1 p-5", className)} {...p} />

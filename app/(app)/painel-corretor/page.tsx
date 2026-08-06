@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Dialog, Skeleton, useToast } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { KanbanBoard } from "@/components/kanban-board"
 import { LeadForm, type LeadFormValues } from "@/components/lead-form"
 
@@ -38,10 +39,11 @@ export default function PainelCorretorPage() {
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold">Painel do Corretor</h1>
-          <p className="text-sm text-muted-foreground">Arraste os cards entre as etapas para atualizar o status do lead.</p>
-        </div>
+        <PageHeading
+          title="Painel do Corretor"
+          subtitle="Arraste os cards entre as etapas para atualizar o status do lead."
+          badge={isGestor ? "Visão gerencial" : "Meus leads"}
+        />
         <Button onClick={() => setNovo(true)}><Plus className="size-4" /> Novo Lead</Button>
       </div>
 

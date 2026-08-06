@@ -209,13 +209,7 @@ function MetaAdsDashboard() {
   }
 
   return (
-    <div className="relative flex flex-col gap-5">
-      {/* Aurora de fundo */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-32 left-1/2 h-[28rem] w-[44rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute right-[-7rem] top-44 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
-        <div className="absolute bottom-[-9rem] left-[-5rem] h-80 w-80 rounded-full bg-secondary/10 blur-3xl" />
-      </div>
+    <div className="flex flex-col gap-5">
       {/* Cabeçalho */}
       <header className="shine relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
         <div aria-hidden className="pointer-events-none absolute -right-24 -top-32 size-80 rounded-full bg-primary/15 blur-3xl" />

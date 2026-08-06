@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { fmtDayLabel, refsTexto } from "@/lib/labels"
 
 const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
@@ -91,10 +92,7 @@ export default function AgendaPage() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold">Agenda de Visitas</h1>
-          <p className="text-sm text-muted-foreground">Visualize e agende visitas vinculadas aos leads.</p>
-        </div>
+        <PageHeading title="Agenda de Visitas" subtitle="Visualize e agende visitas vinculadas aos leads." badge="Visitas" />
         <div className="flex items-center gap-2">
           {isGestor && (
             <Select value={filterCorretor} onChange={(e) => setFilterCorretor(e.target.value)} aria-label="Filtrar por corretor" className="w-44">

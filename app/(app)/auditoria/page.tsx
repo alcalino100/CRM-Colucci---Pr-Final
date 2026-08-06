@@ -6,6 +6,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, SearchX } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Input, Select, Skeleton } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import {
   AUDIT_TIPO_LABEL, AUDIT_TIPO_VARIANT, LEAD_STATUSES, STATUS_LABEL, STATUS_VARIANT,
   TEMPERATURAS, TEMP_LABEL, TEMP_VARIANT, fmtDateTime, refsTexto,
@@ -101,10 +102,11 @@ export default function AuditoriaPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold">Auditoria de Leads</h1>
-        <p className="text-sm text-muted-foreground">Conferência operacional e auditoria gerencial. {totalAlertas > 0 && <span className="font-medium text-destructive">{totalAlertas} alerta(s) de qualidade.</span>}</p>
-      </div>
+      <PageHeading
+        title="Auditoria de Leads"
+        badge="Qualidade"
+        subtitle={<>Conferência operacional e auditoria gerencial. {totalAlertas > 0 && <span className="font-medium text-destructive">{totalAlertas} alerta(s) de qualidade.</span>}</>}
+      />
 
       {/* Filtros */}
       <Card>

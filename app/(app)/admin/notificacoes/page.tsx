@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, Dialog, Label, Select, Table, TD, Textarea, TH, THead, TR, useToast } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { fmtDateTime } from "@/lib/labels"
 import type { Role } from "@/lib/mock-data"
 
@@ -65,10 +66,7 @@ export default function NotificationDispatcherPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-balance">Disparador de Notificações</h1>
-        <p className="text-sm text-muted-foreground">Envie comunicados segmentados para a equipe.</p>
-      </div>
+      <PageHeading title="Disparador de Notificações" subtitle="Envie comunicados segmentados para a equipe." badge="Comunicados" />
 
       <Card>
         <CardHeader><CardTitle>Nova notificação</CardTitle></CardHeader>

@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Badge, Card, CardHeader, CardTitle, Select, Skeleton, Table, TD, TH, THead, TR } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ACCESS_LABEL, ACTION_LABEL, ACTION_VARIANT, brl, fmtDateTime } from "@/lib/labels"
 import { ACCESS_LOGS, USERS } from "@/lib/mock-data"
 
@@ -77,10 +78,7 @@ export default function LogsPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="font-display text-2xl font-bold">Logs</h1>
-        <p className="text-sm text-muted-foreground">Auditoria de alterações e acessos ao sistema.</p>
-      </div>
+      <PageHeading title="Logs" subtitle="Auditoria de alterações e acessos ao sistema." badge="Auditoria" />
 
       {/* Alterações */}
       <Card>

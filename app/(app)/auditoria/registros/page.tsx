@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ScrollText, SearchX } from "lucide-react"
+import { SearchX } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Input, Select, Skeleton } from "@/components/ui/primitives"
+import { PageHeading } from "@/components/ui/page-heading"
 import { AUDIT_TIPO_LABEL, AUDIT_TIPO_VARIANT, fmtDateTime } from "@/lib/labels"
 import type { AuditTipo } from "@/lib/mock-data"
 
@@ -64,13 +65,7 @@ export default function RegistrosAuditoriaPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex items-center gap-2">
-        <ScrollText className="size-5 text-primary" />
-        <div>
-          <h1 className="font-display text-xl font-bold text-foreground">Registros de Auditoria</h1>
-          <p className="text-sm text-muted-foreground">Histórico completo de ações do sistema (somente leitura).</p>
-        </div>
-      </header>
+      <PageHeading title="Registros de Auditoria" subtitle="Histórico completo de ações do sistema (somente leitura)." badge="Auditoria" />
 
       <Card>
         <CardHeader>
