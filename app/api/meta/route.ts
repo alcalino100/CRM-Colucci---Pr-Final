@@ -143,6 +143,12 @@ export async function GET(req: Request) {
       body = mock
         ? mockCreative(cr)
         : (await metaGetAll(`${BASE}/${cr}?fields=id,title,body,object_type,call_to_action_type,image_url,thumbnail_url,video_id,link_description&access_token=${token}`))[0]
+    } else if (op === "ad_enh") {
+      // Aprimoramentos reais aplicados no anúncio (creative_features_spec do nó do anúncio)
+      const id = url.searchParams.get("id")!
+      body = mock
+        ? { id }
+        : (await metaGetAll(`${BASE}/${id}?fields=id,name,effective_status,creative_features_spec&access_token=${token}`))[0]
     } else if (op === "insights") {
       const node = url.searchParams.get("node")! // act_x | campaign_id | adset_id | ad_id
       const level = url.searchParams.get("level") || "" // vazio = agregado do próprio nó
