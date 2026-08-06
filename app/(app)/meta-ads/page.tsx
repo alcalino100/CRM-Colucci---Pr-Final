@@ -8,10 +8,10 @@ import { useMemo, useState } from "react"
 import useSWR from "swr"
 import {
   CircleDollarSign, Eye, MousePointerClick, Percent, Coins, BarChart3, Users, Target,
-  ChevronRight, Link2, TriangleAlert, ArrowUpRight, ArrowDownRight, Plug, RefreshCw,
+  ChevronRight, Link2, TriangleAlert, ArrowUpRight, ArrowDownRight, Plug, RefreshCw, CalendarRange,
 } from "lucide-react"
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend,
+  ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend,
 } from "recharts"
 import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
@@ -210,26 +210,36 @@ function MetaAdsDashboard() {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Cabeçalho + conexão */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold">Meta Ads</h1>
-          <p className="text-sm text-muted-foreground text-pretty">Performance das campanhas com dados da Meta Graph API e leads reais do CRM.</p>
+      {/* Cabeçalho */}
+      <header className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+        <div aria-hidden className="pointer-events-none absolute -right-20 -top-28 size-72 rounded-full bg-primary/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-10 size-56 rounded-full bg-secondary/10 blur-3xl" />
+        <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary ring-1 ring-primary/10">
+              <BarChart3 className="size-3.5" /> Gestão de tráfego
+            </span>
+            <h1 className="mt-2.5 font-display text-2xl font-bold tracking-tight sm:text-3xl">Meta Ads</h1>
+            <p className="mt-1 max-w-xl text-sm text-muted-foreground text-pretty">
+              Performance das campanhas com dados da Meta Graph API e leads reais do CRM.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {status && (
+              <Badge variant={status.connected ? "green" : "amber"} className="gap-1.5 px-3 py-1.5 shadow-sm">
+                <span className={cn("size-1.5 rounded-full", status.connected ? "bg-emerald-500" : "bg-amber-500")} />
+                <Plug className="size-3" />
+                {status.connected ? (status.source === "env" ? "Conectado (token)" : "Conectado") : "Modo demonstração"}
+              </Badge>
+            )}
+            {!status?.connected && (
+              <a href="/api/meta/oauth/start" className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-b from-primary to-primary/90 px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:brightness-110">
+                <Link2 className="size-4" /> Conectar Meta Business
+              </a>
+            )}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {status && (
-            <Badge variant={status.connected ? "green" : "amber"} className="gap-1">
-              <Plug className="size-3" />
-              {status.connected ? (status.source === "env" ? "Conectado (token)" : "Conectado") : "Modo demonstração"}
-            </Badge>
-          )}
-          {!status?.connected && (
-            <a href="/api/meta/oauth/start" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
-              <Link2 className="size-4" /> Conectar Meta Business
-            </a>
-          )}
-        </div>
-      </div>
+      </header>
 
       {/* Avisos */}
       {status?.warnExpiring && (
@@ -239,17 +249,17 @@ function MetaAdsDashboard() {
         <Aviso texto="Token expirado. Reconecte sua conta Meta Business para continuar vendo os dados." acao="Reconectar" erro />
       )}
       {modoMock && (
-        <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <p className="rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
           Exibindo dados de demonstração no formato real da Graph API. Conecte a conta Meta Business (ou defina META_ACCESS_TOKEN) para ver dados reais.
         </p>
       )}
 
       {/* Conta + período */}
-      <Card>
-        <CardContent className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">Conta de anúncios</span>
-            <Select value={conta?.id ?? ""} onChange={(e) => { setContaId(e.target.value); setTrilha([]) }} aria-label="Conta de anúncios">
+      <Card className="rounded-2xl">
+        <CardContent className="grid gap-4 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="meta-conta">Conta de anúncios</label>
+            <Select id="meta-conta" value={conta?.id ?? ""} onChange={(e) => { setContaId(e.target.value); setTrilha([]) }} aria-label="Conta de anúncios">
               {(contas?.data ?? []).map((c: any) => (
                 <option key={c.id} value={c.id}>{c.name} · {c.currency}</option>
               ))}
@@ -261,28 +271,33 @@ function MetaAdsDashboard() {
               </span>
             )}
           </div>
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">Período</span>
-            <Select value={preset} onChange={(e) => setPreset(e.target.value)} aria-label="Período">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="meta-periodo">
+              <CalendarRange className="size-3.5" /> Período
+            </label>
+            <Select id="meta-periodo" value={preset} onChange={(e) => setPreset(e.target.value)} aria-label="Período">
               {PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </Select>
           </div>
           {preset === "custom" ? (
             <>
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground">De</span>
-                <Input type="date" value={cSince} onChange={(e) => setCSince(e.target.value)} />
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="meta-de">De</label>
+                <Input id="meta-de" type="date" value={cSince} onChange={(e) => setCSince(e.target.value)} />
               </div>
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground">Até</span>
-                <Input type="date" value={cUntil} onChange={(e) => setCUntil(e.target.value)} />
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="meta-ate">Até</label>
+                <Input id="meta-ate" type="date" value={cUntil} onChange={(e) => setCUntil(e.target.value)} />
               </div>
             </>
           ) : (
             <div className="flex items-end md:col-span-1 xl:col-span-2">
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-                <input type="checkbox" checked={comparar} onChange={(e) => setComparar(e.target.checked)} className="accent-primary" />
-                Comparar com período anterior ({prev.since.split("-").reverse().join("/")} – {prev.until.split("-").reverse().join("/")})
+              <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted/60">
+                <input type="checkbox" checked={comparar} onChange={(e) => setComparar(e.target.checked)} className="size-4 accent-primary" />
+                Comparar com período anterior
+                <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border tabular-nums">
+                  {prev.since.split("-").reverse().join("/")} – {prev.until.split("-").reverse().join("/")}
+                </span>
               </label>
             </div>
           )}
@@ -290,19 +305,28 @@ function MetaAdsDashboard() {
       </Card>
 
       {/* Breadcrumb do drill-down */}
-      <nav aria-label="Navegação da hierarquia" className="flex flex-wrap items-center gap-1 text-sm">
-        <button type="button" className="font-medium text-primary hover:underline" onClick={() => setTrilha([])}>
+      <nav aria-label="Navegação da hierarquia" className="flex flex-wrap items-center gap-1.5 text-sm">
+        <button
+          type="button"
+          className="rounded-lg px-2 py-1 font-medium text-primary transition hover:bg-primary/10"
+          onClick={() => setTrilha([])}
+        >
           {conta?.name ?? "Conta"}
         </button>
         {trilha.map((t, i) => (
-          <span key={t.id} className="flex items-center gap-1">
-            <ChevronRight className="size-4 text-muted-foreground" />
+          <span key={t.id} className="flex items-center gap-1.5">
+            <ChevronRight className="size-4 text-muted-foreground/50" />
             <button
               type="button"
-              className={i === trilha.length - 1 ? "font-medium" : "font-medium text-primary hover:underline"}
+              className={cn(
+                "rounded-lg px-2 py-1 font-medium transition",
+                i === trilha.length - 1
+                  ? "bg-card text-foreground ring-1 ring-border shadow-sm"
+                  : "text-primary hover:bg-primary/10",
+              )}
               onClick={() => setTrilha((arr) => arr.slice(0, i + 1))}
             >
-              <span className="text-xs text-muted-foreground">{NIVEL_LABEL[t.nivel]}: </span>{t.nome}
+              <span className="mr-1 text-xs font-normal text-muted-foreground">{NIVEL_LABEL[t.nivel]}:</span>{t.nome}
             </button>
           </span>
         ))}
@@ -311,7 +335,7 @@ function MetaAdsDashboard() {
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {loadIns ? (
-          Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)
+          Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)
         ) : (
           <>
             <Kpi icon={CircleDollarSign} label="Gasto total" value={brl(kpi.spend)} prev={comparar ? kpiPrev.spend : undefined} cur={kpi.spend} invert />
@@ -320,7 +344,7 @@ function MetaAdsDashboard() {
             <Kpi icon={Percent} label="CTR" value={`${fmt(kpi.ctr, 2)}%`} prev={comparar ? kpiPrev.ctr : undefined} cur={kpi.ctr} />
             <Kpi icon={Coins} label="CPC" value={brl(kpi.cpc)} prev={comparar ? kpiPrev.cpc : undefined} cur={kpi.cpc} invert />
             <Kpi icon={BarChart3} label="CPM" value={brl(kpi.cpm)} prev={comparar ? kpiPrev.cpm : undefined} cur={kpi.cpm} invert />
-            <Kpi icon={Users} label="Resultados (leads)" value={fmt(kpi.results)} prev={comparar ? kpiPrev.results : undefined} cur={kpi.results} />
+            <Kpi icon={Users} label="Resultados (leads)" value={fmt(kpi.results)} prev={comparar ? kpiPrev.results : undefined} cur={kpi.results} accent />
             <Kpi icon={Target} label="Custo por resultado" value={kpi.results ? brl(kpi.cpr) : "—"} prev={comparar ? kpiPrev.cpr : undefined} cur={kpi.cpr} invert />
           </>
         )}
@@ -331,8 +355,10 @@ function MetaAdsDashboard() {
 
       {/* Gráficos */}
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>Evolução diária — gasto × resultados</CardTitle></CardHeader>
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle>Evolução diária — gasto × resultados</CardTitle>
+          </CardHeader>
           <CardContent>
             {!insDiario ? <Skeleton className="h-64 rounded-xl" /> : serie.length === 0 ? (
               <Vazio texto="Sem dados no período selecionado." />
@@ -340,21 +366,27 @@ function MetaAdsDashboard() {
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                    <XAxis dataKey="dia" tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="g" tick={{ fontSize: 11 }} width={52} />
-                    <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11 }} width={32} />
-                    <Tooltip formatter={(v: any, n: any) => (n === "gasto" ? brl(Number(v)) : v)} />
-                    <Legend />
-                    <Line yAxisId="g" type="monotone" dataKey="gasto" name="Gasto (R$)" stroke="var(--color-primary)" strokeWidth={2} dot={false} />
-                    <Line yAxisId="r" type="monotone" dataKey="resultados" name="Resultados" stroke="#64748b" strokeWidth={2} dot={false} />
+                    <defs>
+                      <linearGradient id="gradGasto" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#b22222" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#b22222" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                    <XAxis dataKey="dia" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="g" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} width={54} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} width={34} tickLine={false} axisLine={false} />
+                    <Tooltip content={<ChartTip />} cursor={{ stroke: "var(--color-border)" }} />
+                    <Legend formatter={(v) => <span className="text-xs font-medium text-muted-foreground">{v}</span>} />
+                    <Area yAxisId="g" type="monotone" dataKey="gasto" name="Gasto (R$)" stroke="#b22222" strokeWidth={2.5} fill="url(#gradGasto)" dot={false} activeDot={{ r: 4, fill: "#b22222", strokeWidth: 2, stroke: "#fff" }} />
+                    <Line yAxisId="r" type="monotone" dataKey="resultados" name="Resultados" stroke="#64748b" strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: "#64748b", strokeWidth: 2, stroke: "#fff" }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             )}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl">
           <CardHeader><CardTitle>Comparação entre {nivelFilho ? NIVEL_LABEL[nivelFilho].toLowerCase() + "s" : "itens"}</CardTitle></CardHeader>
           <CardContent>
             {!insFilhos && nivelFilho ? <Skeleton className="h-64 rounded-xl" /> : barras.length === 0 ? (
@@ -362,14 +394,20 @@ function MetaAdsDashboard() {
             ) : (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barras} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                    <XAxis dataKey="nome" tick={{ fontSize: 10 }} interval={0} angle={-12} height={48} />
-                    <YAxis tick={{ fontSize: 11 }} width={52} />
-                    <Tooltip formatter={(v: any, n: any) => (n === "gasto" ? brl(Number(v)) : v)} />
-                    <Legend />
-                    <Bar dataKey="gasto" name="Gasto (R$)" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="resultados" name="Resultados" fill="#64748b" radius={[4, 4, 0, 0]} />
+                  <BarChart data={barras} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="28%">
+                    <defs>
+                      <linearGradient id="gradBar" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#c41e24" />
+                        <stop offset="100%" stopColor="#b22222" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                    <XAxis dataKey="nome" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} interval={0} angle={-12} height={48} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} width={54} tickLine={false} axisLine={false} />
+                    <Tooltip content={<ChartTip />} cursor={{ fill: "var(--color-muted)", opacity: 0.4 }} />
+                    <Legend formatter={(v) => <span className="text-xs font-medium text-muted-foreground">{v}</span>} />
+                    <Bar dataKey="gasto" name="Gasto (R$)" fill="url(#gradBar)" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="resultados" name="Resultados" fill="#64748b" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -380,13 +418,13 @@ function MetaAdsDashboard() {
 
       {/* Tabela detalhada / drill-down */}
       {nivelFilho ? (
-        <Card>
+        <Card className="rounded-2xl">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>{NIVEL_LABEL[nivelFilho]}s {selecionado && selecionado.nivel !== "account" ? `de "${selecionado.nome}"` : ""}</CardTitle>
             <button
               type="button"
               onClick={() => setCompacto((v) => !v)}
-              className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
             >
               {compacto ? "Ver todas as colunas" : "Ver menos colunas"}
             </button>
@@ -400,31 +438,31 @@ function MetaAdsDashboard() {
               // Scroll horizontal isolado: só a tabela rola, com fade na borda direita
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-8 bg-gradient-to-l from-card to-transparent" aria-hidden="true" />
-                <div className="max-h-[32rem] overflow-auto overscroll-x-contain rounded-lg border border-border">
+                <div className="max-h-[32rem] overflow-auto overscroll-x-contain rounded-xl border border-border">
                   <table className="w-full text-xs sm:text-sm">
                     <thead className="sticky top-0 z-10 bg-card">
-                      <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                        <th className="sticky left-0 z-20 min-w-52 max-w-64 bg-card py-2 pl-3 pr-3">Nome</th>
-                        <th className="min-w-24 py-2 pr-3">Status</th>
-                        {!compacto && nivelFilho === "campaign" && <th className="min-w-28 py-2 pr-3">Objetivo</th>}
+                      <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <th className="sticky left-0 z-20 min-w-52 max-w-64 bg-card py-2.5 pl-4 pr-3 font-semibold">Nome</th>
+                        <th className="min-w-24 py-2.5 pr-3 font-semibold">Status</th>
+                        {!compacto && nivelFilho === "campaign" && <th className="min-w-28 py-2.5 pr-3 font-semibold">Objetivo</th>}
                         {/* Bloco Orçamento/Gasto */}
-                        {!compacto && <th className="min-w-[110px] border-l border-border/60 py-2 pl-3 pr-3 text-right">Orçamento/dia</th>}
-                        <th className={cn("min-w-[100px] py-2 pr-3 text-right", compacto && "border-l border-border/60 pl-3")}>Gasto</th>
+                        {!compacto && <th className="min-w-[110px] border-l border-border/60 py-2.5 pl-3 pr-3 text-right font-semibold">Orçamento/dia</th>}
+                        <th className={cn("min-w-[100px] py-2.5 pr-3 text-right font-semibold", compacto && "border-l border-border/60 pl-3")}>Gasto</th>
                         {/* Bloco Tráfego */}
-                        {!compacto && <th className="min-w-[90px] border-l border-border/60 py-2 pl-3 pr-3 text-right">Impr.</th>}
-                        <th className={cn("min-w-[90px] py-2 pr-3 text-right", compacto && "border-l border-border/60 pl-3")}>Cliques</th>
-                        <th className="min-w-[80px] py-2 pr-3 text-right">CTR</th>
-                        {!compacto && <th className="min-w-[90px] py-2 pr-3 text-right">CPC</th>}
-                        {!compacto && <th className="min-w-[90px] py-2 pr-3 text-right">CPM</th>}
+                        {!compacto && <th className="min-w-[90px] border-l border-border/60 py-2.5 pl-3 pr-3 text-right font-semibold">Impr.</th>}
+                        <th className={cn("min-w-[90px] py-2.5 pr-3 text-right font-semibold", compacto && "border-l border-border/60 pl-3")}>Cliques</th>
+                        <th className="min-w-[80px] py-2.5 pr-3 text-right font-semibold">CTR</th>
+                        {!compacto && <th className="min-w-[90px] py-2.5 pr-3 text-right font-semibold">CPC</th>}
+                        {!compacto && <th className="min-w-[90px] py-2.5 pr-3 text-right font-semibold">CPM</th>}
                         {/* Bloco Alcance */}
-                        {!compacto && <th className="min-w-[95px] border-l border-border/60 py-2 pl-3 pr-3 text-right">Alcance</th>}
-                        {!compacto && <th className="min-w-[80px] py-2 pr-3 text-right">Freq.</th>}
+                        {!compacto && <th className="min-w-[95px] border-l border-border/60 py-2.5 pl-3 pr-3 text-right font-semibold">Alcance</th>}
+                        {!compacto && <th className="min-w-[80px] py-2.5 pr-3 text-right font-semibold">Freq.</th>}
                         {/* Bloco Resultados */}
-                        <th className="min-w-[90px] border-l border-border/60 py-2 pl-3 pr-3 text-right">Result.</th>
-                        <th className="min-w-[110px] py-2 pr-3 text-right">Custo/Result.</th>
+                        <th className="min-w-[90px] border-l border-border/60 py-2.5 pl-3 pr-3 text-right font-semibold">Result.</th>
+                        <th className="min-w-[110px] py-2.5 pr-3 text-right font-semibold">Custo/Result.</th>
                         {/* Bloco CRM */}
-                        {nivelFilho === "campaign" && <th className="min-w-[95px] border-l border-border/60 py-2 pl-3 pr-3 text-right">Leads CRM</th>}
-                        {nivelFilho === "campaign" && <th className="min-w-[95px] py-2 pr-3 text-right">CPL real</th>}
+                        {nivelFilho === "campaign" && <th className="min-w-[95px] border-l border-border/60 py-2.5 pl-3 pr-3 text-right font-semibold">Leads CRM</th>}
+                        {nivelFilho === "campaign" && <th className="min-w-[95px] py-2.5 pr-4 text-right font-semibold">CPL real</th>}
                       </tr>
                     </thead>
                     <tbody className="tabular-nums">
@@ -434,13 +472,13 @@ function MetaAdsDashboard() {
                         const spend = Number(i?.spend ?? 0)
                         const crmLeads = nivelFilho === "campaign" ? (leadsPorCampanha.get(f.id) ?? 0) : 0
                         return (
-                          <tr key={f.id} className="group border-b border-border/60 hover:bg-muted/40">
+                          <tr key={f.id} className="group border-b border-border/60 transition-colors hover:bg-primary/[0.03]">
                             {/* Nome fixo à esquerda com fundo sólido */}
-                            <td className="sticky left-0 z-10 min-w-52 max-w-64 bg-card py-2 pl-3 pr-3 group-hover:bg-muted">
+                            <td className="sticky left-0 z-10 min-w-52 max-w-64 bg-card py-2.5 pl-4 pr-3 group-hover:bg-primary/[0.03]">
                               <button
                                 type="button"
                                 title={f.name}
-                                className="block w-full truncate text-left font-medium text-primary hover:underline"
+                                className="block w-full truncate text-left font-medium text-primary transition hover:text-primary/80 hover:underline"
                                 onClick={() => drill(nivelFilho, f.id, f.name, { creativeId: f.creative?.id, status: f.effective_status })}
                               >
                                 {f.name}
@@ -451,21 +489,21 @@ function MetaAdsDashboard() {
                                 </p>
                               )}
                             </td>
-                            <td className="py-2 pr-3"><StatusBadge s={f.effective_status} /></td>
-                            {!compacto && nivelFilho === "campaign" && <td className="py-2 pr-3 text-xs">{(f.objective || "—").replace("OUTCOME_", "")}</td>}
-                            {!compacto && <td className="border-l border-border/60 py-2 pl-3 pr-3 text-right">{f.daily_budget ? brl(Number(f.daily_budget) / 100) : "—"}</td>}
-                            <td className={cn("py-2 pr-3 text-right font-medium", compacto && "border-l border-border/60 pl-3")}>{brl(spend)}</td>
-                            {!compacto && <td className="border-l border-border/60 py-2 pl-3 pr-3 text-right">{fmt(Number(i?.impressions ?? 0))}</td>}
-                            <td className={cn("py-2 pr-3 text-right", compacto && "border-l border-border/60 pl-3")}>{fmt(Number(i?.clicks ?? 0))}</td>
-                            <td className="py-2 pr-3 text-right">{fmt(Number(i?.ctr ?? 0), 2)}%</td>
-                            {!compacto && <td className="py-2 pr-3 text-right">{brl(Number(i?.cpc ?? 0))}</td>}
-                            {!compacto && <td className="py-2 pr-3 text-right">{brl(Number(i?.cpm ?? 0))}</td>}
-                            {!compacto && <td className="border-l border-border/60 py-2 pl-3 pr-3 text-right">{fmt(Number(i?.reach ?? 0))}</td>}
-                            {!compacto && <td className="py-2 pr-3 text-right">{fmt(Number(i?.frequency ?? 0), 2)}</td>}
-                            <td className="border-l border-border/60 py-2 pl-3 pr-3 text-right font-medium">{fmt(res)}</td>
-                            <td className="py-2 pr-3 text-right">{res ? brl(spend / res) : "—"}</td>
-                            {nivelFilho === "campaign" && <td className="border-l border-border/60 py-2 pl-3 pr-3 text-right font-medium">{crmLeads}</td>}
-                            {nivelFilho === "campaign" && <td className="py-2 pr-3 text-right">{crmLeads ? brl(spend / crmLeads) : "—"}</td>}
+                            <td className="py-2.5 pr-3"><StatusBadge s={f.effective_status} /></td>
+                            {!compacto && nivelFilho === "campaign" && <td className="py-2.5 pr-3 text-xs">{(f.objective || "—").replace("OUTCOME_", "")}</td>}
+                            {!compacto && <td className="border-l border-border/60 py-2.5 pl-3 pr-3 text-right">{f.daily_budget ? brl(Number(f.daily_budget) / 100) : "—"}</td>}
+                            <td className={cn("py-2.5 pr-3 text-right font-semibold text-foreground", compacto && "border-l border-border/60 pl-3")}>{brl(spend)}</td>
+                            {!compacto && <td className="border-l border-border/60 py-2.5 pl-3 pr-3 text-right">{fmt(Number(i?.impressions ?? 0))}</td>}
+                            <td className={cn("py-2.5 pr-3 text-right", compacto && "border-l border-border/60 pl-3")}>{fmt(Number(i?.clicks ?? 0))}</td>
+                            <td className="py-2.5 pr-3 text-right">{fmt(Number(i?.ctr ?? 0), 2)}%</td>
+                            {!compacto && <td className="py-2.5 pr-3 text-right">{brl(Number(i?.cpc ?? 0))}</td>}
+                            {!compacto && <td className="py-2.5 pr-3 text-right">{brl(Number(i?.cpm ?? 0))}</td>}
+                            {!compacto && <td className="border-l border-border/60 py-2.5 pl-3 pr-3 text-right">{fmt(Number(i?.reach ?? 0))}</td>}
+                            {!compacto && <td className="py-2.5 pr-3 text-right">{fmt(Number(i?.frequency ?? 0), 2)}</td>}
+                            <td className="border-l border-border/60 py-2.5 pl-3 pr-3 text-right font-semibold text-primary">{fmt(res)}</td>
+                            <td className="py-2.5 pr-3 text-right">{res ? brl(spend / res) : "—"}</td>
+                            {nivelFilho === "campaign" && <td className="border-l border-border/60 py-2.5 pl-3 pr-3 text-right font-semibold">{crmLeads}</td>}
+                            {nivelFilho === "campaign" && <td className="py-2.5 pr-4 text-right">{crmLeads ? brl(spend / crmLeads) : "—"}</td>}
                           </tr>
                         )
                       })}
@@ -479,7 +517,7 @@ function MetaAdsDashboard() {
       ) : (
         // Nível de anúncio: preview do criativo
         selecionado && (
-          <Card>
+          <Card className="rounded-2xl">
             <CardHeader><CardTitle>Criativo do anúncio</CardTitle></CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <CreativeCard
@@ -494,7 +532,7 @@ function MetaAdsDashboard() {
 
       {/* Grid de criativos ao navegar em um conjunto */}
       {selecionado?.nivel === "adset" && (filhos?.data ?? []).length > 0 && (
-        <Card>
+        <Card className="rounded-2xl">
           <CardHeader><CardTitle>Criativos do conjunto</CardTitle></CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {(filhos?.data ?? []).map((ad: any) => (
@@ -508,36 +546,72 @@ function MetaAdsDashboard() {
 }
 
 // ---------- componentes ----------
-function Kpi({ icon: Icon, label, value, prev, cur, invert }: { icon: any; label: string; value: string; prev?: number; cur: number; invert?: boolean }) {
+function Kpi({ icon: Icon, label, value, prev, cur, invert, accent }: { icon: any; label: string; value: string; prev?: number; cur: number; invert?: boolean; accent?: boolean }) {
   let delta: number | null = null
   if (prev !== undefined && prev > 0) delta = ((cur - prev) / prev) * 100
   const positivo = delta !== null && (invert ? delta < 0 : delta > 0)
   return (
-    <Card>
-      <CardContent className="p-4">
+    <Card className="group rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <CardContent className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="truncate text-xs text-muted-foreground">{label}</p>
-            <p className="truncate text-xl font-bold tabular-nums md:text-2xl">{value}</p>
+            <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="mt-1 truncate font-display text-xl font-bold tabular-nums tracking-tight md:text-2xl">{value}</p>
             {delta !== null && (
-              <p className={`flex items-center gap-0.5 text-xs font-medium tabular-nums ${positivo ? "text-emerald-600" : "text-red-600"}`}>
+              <span className={cn(
+                "mt-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+                positivo ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600",
+              )}>
                 {delta >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
                 {fmt(Math.abs(delta), 1)}% vs anterior
-              </p>
+              </span>
             )}
           </div>
-          <div className="shrink-0 rounded-lg bg-muted p-2"><Icon className="size-4 text-muted-foreground" /></div>
+          <div className={cn(
+            "shrink-0 rounded-xl p-2.5 ring-1 transition-transform duration-200 group-hover:scale-105",
+            accent ? "bg-accent/10 text-accent ring-accent/10" : "bg-primary/10 text-primary ring-primary/10",
+          )}>
+            <Icon className="size-4.5" />
+          </div>
         </div>
       </CardContent>
     </Card>
   )
 }
 
+function ChartTip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-lg">
+      {label && <p className="mb-1.5 font-semibold text-foreground">{label}</p>}
+      <div className="flex flex-col gap-1">
+        {payload.map((p: any, i: number) => (
+          <span key={i} className="flex items-center justify-between gap-4 tabular-nums">
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <span className="size-2 rounded-full" style={{ background: p.color || p.fill || "#b22222" }} />
+              {p.name}
+            </span>
+            <span className="font-semibold text-foreground">{p.name === "Gasto (R$)" ? brl(Number(p.value)) : p.value}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Aviso({ texto, acao, erro }: { texto: string; acao: string; erro?: boolean }) {
   return (
-    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${erro ? "border-red-300 bg-red-50 text-red-800" : "border-amber-300 bg-amber-50 text-amber-800"}`}>
-      <span className="flex items-center gap-2"><TriangleAlert className="size-4 shrink-0" />{texto}</span>
-      <a href="/api/meta/oauth/start" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90">
+    <div className={cn(
+      "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm",
+      erro ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-800",
+    )}>
+      <span className="flex items-center gap-2.5">
+        <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-full", erro ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-600")}>
+          <TriangleAlert className="size-4" />
+        </span>
+        {texto}
+      </span>
+      <a href="/api/meta/oauth/start" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-sm transition hover:brightness-110">
         <RefreshCw className="size-3" /> {acao}
       </a>
     </div>
@@ -545,7 +619,14 @@ function Aviso({ texto, acao, erro }: { texto: string; acao: string; erro?: bool
 }
 
 function Vazio({ texto }: { texto: string }) {
-  return <p className="py-10 text-center text-sm text-muted-foreground">{texto}</p>
+  return (
+    <div className="flex flex-col items-center justify-center gap-2.5 py-12 text-center">
+      <div className="flex size-11 items-center justify-center rounded-full bg-muted">
+        <BarChart3 className="size-5 text-muted-foreground/70" />
+      </div>
+      <p className="text-sm text-muted-foreground">{texto}</p>
+    </div>
+  )
 }
 
 const CTA_PT: Record<string, string> = { LEARN_MORE: "Saiba mais", WHATSAPP_MESSAGE: "Enviar WhatsApp", SIGN_UP: "Cadastre-se", CONTACT_US: "Fale conosco" }
@@ -554,25 +635,28 @@ function CreativeCard({ ad, ins, adsetNome }: { ad: any; ins?: any; adsetNome: s
   const { data: cr } = useSWR(ad.creative?.id ? `/api/meta?op=creative&id=${ad.creative.id}` : null, fetcher)
   const res = ins ? resultados(ins) : 0
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-border">
-      {cr?.image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={cr.image_url || "/placeholder.svg"} alt={`Criativo do anúncio ${ad.name}`} className="h-40 w-full object-cover" />
-      ) : (
-        <Skeleton className="h-40 w-full" />
-      )}
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <div className="flex flex-wrap items-center gap-1.5">
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+      <div className="relative">
+        {cr?.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cr.image_url || "/placeholder.svg"} alt={`Criativo do anúncio ${ad.name}`} className="h-44 w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+        ) : (
+          <Skeleton className="h-44 w-full rounded-none" />
+        )}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent" aria-hidden="true" />
+        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           <StatusBadge s={ad.effective_status} />
-          {cr?.object_type && <Badge variant="gray">{cr.object_type === "VIDEO" ? "Vídeo" : cr.object_type === "CAROUSEL" ? "Carrossel" : "Imagem"}</Badge>}
+          {cr?.object_type && <Badge variant="slate">{cr.object_type === "VIDEO" ? "Vídeo" : cr.object_type === "CAROUSEL" ? "Carrossel" : "Imagem"}</Badge>}
         </div>
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-4">
         <p className="text-sm font-semibold text-pretty">{cr?.title ?? ad.name}</p>
         {cr?.body && <p className="line-clamp-2 text-xs text-muted-foreground">{cr.body}</p>}
         <p className="text-xs text-muted-foreground">Anúncio: {ad.name} · Conjunto: {adsetNome}</p>
         {cr?.call_to_action_type && (
-          <span className="w-fit rounded-md border border-border px-2 py-1 text-xs font-medium">{CTA_PT[cr.call_to_action_type] ?? cr.call_to_action_type}</span>
+          <span className="w-fit rounded-lg bg-primary/10 px-2 py-1 text-xs font-medium text-primary">{CTA_PT[cr.call_to_action_type] ?? cr.call_to_action_type}</span>
         )}
-        <div className="mt-auto grid grid-cols-4 gap-1 border-t border-border pt-2 text-center tabular-nums">
+        <div className="mt-auto grid grid-cols-4 gap-1 border-t border-border pt-3 text-center tabular-nums">
           <MiniMetric l="Gasto" v={brl(Number(ins?.spend ?? 0))} />
           <MiniMetric l="Cliques" v={fmt(Number(ins?.clicks ?? 0))} />
           <MiniMetric l="CTR" v={`${fmt(Number(ins?.ctr ?? 0), 2)}%`} />
@@ -587,9 +671,7 @@ function MiniMetric({ l, v }: { l: string; v: string }) {
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{l}</p>
-      <p className="text-xs font-semibold">{v}</p>
+      <p className="text-xs font-semibold text-foreground">{v}</p>
     </div>
   )
 }
-
-
