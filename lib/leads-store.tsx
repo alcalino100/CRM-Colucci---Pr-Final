@@ -98,6 +98,7 @@ function rowToLead(r: any): Lead {
     observacoes: r.observacoes ?? "",
     status: normalizeStatus(r.status ?? "novo"),
     valorNegociacao: r.valor_proposta ?? undefined,
+    valorComissao: r.valor_comissao ?? undefined,
     corretorId: r.corretor_id ?? "",
     gestorResponsavel: r.gestor_responsavel ?? undefined,
     criadoEm: r.criado_em,
@@ -123,6 +124,7 @@ function leadPatchToRow(p: Partial<Lead>): Record<string, any> {
   if (p.observacoes !== undefined) row.observacoes = p.observacoes
   if (p.status !== undefined) row.status = p.status
   if (p.valorNegociacao !== undefined) row.valor_proposta = p.valorNegociacao
+  if (p.valorComissao !== undefined) row.valor_comissao = p.valorComissao ?? null
   if (p.corretorId !== undefined) row.corretor_id = p.corretorId || null
   if (p.gestorResponsavel !== undefined) row.gestor_responsavel = p.gestorResponsavel || null
   if (p.arquivadoEm !== undefined) row.arquivado_em = p.arquivadoEm || null
@@ -431,10 +433,11 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (patch.status === "negociando" && patch.negociandoEm === undefined) row.negociando_em = agora
     row.atualizado_em = agora
     let { error } = await supabase.from("leads").update(row).eq("id", id)
-    // Colunas fechado_em/negociando_em ainda não criadas (script 011 pendente): tenta sem elas
+    // Colunas fechado_em/negociando_em/valor_comissao ainda não criadas (script 011/012 pendente): tenta sem elas
     if (error && String(error.message).includes("does not exist")) {
       delete row.fechado_em
       delete row.negociando_em
+      delete row.valor_comissao
       ;({ error } = await supabase.from("leads").update(row).eq("id", id))
     }
     if (error) {

@@ -76,6 +76,7 @@ export interface Lead {
   observacoes: string
   status: LeadStatus
   valorNegociacao?: number
+  valorComissao?: number | null
   corretorId: string
   gestorResponsavel?: string
   criadoEm: string

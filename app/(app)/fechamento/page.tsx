@@ -2,13 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts"
-import { Handshake, Banknote, BadgeCheck, PieChart as PieIcon } from "lucide-react"
+import { Check, Coins, Handshake, Banknote, BadgeCheck, PieChart as PieIcon, Pencil, X } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
+import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
 import { brl, fmtDate, refsTexto } from "@/lib/labels"
 import type { Lead } from "@/lib/mock-data"
 
 type Aba = "fechamentos" | "negociacoes"
+
+// Gestores autorizados a registrar/editar comissão por lead
+const COMISSAO_EDITORES = new Set([
+  "6c2875b4-0d11-4370-b9fd-3c13b5257bd4", // Patricia
+  "d6c9e533-a530-4559-bf07-60938e02b874", // Kleber
+  "c044c57d-8186-4d15-acd8-4d86169e3c1a", // Guilherme
+])
 
 function dataEvento(l: Lead, aba: Aba): string {
   return aba === "fechamentos" ? (l.fechadoEm ?? l.atualizadoEm) : (l.negociandoEm ?? l.atualizadoEm)
@@ -51,18 +59,38 @@ const PRESETS: { label: string; get: () => { ini: string; fim: string } }[] = [
 ]
 
 export default function FechamentoPage() {
-  const { leads, corretores, userName } = useLeads()
+  const { leads, corretores, userName, updateLead } = useLeads()
+  const { user } = useAuth()
+  const podeEditarComissao = !!user && COMISSAO_EDITORES.has(user.id)
   const [loading, setLoading] = useState(true)
   const [aba, setAba] = useState<Aba>("fechamentos")
   const [dataInicio, setDataInicio] = useState("")
   const [dataFim, setDataFim] = useState("")
   const [corretor, setCorretor] = useState("todos")
   const [buscaRef, setBuscaRef] = useState("")
+  const [editandoComissao, setEditandoComissao] = useState<string | null>(null)
+  const [comissaoDraft, setComissaoDraft] = useState("")
+  const [salvandoComissao, setSalvandoComissao] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600)
     return () => clearTimeout(t)
   }, [])
+
+  function iniciarEdicaoComissao(l: Lead) {
+    setEditandoComissao(l.id)
+    setComissaoDraft(l.valorComissao != null ? String(l.valorComissao) : "")
+  }
+
+  async function salvarComissao(l: Lead) {
+    const texto = comissaoDraft.trim().replace(",", ".")
+    const valor = texto === "" ? null : Number(texto)
+    if (valor != null && Number.isNaN(valor)) return
+    setSalvandoComissao(true)
+    const r = await updateLead(l.id, { valorComissao: valor })
+    setSalvandoComissao(false)
+    if (r.ok) setEditandoComissao(null)
+  }
 
   const base = useMemo(() => {
     const fechados = leads.filter((l) => l.status === "fechado")
@@ -105,7 +133,8 @@ export default function FechamentoPage() {
     const top = corretores
       .map((c) => ({ nome: c.nome, total: filtrados.filter((l) => l.corretorId === c.id).reduce((s, l) => s + (l.valorNegociacao ?? 0), 0) }))
       .sort((a, b) => b.total - a.total)[0]
-    return { qtd, total, ticket, top: top?.nome ?? "—" }
+    const totalComissao = filtrados.reduce((s, l) => s + (l.valorComissao ?? 0), 0)
+    return { qtd, total, ticket, top: top?.nome ?? "—", totalComissao }
   }, [filtrados, corretores])
 
   const porMes = useMemo(() => {
@@ -199,10 +228,11 @@ export default function FechamentoPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi icon={Handshake} label={aba === "fechamentos" ? "Fechamentos" : "Negociações"} value={String(kpis.qtd)} />
         <Kpi icon={Banknote} label="Valor total" value={brl(kpis.total)} accent />
         <Kpi icon={BadgeCheck} label="Ticket médio" value={brl(kpis.ticket)} />
+        <Kpi icon={Coins} label="Total comissões" value={brl(kpis.totalComissao)} />
         <Kpi icon={PieIcon} label="Corretor líder" value={kpis.top} />
       </div>
 
@@ -270,19 +300,63 @@ export default function FechamentoPage() {
                     <th className="py-2 pr-3">Corretor</th>
                     <th className="py-2 pr-3 text-right">Valor</th>
                     <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3 text-right">Comissão</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtrados.map((l) => (
                     <tr key={l.id} className="border-b border-border/60 last:border-0">
                       <td className="whitespace-nowrap py-2.5 pr-3 text-muted-foreground">{fmtDate(dataEvento(l, aba))}</td>
-                      <td className="py-2.5 pr-3 font-medium">{l.nome}</td>
+                      <td className="py-2.5 pr-3 font-medium">
+                        <span className="flex items-center gap-1.5">
+                          {l.nome}
+                          {podeEditarComissao && (
+                            <button
+                              onClick={() => iniciarEdicaoComissao(l)}
+                              title={l.valorComissao != null ? "Editar comissão" : "Adicionar comissão"}
+                              aria-label={`Editar comissão de ${l.nome}`}
+                              className="rounded p-0.5 text-muted-foreground transition hover:bg-muted hover:text-primary"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                          )}
+                        </span>
+                      </td>
                       <td className="py-2.5 pr-3">{aba === "fechamentos" ? (l.refFechamento || refsTexto(l)) : (l.refProposta || refsTexto(l)) || "—"}</td>
                       <td className="py-2.5 pr-3">{userName(l.corretorId)}</td>
                       <td className="py-2.5 pr-3 text-right font-display font-bold text-primary">{brl(l.valorNegociacao)}</td>
                       <td className="py-2.5 pr-3"><Badge variant={aba === "fechamentos" ? "green" : "accent"}>{corLabel}</Badge></td>
+                      <td className="py-2.5 pr-3 text-right">
+                        {editandoComissao === l.id ? (
+                          <span className="flex items-center justify-end gap-1">
+                            <input
+                              autoFocus
+                              value={comissaoDraft}
+                              onChange={(e) => setComissaoDraft(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") salvarComissao(l); if (e.key === "Escape") setEditandoComissao(null) }}
+                              placeholder="0,00"
+                              inputMode="decimal"
+                              className="w-24 rounded-md border border-input bg-background px-2 py-1 text-right text-sm outline-none focus:border-ring"
+                            />
+                            <button onClick={() => salvarComissao(l)} disabled={salvandoComissao} aria-label="Salvar comissão" className="rounded p-1 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-40">
+                              <Check className="size-4" />
+                            </button>
+                            <button onClick={() => setEditandoComissao(null)} aria-label="Cancelar" className="rounded p-1 text-muted-foreground transition hover:bg-muted">
+                              <X className="size-4" />
+                            </button>
+                          </span>
+                        ) : (
+                          <span className={l.valorComissao != null ? "font-semibold" : "text-muted-foreground"}>
+                            {l.valorComissao != null ? brl(l.valorComissao) : "—"}
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 border-border bg-muted/40">
+                    <td colSpan={6} className="py-2.5 pr-3 text-right font-semibold">Total de comissões</td>
+                    <td className="py-2.5 pr-3 text-right font-display text-base font-bold text-primary">{brl(kpis.totalComissao)}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
