@@ -173,13 +173,25 @@ export async function POST(req: Request) {
   const op = url.searchParams.get("op")
   const { token } = await resolveToken()
   if (!token) return NextResponse.json({ error: "sem token (env META_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN)" }, { status: 401 })
-  if (op !== "set_budget" && op !== "link_pixel" && op !== "set_pixel") return NextResponse.json({ error: "op inválida (use op=set_budget, op=link_pixel ou op=set_pixel)" }, { status: 400 })
+  if (op !== "set_budget" && op !== "link_pixel" && op !== "set_pixel" && op !== "remove_pixel") return NextResponse.json({ error: "op inválida (use op=set_budget, op=link_pixel, op=set_pixel ou op=remove_pixel)" }, { status: 400 })
 
   try {
     let body: any
     try { body = await req.json() } catch { return NextResponse.json({ error: "body JSON inválido" }, { status: 400 }) }
 
     const adsetId: string | undefined = body.adset_id
+    if (op === "remove_pixel") {
+      // Reverte a qualificação por Compras: tira pixel/custom_event_type do promoted_object,
+      // mantendo apenas o page_id (conversas do WhatsApp) quando informado.
+      const pageId: string | undefined = body.page_id
+      if (!adsetId) return NextResponse.json({ error: "informe adset_id" }, { status: 400 })
+      const po: any = pageId ? { page_id: pageId } : {}
+      const form = new URLSearchParams({ access_token: token, promoted_object: JSON.stringify(po) })
+      const r = await fetch(`${BASE}/${adsetId}`, { method: "POST", body: form })
+      const j: any = await r.json()
+      if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
+      return NextResponse.json({ ok: true, adset_id: adsetId, promoted_object: po, meta: j })
+    }
     if (op === "set_pixel") {
       const pixelId: string | undefined = body.pixel_id
       const pageId: string | undefined = body.page_id
