@@ -15,14 +15,13 @@ import { type Lead, type LeadStatus, type Temperatura } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
 const TIPO_IMOVEL_VENDIDO = [
-  "asa",
-  "casa em condomínio fechado",
-  "apartamento",
-  "terreno",
-  "terreno em condomínio fechado",
-  "comercial casa",
-  "comercial - casa",
-  "comercial - barracão",
+  "Casa",
+  "Casa em condomínio fechado",
+  "Apartamento",
+  "Terreno",
+  "Terreno em condomínio fechado",
+  "Comercial - Casa",
+  "Comercial - Barracão",
 ]
 
 export function KanbanBoard({
