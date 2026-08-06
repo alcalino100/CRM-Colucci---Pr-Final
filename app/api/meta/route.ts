@@ -11,7 +11,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-const VERSAO = process.env.META_API_VERSION || "v21.0"
+const VERSAO = process.env.META_API_VERSION || "v26.0"
 const BASE = `https://graph.facebook.com/${VERSAO}`
 
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
@@ -195,21 +195,28 @@ export async function POST(req: Request) {
     const adsetId: string | undefined = body.adset_id
     if (op === "set_enhancements") {
       // Desativa/ativa aprimoramentos do criativo (ex.: Aprimorar CTA / Enhance CTA).
-      // body: { ad_id?, creative_id, degrees_of_freedom_spec } — atualiza o CRIATIVO
-      // (fonte real dos enhancements); mantém ad_id apenas para referência.
+      // body: { ad_id, creative_id?, creative_features_spec, degrees_of_freedom_spec? }
+      // Atualiza o ANÚNCIO (creative_features_spec — forma aceita para anúncios existentes);
+      // se a Meta rejeitar, tenta o criativo (degrees_of_freedom_spec).
+      const adId: string | undefined = body.ad_id
       const creativeId: string | undefined = body.creative_id
-      const dofSpec: any = body.degrees_of_freedom_spec
       const spec: any = body.creative_features_spec
-      const target = creativeId && (dofSpec || spec)
-      if (!target) return NextResponse.json({ error: "informe creative_id e degrees_of_freedom_spec (objeto)" }, { status: 400 })
+      if (!adId || !spec || typeof spec !== "object") return NextResponse.json({ error: "informe ad_id e creative_features_spec (objeto)" }, { status: 400 })
 
-      const params: any = { access_token: token }
-      if (dofSpec) params.degrees_of_freedom_spec = JSON.stringify(dofSpec)
-      else params.creative_features_spec = JSON.stringify(spec)
-      const r = await fetch(`${BASE}/${creativeId}`, { method: "POST", body: new URLSearchParams(params) })
-      const j: any = await r.json()
+      let r = await fetch(`${BASE}/${adId}`, {
+        method: "POST",
+        body: new URLSearchParams({ access_token: token, creative_features_spec: JSON.stringify(spec) }),
+      })
+      let j: any = await r.json()
+      if (j.error && creativeId && body.degrees_of_freedom_spec) {
+        r = await fetch(`${BASE}/${creativeId}`, {
+          method: "POST",
+          body: new URLSearchParams({ access_token: token, degrees_of_freedom_spec: JSON.stringify(body.degrees_of_freedom_spec) }),
+        })
+        j = await r.json()
+      }
       if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
-      return NextResponse.json({ ok: true, creative_id: creativeId, meta: j })
+      return NextResponse.json({ ok: true, ad_id: adId, meta: j })
     }
     if (op === "remove_pixel") {
       // Reverte a qualificação por Compras: tira pixel/custom_event_type do promoted_object,
