@@ -25,10 +25,11 @@ export async function GET(req: Request) {
   const desdeIso = desde.toISOString()
 
   try {
-    const [{ data: mensagens }, { data: instancias }, { data: leads }] = await Promise.all([
+    const [{ data: mensagens }, { data: mensagensTodas }, { data: instancias }, { data: leads }] = await Promise.all([
       wsupabase.from("whatsapp_mensagens").select("id, instance_name, telefone, nome_contato, lead_id, veio_de_anuncio, anuncio_id, anuncio_titulo, criado_em").gte("criado_em", desdeIso).order("criado_em", { ascending: true }),
+      wsupabase.from("whatsapp_mensagens").select("criado_em").order("criado_em", { ascending: false }).limit(5),
       wsupabase.from("whatsapp_instancias").select("instance_name, corretor_id, numero, status"),
-      wsupabase.from("leads").select("id, nome, telefone, corretor_id, origem, status, meta_campaign_id, criado_em").gte("criado_em", desdeIso).order("criado_em", { ascending: true }),
+      wsupabase.from("leads").select("id, nome, telefone, corretor_id, origem, status, meta_campaign_id, criado_em, observacoes").gte("criado_em", desdeIso).order("criado_em", { ascending: true }),
     ])
 
     const instMap = new Map((instancias ?? []).map((i) => [i.instance_name, i]))
@@ -83,6 +84,7 @@ export async function GET(req: Request) {
           status: l.status,
           meta_campaign_id: l.meta_campaign_id ?? null,
           criado_em: l.criado_em,
+          observacoes: (l.observacoes ?? "").slice(0, 80),
           tem_mensagem_ctwa_hoje: !!msg,
           ctwa_hora: msg?.criado_em ?? null,
           ctwa_anuncio: msg?.anuncio_titulo ?? msg?.anuncio_id ?? null,
@@ -105,6 +107,7 @@ export async function GET(req: Request) {
       ok: true,
       hoje,
       desde: desdeIso,
+      total_mensagens_tabela_recentes: (mensagensTodas ?? []).map((m) => m.criado_em),
       resumo_hoje: Array.from(porInstancia.values()).sort((a, b) => b.de_anuncio - a.de_anuncio),
       total_mensagens_hoje: msgHoje.length,
       total_ctwa_hoje: msgHoje.filter((m) => m.veio_de_anuncio).length,
