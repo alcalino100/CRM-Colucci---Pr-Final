@@ -115,6 +115,13 @@ export async function GET(req: Request) {
       body = mock
         ? mockAds(adset)
         : { data: await metaGetAll(`${BASE}/${adset}/ads?fields=id,name,effective_status,adset_id,creative{id}&limit=200&access_token=${token}`) }
+    } else if (op === "ads_all") {
+      // Todos os anúncios da conta com o spec de aprimoramentos do criativo
+      // (degrees_of_freedom_spec → creative_features_spec: enhance_cta, text_optimizations, ...)
+      const acc = url.searchParams.get("account")!
+      body = mock
+        ? { data: [] }
+        : { data: await metaGetAll(`${BASE}/${acc}/ads?fields=id,name,effective_status,adset_id,creative{id,degrees_of_freedom_spec}&limit=200&access_token=${token}`) }
     } else if (op === "pixels") {
       const acc = url.searchParams.get("account") || "act_321873088505518"
       body = mock
@@ -173,13 +180,38 @@ export async function POST(req: Request) {
   const op = url.searchParams.get("op")
   const { token } = await resolveToken()
   if (!token) return NextResponse.json({ error: "sem token (env META_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN)" }, { status: 401 })
-  if (op !== "set_budget" && op !== "link_pixel" && op !== "set_pixel" && op !== "remove_pixel") return NextResponse.json({ error: "op inválida (use op=set_budget, op=link_pixel, op=set_pixel ou op=remove_pixel)" }, { status: 400 })
+  if (op !== "set_budget" && op !== "link_pixel" && op !== "set_pixel" && op !== "remove_pixel" && op !== "set_enhancements") return NextResponse.json({ error: "op inválida (use op=set_budget, op=link_pixel, op=set_pixel, op=remove_pixel ou op=set_enhancements)" }, { status: 400 })
 
   try {
     let body: any
     try { body = await req.json() } catch { return NextResponse.json({ error: "body JSON inválido" }, { status: 400 }) }
 
     const adsetId: string | undefined = body.adset_id
+    if (op === "set_enhancements") {
+      // Desativa/ativa aprimoramentos do criativo (ex.: Aprimorar CTA / Enhance CTA).
+      // body: { ad_id, creative_id?, creative_features_spec, degrees_of_freedom_spec? }
+      // Tenta atualizar o anúncio (creative_features_spec); se a Meta rejeitar,
+      // faz fallback no criativo (degrees_of_freedom_spec).
+      const adId: string | undefined = body.ad_id
+      const creativeId: string | undefined = body.creative_id
+      const spec: any = body.creative_features_spec
+      if (!adId || !spec || typeof spec !== "object") return NextResponse.json({ error: "informe ad_id e creative_features_spec (objeto)" }, { status: 400 })
+
+      let r = await fetch(`${BASE}/${adId}`, {
+        method: "POST",
+        body: new URLSearchParams({ access_token: token, creative_features_spec: JSON.stringify(spec) }),
+      })
+      let j: any = await r.json()
+      if (j.error && creativeId && body.degrees_of_freedom_spec) {
+        r = await fetch(`${BASE}/${creativeId}`, {
+          method: "POST",
+          body: new URLSearchParams({ access_token: token, degrees_of_freedom_spec: JSON.stringify(body.degrees_of_freedom_spec) }),
+        })
+        j = await r.json()
+      }
+      if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
+      return NextResponse.json({ ok: true, ad_id: adId, meta: j })
+    }
     if (op === "remove_pixel") {
       // Reverte a qualificação por Compras: tira pixel/custom_event_type do promoted_object,
       // mantendo apenas o page_id (conversas do WhatsApp) quando informado.
