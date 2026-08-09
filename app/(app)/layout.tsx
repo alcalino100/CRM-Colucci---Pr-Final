@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BellRing, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, MessageCircle, UserCircle, X, Handshake } from "lucide-react"
+import { BellRing, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, MessageCircle, UserCircle, X, Handshake, UserPlus } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { ToastProvider } from "@/components/ui/primitives"
@@ -28,6 +28,7 @@ const NAV: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/painel-corretor", label: "Kanban", icon: KanbanSquare, roles: ["corretor", "gestor"] },
   { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["corretor", "gestor"] },
   { href: "/dashboard-gestao", label: "Dashboard", icon: LayoutDashboard, roles: ["gestor"] },
+  { href: "/cadastros", label: "Leads Cadastrados", icon: UserPlus, roles: ["gestor"] },
   { href: "/fechamento", label: "Fechamentos", icon: Handshake, roles: ["gestor"] },
   { href: "/auditoria", label: "Auditoria de Leads", icon: ClipboardCheck, roles: ["gestor"] },
   { href: "/auditoria/registros", label: "Registros de Auditoria", icon: ScrollText, roles: ["gestor"] },
