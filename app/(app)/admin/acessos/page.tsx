@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { Plus, Eye, EyeOff, Pencil } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { isAdminRole, isMaster, ROLE_GROUPS, ROLE_LABEL } from "@/lib/roles"
+import { isMaster, modulosRole, podeGerenciarEquipe, ROLE_GROUPS, ROLE_LABEL } from "@/lib/roles"
+import type { Modulo } from "@/lib/mock-data"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Badge, Card, Dialog, Input, Label, Select, Table, TD, TH, THead, TR, useToast } from "@/components/ui/primitives"
@@ -24,11 +25,25 @@ export default function AcessosPage() {
   const [form, setForm] = useState<FormState>(empty)
   const [error, setError] = useState("")
 
-  if (!isAdminRole(user?.role ?? "corretor")) {
+  if (!podeGerenciarEquipe(user?.role ?? "corretor")) {
     return <p className="py-16 text-center text-muted-foreground">Acesso restrito a gestores.</p>
   }
 
   const canManageMaster = isMaster(user?.role ?? "corretor")
+
+  // Gestor de módulo só gerencia perfis do(s) seu(s) módulo(s); master vê todos
+  const mods = modulosRole(user?.role ?? "corretor")
+  const temModulo = (m: Modulo) => mods.includes(m)
+  const roleGroups = ROLE_GROUPS.map((g) => ({
+    ...g,
+    roles: g.roles.filter((r) => {
+      if (r === "gestor_master") return canManageMaster
+      if (r === "corretor" || r === "gestor") return temModulo("vendas") && temModulo("locacao")
+      if (r === "corretor_vendas" || r === "gestor_vendas") return temModulo("vendas")
+      if (r === "corretor_locacao" || r === "gestor_locacao") return temModulo("locacao")
+      return false
+    }),
+  })).filter((g) => g.roles.length > 0)
 
   function openNovo() {
     setForm(empty); setError(""); setNovo(true)
@@ -107,17 +122,17 @@ export default function AcessosPage() {
       </Card>
 
       <Dialog open={novo} onClose={() => setNovo(false)} title="Novo Usuário">
-        <UserForm form={form} set={set} error={error} onSubmit={submitNovo} onCancel={() => setNovo(false)} submitLabel="Cadastrar" canManageMaster={canManageMaster} />
+        <UserForm form={form} set={set} error={error} onSubmit={submitNovo} onCancel={() => setNovo(false)} submitLabel="Cadastrar" canManageMaster={canManageMaster} roleGroups={roleGroups} />
       </Dialog>
       <Dialog open={!!editing} onClose={() => setEditing(null)} title="Editar Usuário">
-        <UserForm form={form} set={set} error={error} onSubmit={submitEdit} onCancel={() => setEditing(null)} submitLabel="Salvar alterações" canManageMaster={canManageMaster} />
+        <UserForm form={form} set={set} error={error} onSubmit={submitEdit} onCancel={() => setEditing(null)} submitLabel="Salvar alterações" canManageMaster={canManageMaster} roleGroups={roleGroups} />
       </Dialog>
     </div>
   )
 }
 
 function UserForm({
-  form, set, error, onSubmit, onCancel, submitLabel, canManageMaster,
+  form, set, error, onSubmit, onCancel, submitLabel, canManageMaster, roleGroups,
 }: {
   form: FormState
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void
@@ -126,6 +141,7 @@ function UserForm({
   onCancel: () => void
   submitLabel: string
   canManageMaster: boolean
+  roleGroups: { label: string; roles: Role[] }[]
 }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3" noValidate>
@@ -145,10 +161,7 @@ function UserForm({
         <div className="flex flex-col gap-1">
           <Label htmlFor="ur">Perfil</Label>
           <Select id="ur" value={form.role} onChange={(e) => set("role", e.target.value as Role)}>
-            {ROLE_GROUPS.map((g) => ({
-              ...g,
-              roles: g.roles.filter((r) => canManageMaster || r !== "gestor_master"),
-            })).filter((g) => g.roles.length > 0).map((g) => (
+            {roleGroups.map((g) => (
               <optgroup key={g.label} label={g.label}>
                 {g.roles.map((r) => (
                   <option key={r} value={r}>{ROLE_LABEL[r]}</option>

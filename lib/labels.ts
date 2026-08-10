@@ -17,6 +17,9 @@ export const AUDIT_TIPO_LABEL: Record<AuditTipo, string> = {
   temperatura: "Temperatura",
   qualidade: "Obs. de qualidade",
   justificativa: "Justificativa operacional",
+  locacao_criacao: "Criação (Locação)",
+  locacao_exclusao: "Exclusão (Locação)",
+  locacao_visita: "Visita agendada (Locação)",
 }
 export const AUDIT_TIPO_VARIANT: Record<AuditTipo, string> = {
   criacao: "green",
@@ -30,6 +33,9 @@ export const AUDIT_TIPO_VARIANT: Record<AuditTipo, string> = {
   temperatura: "amber",
   qualidade: "gray",
   justificativa: "red",
+  locacao_criacao: "green",
+  locacao_exclusao: "red",
+  locacao_visita: "blue",
 }
 
 // Referência principal do lead (fallback para imovelRef legado)

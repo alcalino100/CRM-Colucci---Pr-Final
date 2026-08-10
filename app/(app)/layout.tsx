@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, UserCircle, UsersRound, X, Handshake, UserPlus } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
-import { isAdminRole, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
+import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
 import { ToastProvider } from "@/components/ui/primitives"
 import { LeadsProvider, useLeads } from "@/lib/leads-store"
 import { LocacaoProvider } from "@/lib/locacao-store"
@@ -47,14 +47,22 @@ const NAV_LOCACAO: { href: string; label: string; icon: any; roles: Role[] }[] =
   { href: "/locacao/agenda", label: "Agenda de Locação", icon: CalendarDays, roles: ["corretor", "gestor"] },
   { href: "/locacao/contratos", label: "Contratos", icon: FileSignature, roles: ["gestor"] },
   { href: "/locacao/dashboard", label: "Dashboard Locação", icon: BarChart3, roles: ["gestor"] },
+  { href: "/locacao/auditoria", label: "Registros de Auditoria", icon: ScrollText, roles: ["gestor"] },
 ]
 
 const NAV2: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/admin", label: "Administração", icon: Shield, roles: ["gestor"] },
   { href: "/admin/notificacoes", label: "Disparador de Notificações", icon: BellRing, roles: ["gestor"] },
-  { href: "/admin/acessos", label: "Gestão de Acessos", icon: KeyRound, roles: ["gestor"] },
   { href: "/admin/logs", label: "Logs", icon: ScrollText, roles: ["gestor"] },
 ]
+
+// Gestor de módulo (vendas/locação) gerencia a própria equipe pelo Gestão de Acessos
+const ACESSOS_LINK: { href: string; label: string; icon: any; roles: Role[] } = {
+  href: "/admin/acessos",
+  label: "Gestão de Acessos",
+  icon: KeyRound,
+  roles: ["gestor"],
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth()
@@ -78,6 +86,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const items = NAV.filter((n) => podeVendas(user.role) && canNivel(n.roles))
   const itemsLocacao = NAV_LOCACAO.filter((n) => podeLocacao(user.role) && canNivel(n.roles))
   const items2 = NAV2.filter((n) => isAdminRole(user.role))
+  // Gestor de módulo (ex.: gestor_locacao) vê Gestão de Acessos na seção do seu módulo
+  const isModuleGestor = isGestorNivel(user.role) && !isAdminRole(user.role)
+  if (isModuleGestor) {
+    if (podeVendas(user.role)) items.push(ACESSOS_LINK)
+    if (podeLocacao(user.role)) itemsLocacao.push(ACESSOS_LINK)
+  }
   const initials = user.nome.split(" ").map((n) => n[0]).slice(0, 2).join("")
 
   function handleLogout() {

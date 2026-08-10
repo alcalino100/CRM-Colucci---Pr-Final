@@ -49,6 +49,11 @@ export function isAdminRole(role: Role): boolean {
   return role === "gestor" || role === "gestor_master"
 }
 
+// Qualquer gestor (inclusive de módulo, ex.: gestor_locacao) gerencia a equipe
+export function podeGerenciarEquipe(role: Role): boolean {
+  return isGestorNivel(role)
+}
+
 export function modulosRole(role: Role): Modulo[] {
   switch (role) {
     case "corretor_vendas":

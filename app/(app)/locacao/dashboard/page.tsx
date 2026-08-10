@@ -213,8 +213,7 @@ export default function LocacaoDashboardPage() {
             conversao: lista.length ? Math.round((locados.length / lista.length) * 100) : 0,
             valor: locados.reduce((s, l) => s + (l.valorAluguel ?? 0), 0),
           }
-        })
-        .filter((r) => r.total > 0),
+        }),
     [leadsFiltrados, corretores],
   )
 
