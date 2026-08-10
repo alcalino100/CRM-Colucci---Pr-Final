@@ -219,7 +219,8 @@ export function KanbanBoardLocacao({
 
   function confirmClose(e: React.FormEvent) {
     e.preventDefault()
-    if (!closeLead) return    if (!fRefs.trim()) {
+    if (!closeLead) return
+    if (!fRefs.trim()) {
       toast("Informe a(s) referência(s) do imóvel locado.", "error")
       return
     }
