@@ -186,7 +186,7 @@ export async function POST(req: Request) {
   const op = url.searchParams.get("op")
   const { token } = await resolveToken()
   if (!token) return NextResponse.json({ error: "sem token (env META_ACCESS_TOKEN / FACEBOOK_PAGE_ACCESS_TOKEN)" }, { status: 401 })
-  if (op !== "set_budget" && op !== "link_pixel" && op !== "set_pixel" && op !== "remove_pixel" && op !== "set_enhancements" && op !== "set_creative") return NextResponse.json({ error: "op inválida (use op=set_budget, op=link_pixel, op=set_pixel, op=remove_pixel, op=set_enhancements ou op=set_creative)" }, { status: 400 })
+  if (op !== "set_budget" && op !== "link_pixel" && op !== "set_pixel" && op !== "remove_pixel" && op !== "set_enhancements" && op !== "set_creative" && op !== "create_adset" && op !== "create_ad" && op !== "set_ad_status") return NextResponse.json({ error: "op inválida (use op=set_budget, op=link_pixel, op=set_pixel, op=remove_pixel, op=set_enhancements, op=set_creative, op=create_adset, op=create_ad ou op=set_ad_status)" }, { status: 400 })
 
   try {
     let body: any
@@ -232,6 +232,47 @@ export async function POST(req: Request) {
       const j: any = await r.json()
       if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
       return NextResponse.json({ ok: true, ad_id: adId, meta: j })
+    }
+    if (op === "create_adset") {
+      // Cria um conjunto (ad set) novo na conta. Mesma forma usada nos splits de criativos
+      // (ex.: [SPLIT] CORRETOR - CRIATIVO ...). body: { account_id, name, campaign_id,
+      // daily_budget (centavos), billing_event, optimization_goal, bid_strategy, targeting, status }
+      const { account_id, name, campaign_id, daily_budget, billing_event, optimization_goal, bid_strategy, targeting, status } = body
+      if (!account_id || !name || !campaign_id || !Number.isInteger(daily_budget) || daily_budget! < 1) {
+        return NextResponse.json({ error: "informe account_id, name, campaign_id e daily_budget inteiro (centavos, >= 1)" }, { status: 400 })
+      }
+      const params: any = { name, campaign_id, daily_budget: String(daily_budget), status: status || "ACTIVE" }
+      if (billing_event) params.billing_event = billing_event
+      if (optimization_goal) params.optimization_goal = optimization_goal
+      if (bid_strategy) params.bid_strategy = bid_strategy
+      if (targeting && typeof targeting === "object") params.targeting = JSON.stringify(targeting)
+      const r = await fetch(`${BASE}/${account_id}/adsets`, { method: "POST", body: new URLSearchParams({ access_token: token, ...params }) })
+      const j: any = await r.json()
+      if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
+      return NextResponse.json({ ok: true, adset_id: j.id, meta: j })
+    }
+    if (op === "create_ad") {
+      // Cria um anúncio num conjunto, reutilizando um criativo existente (a Meta cria uma cópia).
+      // body: { account_id, name, adset_id, creative_id, status }
+      const { account_id, name, adset_id, creative_id, status } = body
+      if (!account_id || !name || !adset_id || !creative_id) {
+        return NextResponse.json({ error: "informe account_id, name, adset_id e creative_id" }, { status: 400 })
+      }
+      const form = new URLSearchParams({ access_token: token, name, adset_id, creative: JSON.stringify({ creative_id }), status: status || "ACTIVE" })
+      const r = await fetch(`${BASE}/${account_id}/ads`, { method: "POST", body: form })
+      const j: any = await r.json()
+      if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
+      return NextResponse.json({ ok: true, ad_id: j.id, meta: j })
+    }
+    if (op === "set_ad_status") {
+      // Ativa/pausa um anúncio. body: { ad_id, status } (ACTIVE | PAUSED)
+      const adId: string | undefined = body.ad_id
+      const status: string | undefined = body.status
+      if (!adId || !status) return NextResponse.json({ error: "informe ad_id e status (ACTIVE | PAUSED)" }, { status: 400 })
+      const r = await fetch(`${BASE}/${adId}`, { method: "POST", body: new URLSearchParams({ access_token: token, status }) })
+      const j: any = await r.json()
+      if (j.error) return NextResponse.json({ error: j.error.message, metaCode: j.error.code, metaErrorSubcode: j.error.error_subcode }, { status: r.status })
+      return NextResponse.json({ ok: true, ad_id: adId, status, meta: j })
     }
     if (op === "remove_pixel") {
       // Reverte a qualificação por Compras: tira pixel/custom_event_type do promoted_object,
