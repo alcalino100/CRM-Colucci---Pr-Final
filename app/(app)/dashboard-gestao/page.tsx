@@ -41,11 +41,43 @@ function inicioSemana(d: Date) {
   return x
 }
 
+type Periodo = "mes_atual" | "mes_passado" | "7d" | "30d" | "90d" | "todos"
+
+const PERIODOS: { key: Periodo; label: string }[] = [
+  { key: "mes_atual", label: "Este mês" },
+  { key: "mes_passado", label: "Mês passado" },
+  { key: "7d", label: "Últimos 7 dias" },
+  { key: "30d", label: "Últimos 30 dias" },
+  { key: "90d", label: "Últimos 90 dias" },
+  { key: "todos", label: "Todo histórico" },
+]
+
+function rangePeriodo(p: Periodo): { start: string; end: string } | null {
+  if (p === "todos") return null
+  const hoje = new Date()
+  const end = new Date(hoje)
+  const start = new Date(hoje)
+  if (p === "mes_atual") {
+    start.setDate(1)
+  } else if (p === "mes_passado") {
+    start.setDate(1)
+    start.setMonth(start.getMonth() - 1)
+    end.setDate(0)
+  } else if (p === "7d") {
+    start.setDate(hoje.getDate() - 6)
+  } else if (p === "30d") {
+    start.setDate(hoje.getDate() - 29)
+  } else if (p === "90d") {
+    start.setDate(hoje.getDate() - 89)
+  }
+  return { start: ymdLocal(start), end: ymdLocal(end) }
+}
+
 export default function DashboardGestaoPage() {
   const { leads, visits, corretores, userName } = useLeads()
   const [loading, setLoading] = useState(true)
   const [subAba, setSubAba] = useState<"andamento" | "fechadas">("andamento")
-  const [tendenciaAba, setTendenciaAba] = useState<"14d" | "12s">("14d")
+  const [periodo, setPeriodo] = useState<Periodo>("mes_atual")
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600)
@@ -67,48 +99,74 @@ export default function DashboardGestaoPage() {
     return { ativos, visitasSemana, valorPropostas, valorFechado }
   }, [leads, visits])
 
+  // Filtro de período aplicado aos gráficos (tendência, funil, performance, distribuições)
+  const periodoRange = rangePeriodo(periodo)
+  const periodoLabel = PERIODOS.find((p) => p.key === periodo)?.label ?? ""
+  const leadsFiltrados = useMemo(() => {
+    const naoArquivados = leads.filter((l) => !l.arquivadoEm)
+    if (!periodoRange) return naoArquivados
+    return naoArquivados.filter((l) => {
+      const k = (l.criadoEm ?? "").slice(0, 10)
+      return k >= periodoRange.start && k <= periodoRange.end
+    })
+  }, [leads, periodoRange])
+
   const leadsPorCorretor = useMemo(
-    () => corretores.map((c) => ({ nome: c.nome.split(" ")[0], total: leads.filter((l) => !l.arquivadoEm && l.corretorId === c.id).length })),
-    [leads, corretores],
+    () => corretores.map((c) => ({ nome: c.nome.split(" ")[0], total: leadsFiltrados.filter((l) => l.corretorId === c.id).length })),
+    [leadsFiltrados, corretores],
   )
   const origemData = useMemo(
-    () => ORIGENS.map((o) => ({ name: o, value: leads.filter((l) => !l.arquivadoEm && l.origem === (o as Origem)).length })).filter((d) => d.value > 0),
-    [leads],
+    () => ORIGENS.map((o) => ({ name: o, value: leadsFiltrados.filter((l) => l.origem === (o as Origem)).length })).filter((d) => d.value > 0),
+    [leadsFiltrados],
   )
 
-  // Item 2 — Tendência de cadastros (diária ou semanal)
+  // Item 2 — Tendência de cadastros (diária até 2 meses; semanal para períodos longos)
   const tendencia = useMemo(() => {
     const arr: { label: string; total: number }[] = []
-    if (tendenciaAba === "14d") {
-      const hoje = new Date()
-      for (let i = 13; i >= 0; i--) {
-        const d = new Date(hoje)
-        d.setDate(d.getDate() - i)
+    const hoje = new Date()
+    let ini: Date
+    let fim: Date
+    let semanal: boolean
+    if (periodoRange) {
+      ini = new Date(`${periodoRange.start}T00:00:00`)
+      fim = new Date(`${periodoRange.end}T00:00:00`)
+      semanal = Math.round((fim.getTime() - ini.getTime()) / 864e5) > 62
+    } else {
+      const minKey = leadsFiltrados.reduce((m, l) => {
+        const k = (l.criadoEm ?? "").slice(0, 10)
+        return k && k < m ? k : m
+      }, ymdLocal(hoje))
+      ini = new Date(`${minKey}T00:00:00`)
+      fim = hoje
+      semanal = true
+    }
+    if (!semanal) {
+      for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
         const key = ymdLocal(d)
         arr.push({
           label: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
-          total: leads.filter((l) => (l.criadoEm ?? "").slice(0, 10) === key).length,
+          total: leadsFiltrados.filter((l) => (l.criadoEm ?? "").slice(0, 10) === key).length,
         })
       }
     } else {
-      for (let i = 11; i >= 0; i--) {
-        const ini = inicioSemana(new Date())
-        ini.setDate(ini.getDate() - i * 7)
-        const fim = new Date(ini)
-        fim.setDate(fim.getDate() + 6)
-        const iniKey = ymdLocal(ini)
-        const fimKey = ymdLocal(fim)
+      let s = inicioSemana(new Date(ini))
+      while (s <= fim) {
+        const e = new Date(s)
+        e.setDate(e.getDate() + 6)
+        const iniKey = ymdLocal(s)
+        const fimKey = ymdLocal(e)
         arr.push({
-          label: ini.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
-          total: leads.filter((l) => {
+          label: s.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+          total: leadsFiltrados.filter((l) => {
             const k = (l.criadoEm ?? "").slice(0, 10)
             return k >= iniKey && k <= fimKey
           }).length,
         })
+        s.setDate(s.getDate() + 7)
       }
     }
     return arr
-  }, [leads, tendenciaAba])
+  }, [leadsFiltrados, periodoRange])
 
   // Item 3 — Previsão ponderada do pipeline por etapa
   const pipeline = useMemo(() => {
@@ -125,20 +183,20 @@ export default function DashboardGestaoPage() {
 
   // Item 5 — Funil de conversão (leads ativos por etapa + % sobre o total)
   const funil = useMemo(() => {
-    const ativos = leads.filter((l) => !l.arquivadoEm && l.status !== "perdido")
+    const ativos = leadsFiltrados.filter((l) => l.status !== "perdido")
     const base = Math.max(1, ativos.length)
     return FUNIL.map((status) => {
       const count = ativos.filter((l) => l.status === status).length
       return { status, count, pct: Math.round((count / base) * 100) }
     })
-  }, [leads])
+  }, [leadsFiltrados])
 
   // Item 5 — Performance por corretor (leads, fechados, conversão, valor)
   const performance = useMemo(
     () =>
       corretores
         .map((c) => {
-          const lista = leads.filter((l) => !l.arquivadoEm && l.corretorId === c.id)
+          const lista = leadsFiltrados.filter((l) => l.corretorId === c.id)
           const fechados = lista.filter((l) => l.status === "fechado")
           return {
             nome: c.nome.split(" ")[0],
@@ -149,7 +207,7 @@ export default function DashboardGestaoPage() {
           }
         })
         .filter((r) => r.total > 0),
-    [leads, corretores],
+    [leadsFiltrados, corretores],
   )
 
   const propostasAndamento = leads.filter((l) => !l.arquivadoEm && l.status === "negociando")
@@ -174,6 +232,16 @@ export default function DashboardGestaoPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeading title="Dashboard de Gestão" subtitle="Visão geral da equipe, funil e propostas." badge="Visão gerencial" />
+
+      {/* Filtro de período */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-muted-foreground">Período:</span>
+        {PERIODOS.map((p) => (
+          <button key={p.key} onClick={() => setPeriodo(p.key)} className={tab(periodo === p.key)}>
+            {p.label}
+          </button>
+        ))}
+      </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -253,7 +321,7 @@ export default function DashboardGestaoPage() {
         </Card>
 
         <Card>
-          <CardHeader className="pb-3"><CardTitle>Funil de conversão</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle>Funil de conversão</CardTitle><p className="text-xs text-muted-foreground">{periodoLabel}</p></CardHeader>
           <CardContent className="pt-3">
             {funil.every((f) => f.count === 0) ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Sem leads ativos</p>
@@ -283,13 +351,8 @@ export default function DashboardGestaoPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-0">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle>Tendência de cadastros</CardTitle>
-              <div className="flex gap-1">
-                <button onClick={() => setTendenciaAba("14d")} className={tab(tendenciaAba === "14d")}>Últimos 14 dias</button>
-                <button onClick={() => setTendenciaAba("12s")} className={tab(tendenciaAba === "12s")}>12 semanas</button>
-              </div>
-            </div>
+            <CardTitle>Tendência de cadastros</CardTitle>
+            <p className="text-xs text-muted-foreground">{periodoLabel}</p>
           </CardHeader>
           <CardContent className="pt-4">
             <ResponsiveContainer width="100%" height={240}>
@@ -311,7 +374,7 @@ export default function DashboardGestaoPage() {
         </Card>
 
         <Card>
-          <CardHeader className="pb-3"><CardTitle>Performance por corretor</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle>Performance por corretor</CardTitle><p className="text-xs text-muted-foreground">{periodoLabel}</p></CardHeader>
           <CardContent className="pt-3">
             {performance.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Sem dados de corretores</p>
