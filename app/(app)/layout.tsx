@@ -10,6 +10,7 @@ import { ToastProvider } from "@/components/ui/primitives"
 import { LeadsProvider, useLeads } from "@/lib/leads-store"
 import { ColucciLogo } from "@/components/colucci-logo"
 import { NotificationBell } from "@/components/notification-bell"
+import { DailySummary } from "@/components/daily-summary"
 import { SaleCelebrationProvider } from "@/components/sale-celebration"
 import { cn } from "@/lib/utils"
 
@@ -97,6 +98,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <ToastProvider>
       <SaleCelebrationProvider>
       <LeadsProvider>
+      <DailySummary />
       <div className="flex min-h-screen bg-background">
         {/* Sidebar desktop */}
         <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col bg-sidebar lg:flex">{SidebarContent}</aside>

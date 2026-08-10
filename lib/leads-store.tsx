@@ -52,6 +52,7 @@ interface Store {
   qualityNotes: QualityNote[]
   justifications: OperationalJustification[]
   audit: AuditEntry[]
+  ready: boolean // dados iniciais já carregados (para UX de resumo/primeira render)
   corretores: User[]
   userName: (id: string) => string
   checkPhoneDuplicate: (phone: string, excludeId?: string) => { nome: string; corretorId: string; status: LeadStatus } | null
@@ -235,6 +236,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   const [justifications, setJustifications] = useState<OperationalJustification[]>([])
   const [audit, setAudit] = useState<AuditEntry[]>([])
   const [changeLogs, setChangeLogs] = useState<ChangeLog[]>([])
+  const [ready, setReady] = useState(false)
 
   const userId = user?.id ?? ""
   const userRole = user?.role ?? "corretor"
@@ -301,7 +303,8 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   const processScheduledNotifications = useCallback(async () => {}, [])
 
   useEffect(() => {
-    loadLeads(); loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadQuality(); loadAudit()
+    void loadLeads().finally(() => setReady(true))
+    loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadQuality(); loadAudit()
 
     const canal = supabase
       .channel("crm-realtime")
@@ -613,7 +616,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   return (
     <Ctx.Provider
       value={{
-        leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, corretores, userName,
+        leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, ready, corretores, userName,
         checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead, assumirLead,
         addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addUser, updateUser, updateProfile,
       }}

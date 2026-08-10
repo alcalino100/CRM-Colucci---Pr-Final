@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { X } from "lucide-react"
+import { X, CheckCircle2, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /* Card */
@@ -36,6 +36,9 @@ export function Badge({ className, variant = "default", ...p }: React.ComponentP
     teal: "bg-teal-100 text-teal-700",
     slateblue: "bg-slate-200 text-slate-600",
     gray: "bg-muted text-muted-foreground",
+    indigo: "bg-indigo-100 text-indigo-700",
+    purple: "bg-purple-100 text-purple-700",
+    sky: "bg-sky-100 text-sky-700",
   }
   return <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium", variants[variant] ?? variants.default, className)} {...p} />
 }
@@ -106,14 +109,38 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const push = React.useCallback((msg: string, type: "success" | "error" = "success") => {
     const id = Date.now()
     setToasts((t) => [...t, { id, msg, type }])
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3000)
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500)
   }, [])
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-2">
         {toasts.map((t) => (
-          <div key={t.id} className={cn("rounded-lg px-4 py-3 text-sm text-white shadow-lg", t.type === "error" ? "bg-destructive" : "bg-primary")}>{t.msg}</div>
+          <div
+            key={t.id}
+            role="status"
+            className={cn(
+              "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border bg-card p-3.5 shadow-[0_14px_36px_-10px_rgb(0_0_0/0.28)] animate-in slide-in-from-right-4 fade-in",
+              t.type === "error" ? "border-destructive/30" : "border-emerald-500/30",
+            )}
+          >
+            <span
+              className={cn(
+                "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full",
+                t.type === "error" ? "bg-destructive/10 text-destructive" : "bg-emerald-100 text-emerald-600",
+              )}
+            >
+              {t.type === "error" ? <AlertCircle className="size-4" /> : <CheckCircle2 className="size-4" />}
+            </span>
+            <p className="flex-1 text-sm font-medium leading-snug text-foreground">{t.msg}</p>
+            <button
+              onClick={() => setToasts((x) => x.filter((y) => y.id !== t.id))}
+              aria-label="Fechar"
+              className="rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         ))}
       </div>
     </ToastCtx.Provider>
