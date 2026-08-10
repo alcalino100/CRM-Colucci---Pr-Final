@@ -4,6 +4,8 @@ import { useState } from "react"
 import { AlertTriangle, Camera, Users, Megaphone, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send, Archive, ArchiveRestore } from "lucide-react"
 import { Badge } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
+import { usePresenca } from "@/lib/presence"
+import { OnlineDot } from "@/components/online-dot"
 import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate } from "@/lib/labels"
 import { type Lead, type Origem } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
@@ -46,6 +48,7 @@ export function LeadCard({
   onDesarquivar?: (lead: Lead) => void
 }) {
   const { userName, users } = useLeads()
+  const { online } = usePresenca()
   const OrigemIcon = ORIGEM_ICON[lead.origem]
   const corretor = users.find((u) => u.id === lead.corretorId)
   const initials = userName(lead.corretorId).split(" ").map((n) => n[0]).slice(0, 2).join("")
@@ -70,14 +73,17 @@ export function LeadCard({
         </button>
         <div className="flex shrink-0 items-center gap-1.5">
           {showCorretor && (
-            corretor?.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={corretor.avatar} alt={corretor.nome} title={corretor.nome} className="size-6 rounded-full object-cover ring-1 ring-border" />
-            ) : (
-              <span title={userName(lead.corretorId)} className="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground">
-                {initials}
-              </span>
-            )
+            <span className="relative">
+              {corretor?.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={corretor.avatar} alt={corretor.nome} title={corretor.nome} className="size-6 rounded-full object-cover ring-1 ring-border" />
+              ) : (
+                <span title={userName(lead.corretorId)} className="flex size-6 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground">
+                  {initials}
+                </span>
+              )}
+              <OnlineDot online={!!online[lead.corretorId]} className="absolute -bottom-0.5 -right-0.5" />
+            </span>
           )}
           {canManage && (
             <div className="relative">
