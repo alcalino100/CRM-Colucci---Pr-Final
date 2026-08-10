@@ -1,23 +1,51 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
-import { Users, CalendarCheck, TrendingUp, CircleDollarSign } from "lucide-react"
+import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
+import { Users, CalendarCheck, TrendingUp, CircleDollarSign, Target } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
-import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
+import { Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
 import { KanbanBoard } from "@/components/kanban-board"
-import { brl, fmtDate } from "@/lib/labels"
-import { ORIGENS, type Origem } from "@/lib/mock-data"
+import { brl, fmtDate, STATUS_ACCENT, STATUS_LABEL, STATUS_VARIANT } from "@/lib/labels"
+import { ORIGENS, type LeadStatus, type Origem } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
 const COLORS = ["#b22222", "#54595f", "#c41e24", "#a1a1aa"]
 
+// Probabilidade de fechamento por etapa (usada na previsão ponderada do pipeline)
+const PIPELINE_PROB: Record<LeadStatus, number> = {
+  novo: 0.1,
+  "em_atendimento": 0.2,
+  "escolhendo opcoes": 0.3,
+  "imovel necessidade": 0.3,
+  permuta: 0.4,
+  "visita agendada": 0.5,
+  negociando: 0.75,
+  fechado: 1,
+  perdido: 0,
+}
+const ETAPAS_PIPELINE: LeadStatus[] = ["novo", "em_atendimento", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "negociando"]
+const FUNIL: LeadStatus[] = ["novo", "em_atendimento", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "negociando", "fechado"]
+
+function ymdLocal(d: Date) {
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const dia = String(d.getDate()).padStart(2, "0")
+  return `${d.getFullYear()}-${m}-${dia}`
+}
+function inicioSemana(d: Date) {
+  const x = new Date(d)
+  const dia = x.getDay()
+  const delta = dia === 0 ? -6 : 1 - dia
+  x.setDate(x.getDate() + delta)
+  return x
+}
+
 export default function DashboardGestaoPage() {
   const { leads, visits, corretores, userName } = useLeads()
   const [loading, setLoading] = useState(true)
-  const [filterCorretor, setFilterCorretor] = useState("todos")
   const [subAba, setSubAba] = useState<"andamento" | "fechadas">("andamento")
+  const [tendenciaAba, setTendenciaAba] = useState<"14d" | "12s">("14d")
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600)
@@ -48,7 +76,81 @@ export default function DashboardGestaoPage() {
     [leads],
   )
 
-  const kanbanLeads = filterCorretor === "todos" ? leads : leads.filter((l) => l.corretorId === filterCorretor)
+  // Item 2 — Tendência de cadastros (diária ou semanal)
+  const tendencia = useMemo(() => {
+    const arr: { label: string; total: number }[] = []
+    if (tendenciaAba === "14d") {
+      const hoje = new Date()
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(hoje)
+        d.setDate(d.getDate() - i)
+        const key = ymdLocal(d)
+        arr.push({
+          label: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+          total: leads.filter((l) => (l.criadoEm ?? "").slice(0, 10) === key).length,
+        })
+      }
+    } else {
+      for (let i = 11; i >= 0; i--) {
+        const ini = inicioSemana(new Date())
+        ini.setDate(ini.getDate() - i * 7)
+        const fim = new Date(ini)
+        fim.setDate(fim.getDate() + 6)
+        const iniKey = ymdLocal(ini)
+        const fimKey = ymdLocal(fim)
+        arr.push({
+          label: ini.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+          total: leads.filter((l) => {
+            const k = (l.criadoEm ?? "").slice(0, 10)
+            return k >= iniKey && k <= fimKey
+          }).length,
+        })
+      }
+    }
+    return arr
+  }, [leads, tendenciaAba])
+
+  // Item 3 — Previsão ponderada do pipeline por etapa
+  const pipeline = useMemo(() => {
+    const ativos = leads.filter((l) => !l.arquivadoEm && l.status !== "fechado" && l.status !== "perdido")
+    const totalValor = ativos.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
+    const previsao = ativos.reduce((s, l) => s + (l.valorNegociacao ?? 0) * PIPELINE_PROB[l.status], 0)
+    const porEtapa = ETAPAS_PIPELINE.map((status) => {
+      const lista = ativos.filter((l) => l.status === status)
+      const valor = lista.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
+      return { status, count: lista.length, valor, ponderado: valor * PIPELINE_PROB[status], prob: Math.round(PIPELINE_PROB[status] * 100) }
+    }).filter((r) => r.count > 0 || r.valor > 0)
+    return { totalValor, previsao, porEtapa }
+  }, [leads])
+
+  // Item 5 — Funil de conversão (leads ativos por etapa + % sobre o total)
+  const funil = useMemo(() => {
+    const ativos = leads.filter((l) => !l.arquivadoEm && l.status !== "perdido")
+    const base = Math.max(1, ativos.length)
+    return FUNIL.map((status) => {
+      const count = ativos.filter((l) => l.status === status).length
+      return { status, count, pct: Math.round((count / base) * 100) }
+    })
+  }, [leads])
+
+  // Item 5 — Performance por corretor (leads, fechados, conversão, valor)
+  const performance = useMemo(
+    () =>
+      corretores
+        .map((c) => {
+          const lista = leads.filter((l) => !l.arquivadoEm && l.corretorId === c.id)
+          const fechados = lista.filter((l) => l.status === "fechado")
+          return {
+            nome: c.nome.split(" ")[0],
+            total: lista.length,
+            fechados: fechados.length,
+            conversao: lista.length ? Math.round((fechados.length / lista.length) * 100) : 0,
+            valor: fechados.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0),
+          }
+        })
+        .filter((r) => r.total > 0),
+    [leads, corretores],
+  )
 
   const propostasAndamento = leads.filter((l) => !l.arquivadoEm && l.status === "negociando")
   const propostasFechadas = leads.filter((l) => !l.arquivadoEm && l.status === "fechado")
@@ -112,16 +214,143 @@ export default function DashboardGestaoPage() {
         </Card>
       </div>
 
+      {/* Item 3 — Pipeline + Item 5 — Funil */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2"><Target className="size-4 text-primary" /> Previsão de vendas</CardTitle>
+            <p className="text-xs text-muted-foreground">Valor ponderado pela probabilidade de cada etapa</p>
+          </CardHeader>
+          <CardContent className="pt-3">
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Previsão (ponderada)</p>
+                <p className="font-display text-xl font-bold text-primary tabular-nums">{brl(pipeline.previsao)}</p>
+              </div>
+              <div className="rounded-xl bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Total no pipeline</p>
+                <p className="font-display text-xl font-bold tabular-nums">{brl(pipeline.totalValor)}</p>
+              </div>
+            </div>
+            {pipeline.porEtapa.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Sem propostas em andamento</p>
+            ) : (
+              <div className="flex flex-col gap-2.5">
+                {pipeline.porEtapa.map((r) => (
+                  <div key={r.status} className="flex items-center gap-3">
+                    <Badge variant={STATUS_VARIANT[r.status]} className="w-36 shrink-0 justify-start">{STATUS_LABEL[r.status]}</Badge>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-gradient-to-r from-primary to-accent" style={{ width: `${r.prob}%` }} />
+                    </div>
+                    <span className="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                      <span className="font-semibold text-foreground">{brl(r.ponderado)}</span> <span className="text-[10px]">({r.prob}%)</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3"><CardTitle>Funil de conversão</CardTitle></CardHeader>
+          <CardContent className="pt-3">
+            {funil.every((f) => f.count === 0) ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Sem leads ativos</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {funil.filter((f) => f.count > 0).map((f) => (
+                  <div key={f.status} className="flex items-center gap-3">
+                    <span className="w-40 shrink-0 truncate text-sm font-medium text-foreground">{STATUS_LABEL[f.status]}</span>
+                    <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${Math.max(3, f.pct)}%`, backgroundColor: STATUS_ACCENT[f.status] }}
+                      />
+                    </div>
+                    <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                      <span className="font-semibold text-foreground">{f.count}</span> · {f.pct}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Item 2 — Tendência + Item 5 — Performance */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-0">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle>Tendência de cadastros</CardTitle>
+              <div className="flex gap-1">
+                <button onClick={() => setTendenciaAba("14d")} className={tab(tendenciaAba === "14d")}>Últimos 14 dias</button>
+                <button onClick={() => setTendenciaAba("12s")} className={tab(tendenciaAba === "12s")}>12 semanas</button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={tendencia}>
+                <defs>
+                  <linearGradient id="gradTendencia" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#b22222" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#b22222" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#71717a" tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="#71717a" tickLine={false} axisLine={false} width={28} />
+                <Tooltip />
+                <Area type="monotone" dataKey="total" name="Leads" stroke="#b22222" strokeWidth={2} fill="url(#gradTendencia)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3"><CardTitle>Performance por corretor</CardTitle></CardHeader>
+          <CardContent className="pt-3">
+            {performance.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Sem dados de corretores</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-2 py-2 font-medium">Corretor</th>
+                      <th className="px-2 py-2 text-right font-medium">Leads</th>
+                      <th className="px-2 py-2 text-right font-medium">Fechados</th>
+                      <th className="px-2 py-2 text-right font-medium">Conv.</th>
+                      <th className="px-2 py-2 text-right font-medium">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {performance.map((p) => (
+                      <tr key={p.nome} className="border-b border-border/60 last:border-0">
+                        <td className="px-2 py-2.5 font-medium">{p.nome}</td>
+                        <td className="px-2 py-2.5 text-right tabular-nums">{p.total}</td>
+                        <td className="px-2 py-2.5 text-right tabular-nums text-emerald-600">{p.fechados}</td>
+                        <td className="px-2 py-2.5 text-right tabular-nums">{p.conversao}%</td>
+                        <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-primary">{brl(p.valor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Kanban geral */}
       <div className="min-w-0">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg font-semibold">Kanban Geral</h2>
-          <Select value={filterCorretor} onChange={(e) => setFilterCorretor(e.target.value)} aria-label="Filtrar por corretor" className="w-52">
-            <option value="todos">Todos os corretores</option>
-            {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </Select>
         </div>
-        <KanbanBoard leads={kanbanLeads} showCorretor currentCorretorId={corretores[0]?.id ?? ""} isGestor heightClass="h-[520px]" />
+        <KanbanBoard leads={leads} showCorretor currentCorretorId={corretores[0]?.id ?? ""} isGestor heightClass="h-[520px]" />
       </div>
 
       {/* Propostas */}

@@ -8,8 +8,8 @@ import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
-import { refsTexto, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/labels"
-import { ORIGENS, type Lead, type LeadStatus } from "@/lib/mock-data"
+import { LEAD_STATUSES, refsTexto, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/labels"
+import { ORIGENS, type Lead, type LeadStatus, type Origem } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
 type Periodo = { ini: string; fim: string }
@@ -68,6 +68,8 @@ export default function CadastrosPage() {
   const [dataInicio, setDataInicio] = useState(() => ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
   const [dataFim, setDataFim] = useState(() => ymd(new Date()))
   const [corretor, setCorretor] = useState("todos")
+  const [origem, setOrigem] = useState<Origem | "todas">("todas")
+  const [status, setStatus] = useState<LeadStatus | "todos">("todos")
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 500)
@@ -84,9 +86,14 @@ export default function CadastrosPage() {
   }, [leads, dataInicio, dataFim])
 
   const filtrados = useMemo(() => {
-    const lista = noPeriodo.filter((l) => corretor === "todos" || l.corretorId === corretor)
+    const lista = noPeriodo.filter(
+      (l) =>
+        (corretor === "todos" || l.corretorId === corretor) &&
+        (origem === "todas" || l.origem === origem) &&
+        (status === "todos" || l.status === status),
+    )
     return [...lista].sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || ""))
-  }, [noPeriodo, corretor])
+  }, [noPeriodo, corretor, origem, status])
 
   const kpis = useMemo(() => {
     const total = filtrados.length
@@ -115,7 +122,7 @@ export default function CadastrosPage() {
       const d = (l.criadoEm || "").slice(0, 10)
       return d >= prevIni && d <= prevFim
     }
-    const prevLeads = leads.filter((l) => (corretor === "todos" || l.corretorId === corretor) && noRange(l))
+    const prevLeads = leads.filter((l) => (corretor === "todos" || l.corretorId === corretor) && (origem === "todas" || l.origem === origem) && (status === "todos" || l.status === status) && noRange(l))
     const prevAtivos = prevLeads.filter((l) => !["fechado", "perdido"].includes(l.status)).length
     const prevFechados = prevLeads.filter((l) => l.status === "fechado").length
     return {
@@ -126,7 +133,7 @@ export default function CadastrosPage() {
       ativos: { cur: kpis.ativos, prev: prevAtivos },
       fechados: { cur: kpis.fechados, prev: prevFechados },
     }
-  }, [dataInicio, dataFim, dias, leads, corretor, filtrados, kpis])
+  }, [dataInicio, dataFim, dias, leads, corretor, origem, status, filtrados, kpis])
 
   const porDia = useMemo(() => {
     const m = new Map<string, { key: string; total: number }>()
@@ -210,9 +217,17 @@ export default function CadastrosPage() {
             <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)}
               className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
           </label>
-          <Select value={corretor} onChange={(e) => setCorretor(e.target.value)} aria-label="Filtrar por corretor" className="w-52">
-            <option value="todos">Todos os corretores</option>
+          <Select value={corretor} onChange={(e) => setCorretor(e.target.value)} aria-label="Filtrar por corretor" className="w-44">
+            <option value="todos">Corretor: todos</option>
             {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </Select>
+          <Select value={origem} onChange={(e) => setOrigem(e.target.value as Origem | "todas")} aria-label="Filtrar por origem" className="w-40">
+            <option value="todas">Origem: todas</option>
+            {ORIGENS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </Select>
+          <Select value={status} onChange={(e) => setStatus(e.target.value as LeadStatus | "todos")} aria-label="Filtrar por status" className="w-48">
+            <option value="todos">Status: todos</option>
+            {LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </Select>
         </div>
       </div>

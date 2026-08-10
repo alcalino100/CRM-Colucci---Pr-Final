@@ -13,7 +13,7 @@ import { supabase } from "@/lib/supabase/client"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
 import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, normalizePhone, refsTexto } from "@/lib/labels"
-import { type Lead, type LeadStatus, type Temperatura } from "@/lib/mock-data"
+import { ORIGENS, type Lead, type LeadStatus, type Origem, type Temperatura } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
 const TIPO_IMOVEL_VENDIDO = [
@@ -57,6 +57,9 @@ export function KanbanBoard({
   const [delDetalhe, setDelDetalhe] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [tempFilter, setTempFilter] = useState<Temperatura | "todas">("todas")
+  const [origemFilter, setOrigemFilter] = useState<Origem | "todas">("todas")
+  const [statusFilter, setStatusFilter] = useState<LeadStatus | "todos">("todos")
+  const [corretorFilter, setCorretorFilter] = useState<string>("todos")
   const [query, setQuery] = useState("")
   const [showArchived, setShowArchived] = useState(false)
 
@@ -414,10 +417,18 @@ export function KanbanBoard({
     (l) =>
       (showArchived || !l.arquivadoEm) &&
       (tempFilter === "todas" || l.temperatura === tempFilter) &&
+      (origemFilter === "todas" || l.origem === origemFilter) &&
+      (statusFilter === "todos" || l.status === statusFilter) &&
+      (corretorFilter === "todos" || l.corretorId === corretorFilter) &&
       matchesQuery(l),
   )
   const byStatus = (s: LeadStatus) => filtered.filter((l) => l.status === s)
-  const noResults = !!q && filtered.length === 0
+  const temFiltros = tempFilter !== "todas" || origemFilter !== "todas" || statusFilter !== "todos" || corretorFilter !== "todos" || !!q
+  const noResults = temFiltros && filtered.length === 0
+
+  const limparFiltros = () => {
+    setQuery(""); setTempFilter("todas"); setOrigemFilter("todas"); setStatusFilter("todos"); setCorretorFilter("todos")
+  }
 
   const chip = (active: boolean, color?: string) =>
     cn(
@@ -467,6 +478,26 @@ export function KanbanBoard({
             </button>
           ))}
           <span className="ml-2 h-5 w-px bg-border" aria-hidden />
+          <Select value={origemFilter} onChange={(e) => setOrigemFilter(e.target.value as Origem | "todas")} aria-label="Filtrar por origem" className="w-36 text-xs">
+            <option value="todas">Origem: todas</option>
+            {ORIGENS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </Select>
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "todos")} aria-label="Filtrar por status" className="w-44 text-xs">
+            <option value="todos">Status: todos</option>
+            {LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+          </Select>
+          {isGestor && (
+            <Select value={corretorFilter} onChange={(e) => setCorretorFilter(e.target.value)} aria-label="Filtrar por corretor" className="w-40 text-xs">
+              <option value="todos">Corretor: todos</option>
+              {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </Select>
+          )}
+          {temFiltros && (
+            <button type="button" onClick={limparFiltros} className="rounded-full border border-dashed border-border px-3 py-1 text-xs font-medium text-primary transition hover:border-primary/40 hover:bg-primary/5">
+              Limpar filtros
+            </button>
+          )}
+          <span className="ml-2 h-5 w-px bg-border" aria-hidden />
           <button
             type="button"
             onClick={() => setShowArchived(!showArchived)}
@@ -481,8 +512,8 @@ export function KanbanBoard({
           <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <SearchX className="size-6" />
           </div>
-          <p className="text-sm font-medium text-foreground">Nenhum lead encontrado para esta pesquisa</p>
-          <button type="button" onClick={() => setQuery("")} className="text-xs font-medium text-primary hover:underline">Limpar pesquisa</button>
+          <p className="text-sm font-medium text-foreground">Nenhum lead encontrado para estes filtros</p>
+          <button type="button" onClick={limparFiltros} className="text-xs font-medium text-primary hover:underline">Limpar filtros</button>
         </div>
       ) : (
       <DragDropContext onDragEnd={onDragEnd}>
