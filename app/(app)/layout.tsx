@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BellRing, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, MessageCircle, UserCircle, X, Handshake, UserPlus } from "lucide-react"
+import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, UserCircle, UsersRound, X, Handshake, UserPlus } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { ToastProvider } from "@/components/ui/primitives"
@@ -38,6 +38,17 @@ const NAV: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/meta-ads", label: "Meta Ads", icon: BarChart3, roles: ["gestor"] },
   { href: "/configuracoes/whatsapp", label: "Conexões WhatsApp", icon: MessageCircle, roles: ["gestor"] },
   { href: "/perfil", label: "Meu Perfil", icon: UserCircle, roles: ["corretor", "gestor"] },
+]
+
+const NAV_LOCACAO: { href: string; label: string; icon: any; roles: Role[] }[] = [
+  { href: "/locacao", label: "Kanban de Locação", icon: Building2, roles: ["corretor", "gestor"] },
+  { href: "/locacao/leads", label: "Leads de Locação", icon: UsersRound, roles: ["corretor", "gestor"] },
+  { href: "/locacao/agenda", label: "Agenda de Locação", icon: CalendarDays, roles: ["corretor", "gestor"] },
+  { href: "/locacao/contratos", label: "Contratos", icon: FileSignature, roles: ["gestor"] },
+  { href: "/locacao/dashboard", label: "Dashboard Locação", icon: BarChart3, roles: ["gestor"] },
+]
+
+const NAV2: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/admin", label: "Administração", icon: Shield, roles: ["gestor"] },
   { href: "/admin/notificacoes", label: "Disparador de Notificações", icon: BellRing, roles: ["gestor"] },
   { href: "/admin/acessos", label: "Gestão de Acessos", icon: KeyRound, roles: ["gestor"] },
@@ -61,6 +72,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const items = NAV.filter((n) => n.roles.includes(user.role))
+  const itemsLocacao = NAV_LOCACAO.filter((n) => n.roles.includes(user.role))
+  const items2 = NAV2.filter((n) => n.roles.includes(user.role))
   const initials = user.nome.split(" ").map((n) => n[0]).slice(0, 2).join("")
 
   function handleLogout() {
@@ -68,25 +81,46 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.replace("/login")
   }
 
+  function renderItems(navItems: { href: string; label: string; icon: any }[]) {
+    return navItems.map((item) => {
+      const active = item.href === "/admin" || item.href === "/auditoria" || item.href === "/locacao"
+        ? pathname === item.href
+        : pathname === item.href || pathname.startsWith(item.href + "/")
+      return (
+        <Link key={item.href} href={item.href}
+          className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
+            active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-white")}>
+          <item.icon className="size-4.5" />
+          {item.label}
+        </Link>
+      )
+    })
+  }
+
   const SidebarContent = (
     <>
       <div className="flex items-center px-5 py-5">
         <ColucciLogo />
       </div>
-      <nav className="flex flex-1 flex-col gap-1 px-3">
-        {items.map((item) => {
-          const active = item.href === "/admin" || item.href === "/auditoria"
-            ? pathname === item.href
-            : pathname === item.href || pathname.startsWith(item.href + "/")
-          return (
-            <Link key={item.href} href={item.href}
-              className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
-                active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-white")}>
-              <item.icon className="size-4.5" />
-              {item.label}
-            </Link>
-          )
-        })}
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3">
+        {items.length > 0 && (
+          <>
+            <span className="px-3 pt-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">Vendas</span>
+            {renderItems(items)}
+          </>
+        )}
+        {itemsLocacao.length > 0 && (
+          <>
+            <span className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">Locação</span>
+            {renderItems(itemsLocacao)}
+          </>
+        )}
+        {items2.length > 0 && (
+          <>
+            <span className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">Administração</span>
+            {renderItems(items2)}
+          </>
+        )}
       </nav>
       <div className="border-t border-sidebar-border px-3 py-4">
         <span className="px-3 text-xs uppercase tracking-wide text-sidebar-foreground/70">
