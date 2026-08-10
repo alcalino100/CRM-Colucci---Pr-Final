@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Plus } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeLocacao } from "@/lib/roles"
 import { useLocacao } from "@/lib/locacao-store"
 import { Button } from "@/components/ui/button"
 import { Dialog, Skeleton, useToast } from "@/components/ui/primitives"
@@ -24,7 +25,8 @@ export default function LocacaoKanbanPage() {
   }, [])
 
   if (!user) return null
-  const isGestor = user.role === "gestor"
+  if (!podeLocacao(user.role)) return null
+  const isGestor = isGestorNivel(user.role)
   const myLeads = isGestor ? leads : leads.filter((l) => l.corretorId === user.id)
 
   async function onCreate(v: LocacaoLeadFormValues) {

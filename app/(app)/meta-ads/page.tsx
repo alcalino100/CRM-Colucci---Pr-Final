@@ -14,6 +14,7 @@ import {
   ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend,
 } from "recharts"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Select, Skeleton, Input } from "@/components/ui/primitives"
 import { brl } from "@/lib/labels"
@@ -100,7 +101,7 @@ function periodoAnterior(since: string, until: string) {
 // ---------- página ----------
 export default function MetaAdsPage() {
   const { user } = useAuth()
-  if (user && user.role !== "gestor") {
+  if (user && (!isGestorNivel(user.role) || !podeVendas(user.role))) {
     return (
       <Card>
         <CardContent className="p-8 text-center text-sm text-muted-foreground">Acesso restrito a gestores.</CardContent>

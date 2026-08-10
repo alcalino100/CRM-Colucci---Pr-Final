@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { UserPlus, CalendarRange, Activity, CheckCircle2, TrendingUp, TrendingDown } from "lucide-react"
 import { useLocacao } from "@/lib/locacao-store"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeLocacao } from "@/lib/roles"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
 import { LOCACAO_STATUSES, refsTexto, LOCACAO_STATUS_LABEL, LOCACAO_STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/locacao-labels"
@@ -161,7 +162,7 @@ export default function LocacaoLeadsPage() {
       .sort((a, b) => b.total - a.total)
   }, [filtrados])
 
-  if (!user || user.role !== "gestor") {
+  if (!user || !isGestorNivel(user.role) || !podeLocacao(user.role)) {
     return <p className="py-16 text-center text-muted-foreground">Acesso restrito aos gestores.</p>
   }
 

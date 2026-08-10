@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { Check, Coins, Handshake, Banknote, BadgeCheck, PieChart as PieIcon, Pencil, X } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
 import { brl, fmtDate, refsTexto } from "@/lib/labels"
@@ -63,6 +64,7 @@ const PRESETS: { label: string; get: () => { ini: string; fim: string } }[] = [
 export default function FechamentoPage() {
   const { leads, corretores, userName, updateLead } = useLeads()
   const { user } = useAuth()
+  if (!user || !isGestorNivel(user.role) || !podeVendas(user.role)) return <p className="py-16 text-center text-muted-foreground">Acesso restrito aos gestores de vendas.</p>
   const podeEditarComissao = !!user && COMISSAO_EDITORES.has(user.id)
   const [loading, setLoading] = useState(true)
   const [aba, setAba] = useState<Aba>("fechamentos")

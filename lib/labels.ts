@@ -117,7 +117,15 @@ export const MOTIVOS_EXCLUSAO = [
 export const PROP_LABEL: Record<PropertyStatus, string> = { disponivel: "Disponível", vendido: "Vendido", alugado: "Alugado" }
 export const PROP_VARIANT: Record<PropertyStatus, string> = { disponivel: "green", vendido: "gray", alugado: "blue" }
 
-export const ROLE_VARIANT: Record<Role, string> = { gestor: "accent", corretor: "default" }
+export const ROLE_VARIANT: Record<Role, string> = {
+  corretor: "default",
+  gestor: "accent",
+  gestor_master: "slateblue",
+  corretor_vendas: "blue",
+  gestor_vendas: "accent",
+  corretor_locacao: "teal",
+  gestor_locacao: "indigo",
+}
 
 export const ACTION_LABEL: Record<ActionType, string> = { criacao: "Criação", edicao: "Edição", exclusao: "Exclusão" }
 export const ACTION_VARIANT: Record<ActionType, string> = { criacao: "green", edicao: "blue", exclusao: "red" }

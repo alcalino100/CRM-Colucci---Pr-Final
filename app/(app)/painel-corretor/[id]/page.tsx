@@ -5,6 +5,7 @@ import Link from "next/link"
 import useSWR from "swr"
 import { ArrowLeft, Clock, MessageSquarePlus, Phone, Mail, Home, ShieldCheck, Megaphone } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Select, Textarea, useToast } from "@/components/ui/primitives"
@@ -21,7 +22,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [nota, setNota] = useState("")
   const [qualiTexto, setQualiTexto] = useState("")
   const lead = getLead(id)
-  const isGestor = user?.role === "gestor"
+  if (!user || !podeVendas(user.role)) return null
+  const isGestor = isGestorNivel(user.role)
   const leadQuality = qualityNotes.filter((q) => q.leadId === id)
 
   if (!lead) {

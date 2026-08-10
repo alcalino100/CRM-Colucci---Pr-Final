@@ -12,6 +12,7 @@ import { useSaleCelebration, SESSION_ID } from "@/components/sale-celebration"
 import { supabase } from "@/lib/supabase/client"
 import { useLocacao } from "@/lib/locacao-store"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel } from "@/lib/roles"
 import { LOCACAO_STATUSES, MOTIVOS_EXCLUSAO, LOCACAO_STATUS_ACCENT, LOCACAO_STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, normalizePhone, refsTexto } from "@/lib/locacao-labels"
 import { ORIGENS, type Origem, type Temperatura } from "@/lib/mock-data"
 import type { LocacaoLead, LocacaoStatus } from "@/lib/locacao-labels"
@@ -276,7 +277,7 @@ export function KanbanBoardLocacao({
 
   async function handleArquivar() {
     if (!archiveLead || !user || submitting) return
-    if (user.role !== "gestor") {
+    if (!isGestorNivel(user.role)) {
       setArchiveLead(null)
       return
     }
@@ -300,7 +301,7 @@ export function KanbanBoardLocacao({
 
   async function handleDesarquivar() {
     if (!desarquivarLead || !user || submitting) return
-    if (user.role !== "gestor") {
+    if (!isGestorNivel(user.role)) {
       setDesarquivarLead(null)
       return
     }

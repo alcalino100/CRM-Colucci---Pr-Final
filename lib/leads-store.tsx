@@ -9,6 +9,7 @@ import {
   type Lead,
   type LeadRef,
   type LeadStatus,
+  type Modulo,
   type Notification,
   type OperationalJustification,
   type Origem,
@@ -19,12 +20,14 @@ import {
   type User,
   type Visit,
 } from "./mock-data"
+import { isCorretorDe, isGestorNivel, isMaster, modulosRole } from "./roles"
 import { supabase } from "./supabase/client"
 import { useAuth } from "./auth-context"
 import { normalizePhone, normalizeStatus } from "./labels"
 
 interface NotifyOpts {
   tipo?: string
+  modulo?: Modulo | null
   paraRole?: Role | null // null = todos
   paraUsuarioId?: string | null
   leadId?: string | null
@@ -64,13 +67,13 @@ interface Store {
   assumirLead: (leadId: string) => Promise<{ ok: boolean; error?: string }>
   addVisit: (v: Omit<Visit, "id">) => void
   notify: (texto: string, opts?: NotifyOpts) => void
-  sendAdminNotification: (input: { mensagem: string; paraRole?: Role | null; paraUsuarioId?: string | null }) => Promise<{ ok: boolean; error?: string }>
+  sendAdminNotification: (input: { mensagem: string; modulo?: Modulo | null; paraRole?: Role | null; paraUsuarioId?: string | null }) => Promise<{ ok: boolean; error?: string }>
   markNotificationsRead: () => void
   logChange: (e: Omit<ChangeLog, "id" | "dataHora">) => void
   logAudit: (e: AuditInput) => void
   addQualityNote: (leadId: string, texto: string) => void
-  addUser: (u: Omit<User, "id" | "criadoEm">) => { ok: boolean; error?: string }
-  updateUser: (id: string, patch: Partial<User>) => { ok: boolean; error?: string }
+  addUser: (u: Omit<User, "id" | "criadoEm">) => Promise<{ ok: boolean; error?: string }>
+  updateUser: (id: string, patch: Partial<User>) => Promise<{ ok: boolean; error?: string }>
   updateProfile: (patch: { avatar?: string; senha?: string }) => Promise<{ ok: boolean; error?: string }>
 }
 
@@ -185,6 +188,7 @@ function rowToNotification(r: any, userId: string): Notification {
     timestamp: r.timestamp,
     read: lidaPor.includes(userId) || r.lida === true,
     tipo: r.tipo ?? "geral",
+    modulo: r.modulo ?? null,
     paraRole: r.para_role ?? null,
     paraUsuarioId: r.para_usuario_id ?? null,
     leadId: r.lead_id ?? null,
@@ -258,16 +262,24 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (!userId) return
     // Segmentação por papel: corretor vê as próprias/operacionais; gestor vê gerenciais e de equipe
     let q = supabase.from("notificacoes").select("*").order("timestamp", { ascending: false }).limit(100)
-    if (userRole === "gestor") {
+    if (isGestorNivel(userRole)) {
       q = q.or(`para_role.eq.gestor,para_role.is.null,para_usuario_id.eq.${userId}`)
     } else {
       q = q.or(`para_usuario_id.eq.${userId},and(para_role.eq.corretor,para_usuario_id.is.null),and(para_role.is.null,para_usuario_id.is.null)`)
     }
     const { data } = await q
-    if (data) setNotifications(data.map((r) => rowToNotification(r, userId)))
+    if (data) {
+      // Compartimentação por módulo: só aparecem notificações do módulo do usuário
+      const mods = modulosRole(userRole)
+      setNotifications(
+        data
+          .map((r) => rowToNotification(r, userId))
+          .filter((n) => !n.modulo || mods.includes(n.modulo)),
+      )
+    }
   }, [userId, userRole])
   const loadAdminNotifications = useCallback(async () => {
-    if (userRole !== "gestor") {
+    if (!isGestorNivel(userRole)) {
       setSentNotifications([])
       setScheduledNotifications([])
       return
@@ -289,12 +301,12 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (data) setJustifications(data.map(rowToJustification))
   }, [userId])
   const loadQuality = useCallback(async () => {
-    if (userRole !== "gestor") return setQualityNotes([]) // corretores nunca carregam esse dado
+    if (!isGestorNivel(userRole)) return setQualityNotes([]) // corretores nunca carregam esse dado
     const { data } = await supabase.from("observacoes_qualidade").select("*").order("criado_em", { ascending: false })
     if (data) setQualityNotes(data.map(rowToQuality))
   }, [userRole])
   const loadAudit = useCallback(async () => {
-    if (userRole !== "gestor") return setAudit([])
+    if (!isGestorNivel(userRole)) return setAudit([])
     const { data } = await supabase.from("auditoria").select("*").order("criado_em", { ascending: false }).limit(1000)
     if (data) setAudit(data.map(rowToAudit))
   }, [userRole])
@@ -358,6 +370,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     void supabase.from("notificacoes").insert({
       mensagem: texto,
       tipo: opts?.tipo ?? "geral",
+      modulo: opts?.modulo ?? "vendas",
       usuario_id: userId ?? null,
       para_role: opts?.paraRole ?? null,
       para_usuario_id: opts?.paraUsuarioId ?? null,
@@ -366,7 +379,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   }, [loadNotifications, userId])
 
   const sendAdminNotification: Store["sendAdminNotification"] = async (input) => {
-    if (userRole !== "gestor" || !userId) return { ok: false, error: "Acesso restrito a gestores." }
+    if (!isGestorNivel(userRole) || !userId) return { ok: false, error: "Acesso restrito a gestores." }
     try {
       const response = await fetch("/api/admin/notifications", {
         method: "POST",
@@ -477,7 +490,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   const deleteLead: Store["deleteLead"] = async (id, motivo, motivoDetalhe) => {
     // Somente gestores podem excluir leads
-    if (user?.role !== "gestor") return { ok: false, error: "Apenas gestores podem excluir leads." }
+    if (!isGestorNivel(user?.role ?? "corretor")) return { ok: false, error: "Apenas gestores podem excluir leads." }
     const motivoTrim = (motivo ?? "").trim()
     const detalheTrim = (motivoDetalhe ?? "").trim()
     if (!motivoTrim) return { ok: false, error: "Selecione o motivo da exclusão." }
@@ -541,7 +554,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   const addJustification: Store["addJustification"] = async (leadId, motivo, observacao) => {
     const lead = leads.find((item) => item.id === leadId)
-    if (!lead || !user || (user.role !== "gestor" && lead.corretorId !== user.id)) return { ok: false, error: "Você não tem permissão para justificar este lead." }
+    if (!lead || !user || (!isGestorNivel(user.role) && lead.corretorId !== user.id)) return { ok: false, error: "Você não tem permissão para justificar este lead." }
     const cleanReason = motivo.trim()
     const cleanNote = observacao?.trim() ?? ""
     if (!cleanReason || (cleanReason === "Outro" && !cleanNote)) return { ok: false, error: "Informe o motivo e detalhe a opção Outro." }
@@ -565,7 +578,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   // ---------- Observações internas de qualidade (somente gestores) ----------
   const addQualityNote: Store["addQualityNote"] = (leadId, texto) => {
-    if (userRole !== "gestor" || !texto.trim()) return
+    if (!isGestorNivel(userRole) || !texto.trim()) return
     const lead = leads.find((l) => l.id === leadId)
     void supabase.from("observacoes_qualidade").insert({
       lead_id: leadId,
@@ -577,15 +590,19 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   }
 
   // ---------- Usuários ----------
-  const addUser: Store["addUser"] = (u) => {
+  const addUser: Store["addUser"] = async (u) => {
+    if (u.role === "gestor_master" && !isMaster(userRole)) return { ok: false, error: "Apenas o Gestor Master pode criar outros Gestores Master." }
     const email = u.email.trim().toLowerCase()
     if (users.some((x) => x.email.toLowerCase() === email)) return { ok: false, error: "E-mail já cadastrado." }
-    void supabase.from("usuarios").insert({
+    const { error } = await supabase.from("usuarios").insert({
       nome: u.nome, email, senha_hash: u.senha, role: u.role, status: u.ativo ? "ativo" : "inativo",
-    }).then(() => loadUsers())
+    })
+    if (error) return { ok: false, error: `Não foi possível salvar: ${error.message}` }
+    await loadUsers()
     return { ok: true }
   }
-  const updateUser: Store["updateUser"] = (id, patch) => {
+  const updateUser: Store["updateUser"] = async (id, patch) => {
+    if (patch.role === "gestor_master" && !isMaster(userRole)) return { ok: false, error: "Apenas o Gestor Master pode atribuir o perfil Gestor Master." }
     const email = patch.email ? patch.email.trim().toLowerCase() : undefined
     if (email && users.some((x) => x.id !== id && x.email.toLowerCase() === email)) return { ok: false, error: "E-mail já cadastrado." }
     const row: Record<string, any> = {}
@@ -595,7 +612,9 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (patch.role !== undefined) row.role = patch.role
     if (patch.avatar !== undefined) row.avatar = patch.avatar
     if (patch.ativo !== undefined) row.status = patch.ativo ? "ativo" : "inativo"
-    void supabase.from("usuarios").update(row).eq("id", id).then(() => loadUsers())
+    const { error } = await supabase.from("usuarios").update(row).eq("id", id)
+    if (error) return { ok: false, error: `Não foi possível salvar: ${error.message}` }
+    await loadUsers()
     return { ok: true }
   }
 
@@ -611,7 +630,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     return { ok: true }
   }
 
-  const corretores = users.filter((u) => u.role === "corretor")
+  const corretores = users.filter((u) => isCorretorDe(u.role, "vendas"))
 
   return (
     <Ctx.Provider

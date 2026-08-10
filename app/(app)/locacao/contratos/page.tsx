@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { Check, Coins, Handshake, Banknote, BadgeCheck, PieChart as PieIcon, Pencil, X } from "lucide-react"
 import { useLocacao } from "@/lib/locacao-store"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeLocacao } from "@/lib/roles"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
 import { brl, fmtDate, refsTexto } from "@/lib/locacao-labels"
@@ -63,6 +64,7 @@ const PRESETS: { label: string; get: () => { ini: string; fim: string } }[] = [
 export default function LocacaoContratosPage() {
   const { leads, corretores, userName, updateLead } = useLocacao()
   const { user } = useAuth()
+  if (!user || !isGestorNivel(user.role) || !podeLocacao(user.role)) return <p className="py-16 text-center text-muted-foreground">Acesso restrito aos gestores de locação.</p>
   const podeEditarComissao = !!user && COMISSAO_EDITORES.has(user.id)
   const [loading, setLoading] = useState(true)
   const [aba, setAba] = useState<Aba>("fechamentos")

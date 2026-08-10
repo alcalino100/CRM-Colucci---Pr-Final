@@ -319,6 +319,7 @@ async function handleMessageUpsert(payload: any) {
         await wsupabase.from("notificacoes").insert({
           mensagem: `Possível lead duplicado: ${telefone} clicou em anúncio e escreveu para o WhatsApp de ${corretorNome}, mas já é lead de outro corretor (status: ${again.status}).`,
           tipo: "possivel_duplicado",
+          modulo: "vendas",
           usuario_id: corretorId,
           para_role: "gestor",
           lead_id: again.id,
@@ -329,6 +330,7 @@ async function handleMessageUpsert(payload: any) {
       await wsupabase.from("notificacoes").insert({
         mensagem: `Novo lead via tráfego pago (WhatsApp): ${nome} (via ${corretorNome})`,
         tipo: "lead_novo",
+        modulo: "vendas",
         usuario_id: corretorId,
         para_role: "gestor",
         lead_id: leadId,
@@ -365,6 +367,7 @@ async function handleMessageUpsert(payload: any) {
         await wsupabase.from("notificacoes").insert({
           mensagem: `Possível lead duplicado: ${telefone} clicou em anúncio e escreveu para o WhatsApp de ${corretorNome}, mas já é lead de ${dono?.nome ?? "outro corretor"} (status: ${existente.status}).`,
           tipo: "possivel_duplicado",
+          modulo: "vendas",
           usuario_id: corretorId,
           para_role: "gestor",
           lead_id: existente.id,

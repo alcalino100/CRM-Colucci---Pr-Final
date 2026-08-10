@@ -7,6 +7,7 @@ type Payload = {
   titulo?: string
   mensagem?: string
   prioridade?: "informativo" | "aviso" | "urgente"
+  modulo?: "vendas" | "locacao" | null
   paraRole?: "gestor" | "corretor" | null
   paraUsuarioId?: string | null
   agendadaPara?: string | null
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.from("notificacoes").insert({
     mensagem,
     tipo: "comunicado_gestao",
+    modulo: body.modulo ?? null,
     usuario_id: sender.id,
     para_role: body.paraRole ?? null,
     para_usuario_id: body.paraUsuarioId ?? null,

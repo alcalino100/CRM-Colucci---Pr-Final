@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { isAdminRole } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { Badge, Card, CardHeader, CardTitle, Select, Skeleton, Table, TD, TH, THead, TR } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
@@ -44,7 +45,7 @@ export default function LogsPage() {
   const [metaErro, setMetaErro] = useState("")
 
   useEffect(() => {
-    if (user?.role !== "gestor") return
+    if (!isAdminRole(user?.role ?? "corretor")) return
     fetch(`/api/meta/event-logs?usuario_id=${user.id}&limite=50`)
       .then((r) => r.json())
       .then((j) => {
@@ -55,7 +56,7 @@ export default function LogsPage() {
   }, [user?.id, user?.role])
 
   useEffect(() => {
-    if (user && user.role !== "gestor") router.replace("/painel-corretor")
+    if (user && !isAdminRole(user.role)) router.replace("/painel-corretor")
   }, [user, router])
 
   useEffect(() => {
@@ -74,7 +75,7 @@ export default function LogsPage() {
     })
   }, [fUser, fAcao, fEntidade, dias, changeLogs])
 
-  if (user && user.role !== "gestor") return null
+  if (user && !isAdminRole(user.role)) return null
 
   return (
     <div className="flex flex-col gap-8">

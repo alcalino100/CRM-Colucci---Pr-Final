@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, Plus, Clock, User, Building, ArrowRight, CalendarDays } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeLocacao } from "@/lib/roles"
 import { useLocacao } from "@/lib/locacao-store"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
@@ -27,7 +28,8 @@ export default function AgendaPage() {
   const [filterCorretor, setFilterCorretor] = useState("todos")
   const [novo, setNovo] = useState(false)
 
-  const isGestor = user?.role === "gestor"
+  if (user && !podeLocacao(user.role)) return null
+  const isGestor = isGestorNivel(user?.role ?? "corretor")
 
   const visibleVisits = useMemo(() => {
     let v = visits

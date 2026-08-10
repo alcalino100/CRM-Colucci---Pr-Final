@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { SearchX } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Input, Select, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
@@ -24,7 +25,8 @@ export default function RegistrosAuditoriaPage() {
     return () => clearTimeout(t)
   }, [])
 
-  const isGestor = user?.role === "gestor"
+  if (user && !podeVendas(user.role)) return null
+  const isGestor = isGestorNivel(user?.role ?? "corretor")
 
   // Ordena do mais recente para o mais antigo e aplica filtros de tipo e busca
   const filtrados = useMemo(() => {

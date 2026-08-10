@@ -12,6 +12,7 @@ import { useSaleCelebration, SESSION_ID } from "@/components/sale-celebration"
 import { supabase } from "@/lib/supabase/client"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel } from "@/lib/roles"
 import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, normalizePhone, refsTexto } from "@/lib/labels"
 import { ORIGENS, type Lead, type LeadStatus, type Origem, type Temperatura } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
@@ -322,7 +323,7 @@ export function KanbanBoard({
 
   async function handleUploadMeta() {
     if (!uploadMeta || !user || submitting) return
-    if (user.role !== "gestor") {
+    if (!isGestorNivel(user.role)) {
       setUploadMeta(null)
       return
     }
@@ -358,7 +359,7 @@ export function KanbanBoard({
 
   async function handleArquivar() {
     if (!archiveLead || !user || submitting) return
-    if (user.role !== "gestor") {
+    if (!isGestorNivel(user.role)) {
       setArchiveLead(null)
       return
     }
@@ -382,7 +383,7 @@ export function KanbanBoard({
 
   async function handleDesarquivar() {
     if (!desarquivarLead || !user || submitting) return
-    if (user.role !== "gestor") {
+    if (!isGestorNivel(user.role)) {
       setDesarquivarLead(null)
       return
     }

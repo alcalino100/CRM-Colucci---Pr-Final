@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input, Label, Select, Textarea } from "@/components/ui/primitives"
 import { useLocacao } from "@/lib/locacao-store"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel } from "@/lib/roles"
 import {
   BAIRROS_LOCACAO,
   GARANTIAS_LOCACAO,
@@ -85,7 +86,7 @@ export function LocacaoLeadForm({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const { corretores, checkPhoneDuplicate, userName } = useLocacao()
   const { user } = useAuth()
-  const isGestor = user?.role === "gestor"
+  const isGestor = isGestorNivel(user?.role ?? "corretor")
   const [phoneDup, setPhoneDup] = useState<{ nome: string; corretorId: string; status: string } | null>(null)
   const showValor = ["negociando", "locado"].includes(v.status)
 

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, UserCircle, UsersRound, X, Handshake, UserPlus } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
+import { isAdminRole, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
 import { ToastProvider } from "@/components/ui/primitives"
 import { LeadsProvider, useLeads } from "@/lib/leads-store"
 import { LocacaoProvider } from "@/lib/locacao-store"
@@ -71,9 +72,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>
   }
 
-  const items = NAV.filter((n) => n.roles.includes(user.role))
-  const itemsLocacao = NAV_LOCACAO.filter((n) => n.roles.includes(user.role))
-  const items2 = NAV2.filter((n) => n.roles.includes(user.role))
+  const nivel = nivelRole(user.role)
+  const nivelName = nivel === "master" ? "gestor" : nivel
+  const canNivel = (roles: Role[]) => roles.includes(nivelName as Role)
+  const items = NAV.filter((n) => podeVendas(user.role) && canNivel(n.roles))
+  const itemsLocacao = NAV_LOCACAO.filter((n) => podeLocacao(user.role) && canNivel(n.roles))
+  const items2 = NAV2.filter((n) => isAdminRole(user.role))
   const initials = user.nome.split(" ").map((n) => n[0]).slice(0, 2).join("")
 
   function handleLogout() {
@@ -124,7 +128,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </nav>
       <div className="border-t border-sidebar-border px-3 py-4">
         <span className="px-3 text-xs uppercase tracking-wide text-sidebar-foreground/70">
-          {user.role === "gestor" ? "Gestor" : "Corretor"}
+          {nivel === "master" ? "Gestor Master" : nivel === "gestor" ? "Gestor" : "Corretor"}
         </span>
       </div>
     </>

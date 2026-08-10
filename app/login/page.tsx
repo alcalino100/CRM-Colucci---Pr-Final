@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Lock, Mail } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { homeDaRole } from "@/lib/roles"
 import { Button } from "@/components/ui/button"
 import { Input, Label } from "@/components/ui/primitives"
 
@@ -29,7 +30,7 @@ export default function LoginPage() {
       setError("Credenciais inválidas. Verifique e-mail e senha.")
       return
     }
-    router.push(res.role === "gestor" ? "/dashboard-gestao" : "/painel-corretor")
+    router.push(res.role ? homeDaRole(res.role) : "/painel-corretor")
   }
 
   return (

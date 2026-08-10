@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Plus } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Dialog, Skeleton, useToast } from "@/components/ui/primitives"
@@ -23,7 +24,8 @@ export default function PainelCorretorPage() {
   }, [])
 
   if (!user) return null
-  const isGestor = user.role === "gestor"
+  if (!podeVendas(user.role)) return null
+  const isGestor = isGestorNivel(user.role)
   const myLeads = isGestor ? leads : leads.filter((l) => l.corretorId === user.id)
 
   const [creating, setCreating] = useState(false)

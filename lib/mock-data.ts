@@ -1,4 +1,12 @@
-export type Role = "corretor" | "gestor"
+export type Role =
+  | "corretor" // legado: Vendas + Locação (nível corretor)
+  | "gestor" // legado: Vendas + Locação (nível gestor)
+  | "gestor_master" // acesso total
+  | "corretor_vendas" // somente Vendas
+  | "gestor_vendas" // somente Vendas (nível gestor)
+  | "corretor_locacao" // somente Locação
+  | "gestor_locacao" // somente Locação (nível gestor)
+export type Modulo = "vendas" | "locacao"
 export type LeadStatus =
   | "novo"
   | "em_atendimento"
@@ -115,6 +123,7 @@ export interface Notification {
   timestamp: string
   read: boolean
   tipo?: string
+  modulo?: Modulo | null
   paraRole?: Role | null
   paraUsuarioId?: string | null
   leadId?: string | null

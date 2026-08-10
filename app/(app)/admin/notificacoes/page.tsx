@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Eye, Send } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { isAdminRole } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, Dialog, Label, Select, Table, TD, Textarea, TH, THead, TR, useToast } from "@/components/ui/primitives"
@@ -12,6 +13,7 @@ import { fmtDateTime } from "@/lib/labels"
 import type { Role } from "@/lib/mock-data"
 
 type Audience = "todos" | "gestores" | "corretores" | "usuario"
+type Module = "todos" | "vendas" | "locacao"
 
 export default function NotificationDispatcherPage() {
   const { user } = useAuth()
@@ -20,13 +22,14 @@ export default function NotificationDispatcherPage() {
   const { users, sentNotifications, sendAdminNotification, userName } = useLeads()
   const [message, setMessage] = useState("")
   const [audience, setAudience] = useState<Audience>("todos")
+  const [modulo, setModulo] = useState<Module>("todos")
   const [selectedUser, setSelectedUser] = useState("")
   const [preview, setPreview] = useState(false)
   const [sending, setSending] = useState(false)
   const [submitError, setSubmitError] = useState("")
 
   useEffect(() => {
-    if (user && user.role !== "gestor") router.replace("/painel-corretor")
+    if (user && !isAdminRole(user.role)) router.replace("/painel-corretor")
   }, [user, router])
 
   const activeUsers = useMemo(() => users.filter((item) => item.ativo), [users])
@@ -50,7 +53,11 @@ export default function NotificationDispatcherPage() {
     if (error) { setSubmitError(error); return toast(error, "error") }
     setSubmitError("")
     setSending(true)
-    const result = await sendAdminNotification({ mensagem: message.trim(), ...target() })
+    const result = await sendAdminNotification({
+      mensagem: message.trim(),
+      modulo: audience === "usuario" ? null : (modulo === "todos" ? null : modulo),
+      ...target(),
+    })
     setSending(false)
     if (!result.ok) {
       const detail = result.error ?? "Não foi possível concluir."
@@ -62,7 +69,7 @@ export default function NotificationDispatcherPage() {
     setMessage(""); setSelectedUser("")
   }
 
-  if (user && user.role !== "gestor") return null
+  if (user && !isAdminRole(user.role)) return null
 
   return (
     <div className="flex flex-col gap-6">
@@ -75,6 +82,7 @@ export default function NotificationDispatcherPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="flex flex-col gap-1.5 md:col-span-2"><Label htmlFor="notification-message">Mensagem</Label><Textarea id="notification-message" value={message} onChange={(e) => setMessage(e.target.value)} required className="min-h-28" /></div>
               <div className="flex flex-col gap-1.5"><Label htmlFor="audience">Destinatário</Label><Select id="audience" value={audience} onChange={(e) => setAudience(e.target.value as Audience)}><option value="todos">Todos os usuários</option><option value="gestores">Somente gestores</option><option value="corretores">Somente corretores</option><option value="usuario">Usuário específico</option></Select></div>
+              {audience !== "usuario" && <div className="flex flex-col gap-1.5"><Label htmlFor="notification-module">Módulo</Label><Select id="notification-module" value={modulo} onChange={(e) => setModulo(e.target.value as Module)}><option value="todos">Vendas + Locação</option><option value="vendas">Somente Vendas</option><option value="locacao">Somente Locação</option></Select></div>}
               {audience === "usuario" && <div className="flex flex-col gap-1.5"><Label htmlFor="specific-user">Buscar usuário por nome</Label><Select id="specific-user" value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)}><option value="">Selecione um usuário</option>{activeUsers.map((item) => <option key={item.id} value={item.id}>{item.nome} — {item.email}</option>)}</Select></div>}
             </div>
             {submitError && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{submitError}</p>}

@@ -5,6 +5,7 @@ import type { ComponentType } from "react"
 import { Bell, BellOff, UserPlus, CalendarDays, Trash2, Megaphone } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel } from "@/lib/roles"
 import { fmtDateTime } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 import type { Notification } from "@/lib/mock-data"
@@ -17,6 +18,17 @@ const TIPO_STYLE: Record<string, { icon: ComponentType<{ className?: string }>; 
   visita: { icon: CalendarDays, chip: "bg-blue-100 text-blue-700" },
   exclusao: { icon: Trash2, chip: "bg-red-100 text-red-700" },
   comunicado_gestao: { icon: Megaphone, chip: "bg-amber-100 text-amber-700" },
+  locacao_lead_novo: { icon: UserPlus, chip: "bg-teal-100 text-teal-700" },
+  locacao_visita: { icon: CalendarDays, chip: "bg-emerald-100 text-emerald-700" },
+  locacao_exclusao: { icon: Trash2, chip: "bg-orange-100 text-orange-700" },
+  whatsapp_desconectado: { icon: BellOff, chip: "bg-red-100 text-red-700" },
+}
+
+// Selo do módulo: Vendas (azul) × Locação (verde)
+function ModuleChip({ modulo }: { modulo?: string | null }) {
+  if (modulo === "vendas") return <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-700">Vendas</span>
+  if (modulo === "locacao") return <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Locação</span>
+  return null
 }
 
 export function NotificationBell() {
@@ -26,7 +38,7 @@ export function NotificationBell() {
   const [aba, setAba] = useState<Aba>("minhas")
   const ref = useRef<HTMLDivElement>(null)
   const unread = notifications.filter((n) => !n.read).length
-  const isGestor = user?.role === "gestor"
+  const isGestor = isGestorNivel(user?.role ?? "corretor")
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -115,7 +127,10 @@ export function NotificationBell() {
                       <Icon className="size-4" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      {n.titulo && <p className="text-sm font-semibold leading-snug text-foreground">{n.titulo}</p>}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {n.titulo && <p className="text-sm font-semibold leading-snug text-foreground">{n.titulo}</p>}
+                        <ModuleChip modulo={n.modulo} />
+                      </div>
                       <p className={cn("text-sm leading-snug text-foreground", n.titulo && "mt-0.5")}>{n.texto}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{fmtDateTime(n.timestamp)}</p>
                     </div>

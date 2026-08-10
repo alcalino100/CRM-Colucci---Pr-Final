@@ -4,6 +4,7 @@ import { useState, use } from "react"
 import Link from "next/link"
 import { ArrowLeft, Clock, MessageSquarePlus, Phone, Mail, Home } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { podeLocacao } from "@/lib/roles"
 import { useLocacao } from "@/lib/locacao-store"
 import { Button } from "@/components/ui/button"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Textarea, useToast } from "@/components/ui/primitives"
@@ -21,6 +22,7 @@ import type { AuditTipo } from "@/lib/mock-data"
 export default function LocacaoLeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { user } = useAuth()
+  if (!user || !podeLocacao(user.role)) return <p className="py-16 text-center text-muted-foreground">Acesso restrito à equipe de locação.</p>
   const { getLead, addInteraction } = useLocacao()
   const toast = useToast()
   const [nota, setNota] = useState("")

@@ -4,9 +4,12 @@ import { useEffect, useMemo, useState } from "react"
 import { CalendarDays, Sparkles, UserPlus, X } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLeads } from "@/lib/leads-store"
+import { useLocacao } from "@/lib/locacao-store"
+import { isGestorNivel, modulosRole } from "@/lib/roles"
 import { Badge } from "@/components/ui/primitives"
-import { ORIGENS, type LeadStatus, type Origem } from "@/lib/mock-data"
+import { ORIGENS, type LeadStatus, type Origem, type Temperatura } from "@/lib/mock-data"
 import { STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT, LEAD_STATUSES } from "@/lib/labels"
+import { LOCACAO_STATUSES, LOCACAO_STATUS_LABEL, LOCACAO_STATUS_VARIANT, type LocacaoStatus } from "@/lib/locacao-labels"
 
 function ymd(d: Date) {
   const m = String(d.getMonth() + 1).padStart(2, "0")
@@ -16,35 +19,82 @@ function ymd(d: Date) {
 
 const KEY_PREFIX = "colucci:resumo:"
 
+type ResumoLead = {
+  tipo: "vendas" | "locacao"
+  id: string
+  nome: string
+  origem: Origem
+  temperatura: Temperatura
+  status: LeadStatus | LocacaoStatus
+  criadoEm: string
+}
+
+function StatusBadge({ item }: { item: ResumoLead }) {
+  if (item.tipo === "vendas") {
+    const s = item.status as LeadStatus
+    return <Badge variant={STATUS_VARIANT[s]} className="shrink-0">{STATUS_LABEL[s]}</Badge>
+  }
+  const s = item.status as LocacaoStatus
+  return <Badge variant={LOCACAO_STATUS_VARIANT[s]} className="shrink-0">{LOCACAO_STATUS_LABEL[s]}</Badge>
+}
+
 export function DailySummary() {
   const { user } = useAuth()
-  const { leads, ready } = useLeads()
+  const { leads: vendasLeads, ready: readyVendas } = useLeads()
+  const { leads: locacaoLeads, ready: readyLocacao } = useLocacao()
   const [open, setOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)
 
-  // Leads que chegaram ONTEM, no escopo do papel do usuário
+  const modulos = useMemo(() => (user ? modulosRole(user.role) : []), [user])
+  const ready = (modulos.includes("vendas") ? readyVendas : true) && (modulos.includes("locacao") ? readyLocacao : true)
+
+  // Leads que chegaram ONTEM, no escopo do papel do usuário e dos módulos dele
   const ontemLeads = useMemo(() => {
     if (!user) return []
-    const ontem = new Date()
-    ontem.setDate(ontem.getDate() - 1)
-    const key = ymd(ontem)
-    return leads
-      .filter((l) => (l.criadoEm ?? "").slice(0, 10) === key)
-      .filter((l) => user.role === "gestor" || l.corretorId === user.id)
-      .sort((a, b) => (b.criadoEm ?? "").localeCompare(a.criadoEm ?? ""))
-  }, [leads, user])
+    const key = ymd(new Date(Date.now() - 86400000))
+    const gestor = isGestorNivel(user.role)
+    const out: ResumoLead[] = []
+    if (modulos.includes("vendas")) {
+      for (const l of vendasLeads) {
+        if ((l.criadoEm ?? "").slice(0, 10) !== key) continue
+        if (!gestor && l.corretorId !== user.id) continue
+        out.push({ tipo: "vendas", id: l.id, nome: l.nome, origem: l.origem, temperatura: l.temperatura, status: l.status, criadoEm: l.criadoEm ?? "" })
+      }
+    }
+    if (modulos.includes("locacao")) {
+      for (const l of locacaoLeads) {
+        if ((l.criadoEm ?? "").slice(0, 10) !== key) continue
+        if (!gestor && l.corretorId !== user.id) continue
+        out.push({ tipo: "locacao", id: l.id, nome: l.nome, origem: l.origem, temperatura: l.temperatura, status: l.status, criadoEm: l.criadoEm ?? "" })
+      }
+    }
+    return out.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
+  }, [user, modulos, vendasLeads, locacaoLeads])
 
-  const porStatus = useMemo(() => {
-    const acc = new Map<LeadStatus, number>()
-    for (const l of ontemLeads) acc.set(l.status, (acc.get(l.status) ?? 0) + 1)
-    return LEAD_STATUSES.filter((s) => acc.get(s)).map((s) => ({ s, n: acc.get(s)! }))
+  const secoesStatus = useMemo(() => {
+    const secoes: { titulo: string; itens: { label: string; variant: string; n: number }[] }[] = []
+    const vendas = ontemLeads.filter((i) => i.tipo === "vendas")
+    if (vendas.length > 0) {
+      const acc = new Map<LeadStatus, number>()
+      for (const i of vendas) acc.set(i.status as LeadStatus, (acc.get(i.status as LeadStatus) ?? 0) + 1)
+      secoes.push({ titulo: "Vendas", itens: LEAD_STATUSES.filter((s) => acc.get(s)).map((s) => ({ label: STATUS_LABEL[s], variant: STATUS_VARIANT[s], n: acc.get(s)! })) })
+    }
+    const locacao = ontemLeads.filter((i) => i.tipo === "locacao")
+    if (locacao.length > 0) {
+      const acc = new Map<LocacaoStatus, number>()
+      for (const i of locacao) acc.set(i.status as LocacaoStatus, (acc.get(i.status as LocacaoStatus) ?? 0) + 1)
+      secoes.push({ titulo: "Locação", itens: LOCACAO_STATUSES.filter((s) => acc.get(s)).map((s) => ({ label: LOCACAO_STATUS_LABEL[s], variant: LOCACAO_STATUS_VARIANT[s], n: acc.get(s)! })) })
+    }
+    return secoes
   }, [ontemLeads])
 
   const porOrigem = useMemo(() => {
     const acc = new Map<Origem, number>()
-    for (const l of ontemLeads) acc.set(l.origem, (acc.get(l.origem) ?? 0) + 1)
+    for (const i of ontemLeads) acc.set(i.origem, (acc.get(i.origem) ?? 0) + 1)
     return ORIGENS.filter((o) => acc.get(o)).map((o) => ({ o, n: acc.get(o)! }))
   }, [ontemLeads])
+
+  const temAmbos = ontemLeads.some((i) => i.tipo === "vendas") && ontemLeads.some((i) => i.tipo === "locacao")
 
   // Abre uma vez por dia por usuário (depois que os dados iniciais carregam)
   useEffect(() => {
@@ -75,6 +125,8 @@ export function DailySummary() {
   ontem.setDate(ontem.getDate() - 1)
   const dataLabel = ontem.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })
   const visiveis = showAll ? ontemLeads : ontemLeads.slice(0, 6)
+  const vendasVisiveis = visiveis.filter((i) => i.tipo === "vendas")
+  const locacaoVisiveis = visiveis.filter((i) => i.tipo === "locacao")
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm animate-in fade-in" role="dialog" aria-modal="true">
@@ -108,20 +160,22 @@ export function DailySummary() {
             </div>
           </div>
 
-          {/* Por status */}
-          {porStatus.length > 0 && (
-            <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Por status</h3>
+          {/* Por status (separado por módulo) */}
+          {secoesStatus.map((sec) => (
+            <section key={sec.titulo}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Por status {temAmbos && <span className="text-primary">· {sec.titulo}</span>}
+              </h3>
               <div className="flex flex-wrap gap-1.5">
-                {porStatus.map(({ s, n }) => (
-                  <Badge key={s} variant={STATUS_VARIANT[s]} className="gap-1 px-2.5 py-1">
-                    {STATUS_LABEL[s]}
-                    <span className="font-bold">{n}</span>
+                {sec.itens.map((it) => (
+                  <Badge key={it.label} variant={it.variant} className="gap-1 px-2.5 py-1">
+                    {it.label}
+                    <span className="font-bold">{it.n}</span>
                   </Badge>
                 ))}
               </div>
             </section>
-          )}
+          ))}
 
           {/* Por origem */}
           {porOrigem.length > 0 && (
@@ -141,20 +195,42 @@ export function DailySummary() {
           {/* Lista de nomes */}
           <section>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {user.role === "gestor" ? "Todos os leads de ontem" : "Seus leads de ontem"}
+              {isGestorNivel(user.role) ? "Todos os leads de ontem" : "Seus leads de ontem"}
             </h3>
-            <ul className="space-y-2">
-              {visiveis.map((l) => (
-                <li key={l.id} className="flex items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{l.nome}</p>
-                    <p className="text-xs text-muted-foreground">{l.origem}</p>
-                  </div>
-                  <Badge variant={TEMP_VARIANT[l.temperatura]}>{TEMP_LABEL[l.temperatura]}</Badge>
-                  <Badge variant={STATUS_VARIANT[l.status]} className="shrink-0">{STATUS_LABEL[l.status]}</Badge>
-                </li>
-              ))}
-            </ul>
+            {vendasVisiveis.length > 0 && (
+              <>
+                {temAmbos && <p className="mb-1 text-xs font-semibold text-primary">Vendas</p>}
+                <ul className="space-y-2">
+                  {vendasVisiveis.map((i) => (
+                    <li key={i.id} className="flex items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">{i.nome}</p>
+                        <p className="text-xs text-muted-foreground">{i.origem}</p>
+                      </div>
+                      <Badge variant={TEMP_VARIANT[i.temperatura]}>{TEMP_LABEL[i.temperatura]}</Badge>
+                      <StatusBadge item={i} />
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {locacaoVisiveis.length > 0 && (
+              <>
+                {temAmbos && <p className="mb-1 text-xs font-semibold text-primary">Locação</p>}
+                <ul className="space-y-2">
+                  {locacaoVisiveis.map((i) => (
+                    <li key={i.id} className="flex items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">{i.nome}</p>
+                        <p className="text-xs text-muted-foreground">{i.origem}</p>
+                      </div>
+                      <Badge variant={TEMP_VARIANT[i.temperatura]}>{TEMP_LABEL[i.temperatura]}</Badge>
+                      <StatusBadge item={i} />
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
             {ontemLeads.length > 6 && !showAll && (
               <button
                 onClick={() => setShowAll(true)}

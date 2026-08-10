@@ -4,39 +4,46 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AlertTriangle, CheckCircle2, Plus } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { isAdminRole, isMaster, ROLE_GROUPS, ROLE_LABEL } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { LeadForm, type LeadFormValues } from "@/components/lead-form"
 import { Button } from "@/components/ui/button"
 import { Badge, Card, CardHeader, CardTitle, Dialog, Input, Label, Select, Table, TD, TH, THead, TR, useToast } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
 import { brl, fmtDate, PROP_LABEL, PROP_VARIANT, ROLE_VARIANT, STATUS_LABEL, STATUS_VARIANT } from "@/lib/labels"
-import { PROPERTIES, USERS, type Lead, type Property, type PropertyStatus, type Role, type User } from "@/lib/mock-data"
+import { PROPERTIES, type Lead, type Property, type PropertyStatus, type Role } from "@/lib/mock-data"
 
 export default function AdminPage() {
   const { user } = useAuth()
   const router = useRouter()
   const toast = useToast()
-  const { leads, updateLead } = useLeads()
+  const { leads, users, updateLead, updateUser } = useLeads()
 
-  const [users, setUsers] = useState<User[]>(USERS)
   const [props, setProps] = useState<Property[]>(PROPERTIES)
   const [editingLead, setEditingLead] = useState<Lead | null>(null)
   const [propModal, setPropModal] = useState(false)
 
   useEffect(() => {
-    if (user && user.role !== "gestor") router.replace("/painel-corretor")
+    if (user && !isAdminRole(user.role)) router.replace("/painel-corretor")
   }, [user, router])
 
   const pendencias = useMemo(() => leads.filter((l) => !l.telefone || !l.imovelRef), [leads])
 
-  function toggleAtivo(id: string) {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ativo: !u.ativo } : u)))
+  async function toggleAtivo(id: string) {
     const u = users.find((x) => x.id === id)
-    toast(`Usuário ${u?.ativo ? "desativado" : "ativado"}: ${u?.nome}`)
+    if (!u) return
+    const res = await updateUser(id, { ativo: !u.ativo })
+    if (res.ok) toast(`Usuário ${u?.ativo ? "desativado" : "ativado"}: ${u?.nome}`)
+    else toast(res.error ?? "Não foi possível salvar.")
   }
-  function changeRole(id: string, role: Role) {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role } : u)))
-    toast("Permissões atualizadas.")
+  async function changeRole(id: string, role: Role) {
+    if (role === "gestor_master" && !isMaster(user?.role ?? "corretor")) {
+      toast("Apenas o Gestor Master pode atribuir esse perfil.")
+      return
+    }
+    const res = await updateUser(id, { role })
+    if (res.ok) toast("Permissões atualizadas.")
+    else toast(res.error ?? "Não foi possível salvar.")
   }
   async function corrigirLead(v: LeadFormValues) {
     const result = await updateLead(editingLead!.id, v)
@@ -50,7 +57,7 @@ export default function AdminPage() {
     toast("Imóvel cadastrado.")
   }
 
-  if (user && user.role !== "gestor") return null
+  if (user && !isAdminRole(user.role)) return null
 
   return (
     <div className="flex flex-col gap-8">
@@ -67,9 +74,23 @@ export default function AdminPage() {
                 <TD className="font-medium">{u.nome}</TD>
                 <TD className="text-muted-foreground">{u.email}</TD>
                 <TD>
-                  <Select value={u.role} onChange={(e) => changeRole(u.id, e.target.value as Role)} aria-label={`Permissão de ${u.nome}`} className="h-8 w-32">
-                    <option value="corretor">Corretor</option>
-                    <option value="gestor">Gestor</option>
+                  <Select
+                    value={u.role}
+                    disabled={u.role === "gestor_master" && !isMaster(user?.role ?? "corretor")}
+                    onChange={(e) => changeRole(u.id, e.target.value as Role)}
+                    aria-label={`Permissão de ${u.nome}`}
+                    className="h-8 w-48"
+                  >
+                    {ROLE_GROUPS.map((g) => ({
+                      ...g,
+                      roles: g.roles.filter((r) => isMaster(user?.role ?? "corretor") || r !== "gestor_master"),
+                    })).filter((g) => g.roles.length > 0).map((g) => (
+                      <optgroup key={g.label} label={g.label}>
+                        {g.roles.map((r) => (
+                          <option key={r} value={r}>{ROLE_LABEL[r]}</option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </Select>
                 </TD>
                 <TD><Badge variant={u.ativo ? "green" : "gray"}>{u.ativo ? "Ativo" : "Inativo"}</Badge></TD>

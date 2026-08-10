@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { WhatsappConnectionCard } from "@/components/whatsapp-connection-card"
 import { PageHeading } from "@/components/ui/page-heading"
@@ -11,7 +12,7 @@ export default function WhatsappConfigPage() {
   const { user } = useAuth()
   const { corretores } = useLeads()
   const router = useRouter()
-  const isGestor = user?.role === "gestor"
+  const isGestor = isGestorNivel(user?.role ?? "corretor")
 
   useEffect(() => {
     if (user && !isGestor) router.replace("/painel-corretor")

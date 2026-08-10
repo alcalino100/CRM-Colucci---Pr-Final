@@ -1,7 +1,8 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
-import { type Interaction, type Notification, type Role, type User } from "./mock-data"
+import { type Interaction, type Modulo, type Notification, type Role, type User } from "./mock-data"
+import { isCorretorDe, isGestorNivel, modulosRole } from "./roles"
 import type { LocacaoLead, LocacaoVisit } from "./locacao-labels"
 import { supabase } from "./supabase/client"
 import { useAuth } from "./auth-context"
@@ -10,6 +11,7 @@ import { normalizeLocacaoStatus } from "./locacao-labels"
 
 interface NotifyOpts {
   tipo?: string
+  modulo?: Modulo | null
   paraRole?: Role | null
   paraUsuarioId?: string | null
   leadId?: string | null
@@ -146,6 +148,7 @@ function rowToNotification(r: any, userId: string): Notification {
     timestamp: r.timestamp ?? r.criado_em,
     read: lidaPor.includes(userId) || r.lida === true,
     tipo: r.tipo ?? "geral",
+    modulo: r.modulo ?? null,
     paraRole: r.para_role ?? null,
     paraUsuarioId: r.para_usuario_id ?? null,
     leadId: r.lead_id ?? null,
@@ -179,13 +182,21 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
   const loadNotifications = useCallback(async () => {
     if (!userId) return
     let q = supabase.from("notificacoes").select("*").order("timestamp", { ascending: false }).limit(100)
-    if (userRole === "gestor") {
+    if (isGestorNivel(userRole)) {
       q = q.or(`para_role.eq.gestor,para_role.is.null,para_usuario_id.eq.${userId}`)
     } else {
       q = q.or(`para_usuario_id.eq.${userId},and(para_role.eq.corretor,para_usuario_id.is.null),and(para_role.is.null,para_usuario_id.is.null)`)
     }
     const { data } = await q
-    if (data) setNotifications(data.map((r) => rowToNotification(r, userId)))
+    if (data) {
+      // Compartimentação por módulo: só aparecem notificações do módulo do usuário
+      const mods = modulosRole(userRole)
+      setNotifications(
+        data
+          .map((r) => rowToNotification(r, userId))
+          .filter((n) => !n.modulo || mods.includes(n.modulo)),
+      )
+    }
   }, [userId, userRole])
 
   useEffect(() => {
@@ -206,7 +217,7 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
   }, [loadLeads, loadVisits, loadUsers, loadNotifications])
 
   const userName = (id: string) => users.find((u) => u.id === id)?.nome ?? "—"
-  const corretores = users.filter((u) => u.role === "corretor")
+  const corretores = users.filter((u) => isCorretorDe(u.role, "locacao"))
 
   // ---------- Auditoria (compartilhada com vendas, tipo prefixado) ----------
   const logAudit: Store["logAudit"] = (e) => {
@@ -235,6 +246,7 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
     void supabase.from("notificacoes").insert({
       mensagem: texto,
       tipo: opts?.tipo ?? "geral",
+      modulo: opts?.modulo ?? "locacao",
       usuario_id: userId ?? null,
       para_role: opts?.paraRole ?? null,
       para_usuario_id: opts?.paraUsuarioId ?? null,
@@ -315,7 +327,7 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
   }
 
   const deleteLead: Store["deleteLead"] = async (id, motivo, motivoDetalhe) => {
-    if (user?.role !== "gestor") return { ok: false, error: "Apenas gestores podem excluir leads." }
+    if (!isGestorNivel(user?.role ?? "corretor")) return { ok: false, error: "Apenas gestores podem excluir leads." }
     const motivoTrim = (motivo ?? "").trim()
     const detalheTrim = (motivoDetalhe ?? "").trim()
     if (!motivoTrim) return { ok: false, error: "Selecione o motivo da exclusão." }

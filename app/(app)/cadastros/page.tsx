@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { UserPlus, CalendarRange, Activity, CheckCircle2, TrendingUp, TrendingDown } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
 import { LEAD_STATUSES, refsTexto, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/labels"
@@ -160,7 +161,7 @@ export default function CadastrosPage() {
       .sort((a, b) => b.total - a.total)
   }, [filtrados])
 
-  if (!user || user.role !== "gestor") {
+  if (!user || !isGestorNivel(user.role) || !podeVendas(user.role)) {
     return <p className="py-16 text-center text-muted-foreground">Acesso restrito aos gestores.</p>
   }
 

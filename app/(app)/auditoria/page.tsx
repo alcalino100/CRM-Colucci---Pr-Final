@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { AlertTriangle, ChevronDown, ChevronRight, SearchX } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Input, Select, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
@@ -56,7 +57,8 @@ export default function AuditoriaPage() {
     return () => clearTimeout(t)
   }, [])
 
-  const isGestor = user?.role === "gestor"
+  if (user && !podeVendas(user.role)) return null
+  const isGestor = isGestorNivel(user?.role ?? "corretor")
 
   const filtered = useMemo(() => {
     return leads.filter((l) => {

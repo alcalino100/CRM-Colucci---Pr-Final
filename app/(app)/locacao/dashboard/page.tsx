@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import { Users, CalendarCheck, TrendingUp, CircleDollarSign, Target } from "lucide-react"
 import { useLocacao } from "@/lib/locacao-store"
+import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel, podeLocacao } from "@/lib/roles"
 import { usePresenca } from "@/lib/presence"
 import { OnlineDot } from "@/components/online-dot"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from "@/components/ui/primitives"
@@ -78,6 +80,8 @@ function rangePeriodo(p: Periodo): { start: string; end: string } | null {
 export default function LocacaoDashboardPage() {
   const { leads, visits, corretores, userName } = useLocacao()
   const { online, usoHoje } = usePresenca()
+  const { user } = useAuth()
+  if (!user || !isGestorNivel(user.role) || !podeLocacao(user.role)) return <p className="py-16 text-center text-muted-foreground">Acesso restrito aos gestores de locação.</p>
   const [loading, setLoading] = useState(true)
   const [subAba, setSubAba] = useState<"andamento" | "locadas">("andamento")
   const [periodo, setPeriodo] = useState<Periodo>("mes_atual")
