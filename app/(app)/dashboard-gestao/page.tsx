@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react"
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import { Users, CalendarCheck, TrendingUp, CircleDollarSign, Target } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
+import { usePresenca } from "@/lib/presence"
+import { OnlineDot } from "@/components/online-dot"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
 import { KanbanBoard } from "@/components/kanban-board"
-import { brl, fmtDate, STATUS_ACCENT, STATUS_LABEL, STATUS_VARIANT } from "@/lib/labels"
+import { brl, fmtDate, fmtDuracao, STATUS_ACCENT, STATUS_LABEL, STATUS_VARIANT } from "@/lib/labels"
 import { ORIGENS, type LeadStatus, type Origem } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
@@ -75,6 +77,7 @@ function rangePeriodo(p: Periodo): { start: string; end: string } | null {
 
 export default function DashboardGestaoPage() {
   const { leads, visits, corretores, userName } = useLeads()
+  const { online, usoHoje } = usePresenca()
   const [loading, setLoading] = useState(true)
   const [subAba, setSubAba] = useState<"andamento" | "fechadas">("andamento")
   const [periodo, setPeriodo] = useState<Periodo>("mes_atual")
@@ -199,6 +202,7 @@ export default function DashboardGestaoPage() {
           const lista = leadsFiltrados.filter((l) => l.corretorId === c.id)
           const fechados = lista.filter((l) => l.status === "fechado")
           return {
+            id: c.id,
             nome: c.nome.split(" ")[0],
             total: lista.length,
             fechados: fechados.length,
@@ -384,6 +388,8 @@ export default function DashboardGestaoPage() {
                   <thead className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-2 py-2 font-medium">Corretor</th>
+                      <th className="px-2 py-2 font-medium">Status</th>
+                      <th className="px-2 py-2 text-right font-medium">Uso hoje</th>
                       <th className="px-2 py-2 text-right font-medium">Leads</th>
                       <th className="px-2 py-2 text-right font-medium">Fechados</th>
                       <th className="px-2 py-2 text-right font-medium">Conv.</th>
@@ -394,6 +400,8 @@ export default function DashboardGestaoPage() {
                     {performance.map((p) => (
                       <tr key={p.nome} className="border-b border-border/60 last:border-0">
                         <td className="px-2 py-2.5 font-medium">{p.nome}</td>
+                        <td className="px-2 py-2.5"><OnlineDot online={!!online[p.id]} showLabel /></td>
+                        <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{fmtDuracao(usoHoje[p.id])}</td>
                         <td className="px-2 py-2.5 text-right tabular-nums">{p.total}</td>
                         <td className="px-2 py-2.5 text-right tabular-nums text-emerald-600">{p.fechados}</td>
                         <td className="px-2 py-2.5 text-right tabular-nums">{p.conversao}%</td>

@@ -151,3 +151,10 @@ export function fmtDayLabel(ymd: string) {
   const [y, m, d] = ymd.split("-").map(Number)
   return new Date(y, m - 1, d).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })
 }
+export function fmtDuracao(seg?: number) {
+  if (!seg || seg < 60) return "—"
+  const h = Math.floor(seg / 3600)
+  const m = Math.round((seg % 3600) / 60)
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}min`
+  return `${m}min`
+}

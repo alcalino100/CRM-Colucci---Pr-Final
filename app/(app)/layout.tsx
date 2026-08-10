@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { ToastProvider } from "@/components/ui/primitives"
 import { LeadsProvider, useLeads } from "@/lib/leads-store"
+import { PresenceProvider } from "@/lib/presence"
 import { ColucciLogo } from "@/components/colucci-logo"
 import { NotificationBell } from "@/components/notification-bell"
 import { DailySummary } from "@/components/daily-summary"
@@ -98,6 +99,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <ToastProvider>
       <SaleCelebrationProvider>
       <LeadsProvider>
+      <PresenceProvider>
       <DailySummary />
       <div className="flex min-h-screen bg-background">
         {/* Sidebar desktop */}
@@ -144,6 +146,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
+      </PresenceProvider>
       </LeadsProvider>
       </SaleCelebrationProvider>
     </ToastProvider>
