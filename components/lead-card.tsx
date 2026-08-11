@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, Camera, Users, Megaphone, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send, Archive, ArchiveRestore } from "lucide-react"
+import { AlertTriangle, Camera, Users, Megaphone, Store, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send, Archive, ArchiveRestore } from "lucide-react"
 import { Badge } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
 import { usePresenca } from "@/lib/presence"
@@ -15,6 +15,7 @@ const ORIGEM_ICON: Record<Origem, any> = {
   Indicação: Users,
   "Tráfego Pago": Megaphone,
   WhatsApp: MessageCircle,
+  Marketplace: Store,
   Outro: Circle,
 }
 

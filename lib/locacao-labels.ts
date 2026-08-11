@@ -168,6 +168,7 @@ export const ORIGEM_VARIANT: Record<Origem, string> = {
   Indicação: "teal",
   "Tráfego Pago": "blue",
   WhatsApp: "green",
+  Marketplace: "purple",
   Outro: "gray",
 }
 

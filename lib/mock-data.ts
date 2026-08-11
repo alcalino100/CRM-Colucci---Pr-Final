@@ -17,7 +17,7 @@ export type LeadStatus =
   | "imovel necessidade"
   | "permuta"
   | "perdido"
-export type Origem = "Instagram" | "Indicação" | "Tráfego Pago" | "WhatsApp" | "Outro"
+export type Origem = "Instagram" | "Indicação" | "Tráfego Pago" | "WhatsApp" | "Marketplace" | "Outro"
 export type Temperatura = "quente" | "morno" | "frio"
 export type AuditTipo =
   | "criacao"
@@ -211,7 +211,7 @@ export const LEADS: Lead[] = []
 
 export const VISITS: Visit[] = []
 
-export const ORIGENS: Origem[] = ["Instagram", "Indicação", "Tráfego Pago", "WhatsApp", "Outro"]
+export const ORIGENS: Origem[] = ["Instagram", "Indicação", "Tráfego Pago", "WhatsApp", "Marketplace", "Outro"]
 
 export function userName(id: string) {
   return USERS.find((u) => u.id === id)?.nome ?? "—"
