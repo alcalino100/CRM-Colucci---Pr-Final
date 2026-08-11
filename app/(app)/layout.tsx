@@ -91,6 +91,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isModuleGestor) {
     if (podeVendas(user.role)) items.push(ACESSOS_LINK)
     if (podeLocacao(user.role)) itemsLocacao.push(ACESSOS_LINK)
+  } else if (isAdminRole(user.role)) {
+    // Admin legado e master gerenciam toda a equipe pela seção Administração
+    items2.push(ACESSOS_LINK)
   }
   const initials = user.nome.split(" ").map((n) => n[0]).slice(0, 2).join("")
 
