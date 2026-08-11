@@ -91,21 +91,6 @@ export default function LocacaoDashboardPage() {
     return () => clearTimeout(t)
   }, [])
 
-  const kpis = useMemo(() => {
-    const naoArquivados = leads.filter((l) => !l.arquivadoEm)
-    const ativos = naoArquivados.filter((l) => !["locado", "perdido"].includes(l.status)).length
-    const weekStart = new Date(); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - weekStart.getDay())
-    const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7)
-    const visitasSemana = visits.filter((v) => {
-      const d = new Date(v.data + "T00:00:00")
-      return d >= weekStart && d < weekEnd
-    }).length
-    const emProposta = naoArquivados.filter((l) => l.status === "negociando")
-    const valorPropostas = emProposta.reduce((s, l) => s + (l.valorAluguel ?? 0), 0)
-    const valorFechado = naoArquivados.filter((l) => l.status === "locado").reduce((s, l) => s + (l.valorAluguel ?? 0), 0)
-    return { ativos, visitasSemana, valorPropostas, valorFechado }
-  }, [leads, visits])
-
   // Filtro de período aplicado aos gráficos (tendência, funil, performance, distribuições)
   const periodoRange = rangePeriodo(periodo)
   const periodoLabel = PERIODOS.find((p) => p.key === periodo)?.label ?? ""
@@ -117,6 +102,32 @@ export default function LocacaoDashboardPage() {
       return k >= periodoRange.start && k <= periodoRange.end
     })
   }, [leads, periodoRange])
+
+  // Locados no período pela DATA DE FECHAMENTO (locadoEm ?? atualizadoEm) — mesmo critério da
+  // página de Contratos. Assim o total e o valor por corretor batem com a locação real.
+  const locadosNoPeriodo = useMemo(() => {
+    const locados = leads.filter((l) => l.status === "locado")
+    if (!periodoRange) return locados
+    return locados.filter((l) => {
+      const k = (l.locadoEm ?? l.atualizadoEm ?? "").slice(0, 10)
+      return k >= periodoRange.start && k <= periodoRange.end
+    })
+  }, [leads, periodoRange])
+
+  const kpis = useMemo(() => {
+    const naoArquivados = leads.filter((l) => !l.arquivadoEm)
+    const ativos = naoArquivados.filter((l) => !["locado", "perdido"].includes(l.status)).length
+    const weekStart = new Date(); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - weekStart.getDay())
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7)
+    const visitasSemana = visits.filter((v) => {
+      const d = new Date(v.data + "T00:00:00")
+      return d >= weekStart && d < weekEnd
+    }).length
+    const emProposta = naoArquivados.filter((l) => l.status === "negociando")
+    const valorPropostas = emProposta.reduce((s, l) => s + (l.valorAluguel ?? 0), 0)
+    const valorFechado = locadosNoPeriodo.reduce((s, l) => s + (l.valorAluguel ?? 0), 0)
+    return { ativos, visitasSemana, valorPropostas, valorFechado }
+  }, [leads, visits, locadosNoPeriodo])
 
   const leadsPorCorretor = useMemo(
     () => corretores.map((c) => ({ nome: c.nome.split(" ")[0], total: leadsFiltrados.filter((l) => l.corretorId === c.id).length })),
@@ -198,23 +209,22 @@ export default function LocacaoDashboardPage() {
     })
   }, [leadsFiltrados])
 
-  // Item 5 — Performance por corretor (leads, fechados, conversão, valor)
+  // Item 5 — Performance por corretor (leads, locados, conversão, valor)
   const performance = useMemo(
     () =>
-      corretores
-        .map((c) => {
-          const lista = leadsFiltrados.filter((l) => l.corretorId === c.id)
-          const locados = lista.filter((l) => l.status === "locado")
-          return {
-            id: c.id,
-            nome: c.nome.split(" ")[0],
-            total: lista.length,
-            locados: locados.length,
-            conversao: lista.length ? Math.round((locados.length / lista.length) * 100) : 0,
-            valor: locados.reduce((s, l) => s + (l.valorAluguel ?? 0), 0),
-          }
-        }),
-    [leadsFiltrados, corretores],
+      corretores.map((c) => {
+        const lista = leadsFiltrados.filter((l) => l.corretorId === c.id)
+        const locados = locadosNoPeriodo.filter((l) => l.corretorId === c.id)
+        return {
+          id: c.id,
+          nome: c.nome.split(" ")[0],
+          total: lista.length,
+          locados: locados.length,
+          conversao: lista.length ? Math.round((locados.length / lista.length) * 100) : 0,
+          valor: locados.reduce((s, l) => s + (l.valorAluguel ?? 0), 0),
+        }
+      }),
+    [leadsFiltrados, locadosNoPeriodo, corretores],
   )
 
   const propostasAndamento = leads.filter((l) => !l.arquivadoEm && l.status === "negociando")

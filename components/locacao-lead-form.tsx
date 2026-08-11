@@ -9,7 +9,6 @@ import { useLocacao } from "@/lib/locacao-store"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
 import {
-  BAIRROS_LOCACAO,
   GARANTIAS_LOCACAO,
   LOCACAO_STATUS_LABEL,
   LOCACAO_STATUSES,
@@ -84,6 +83,7 @@ export function LocacaoLeadForm({
     corretorId: initial?.corretorId ?? defaultCorretorId,
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [bairrosText, setBairrosText] = useState((initial?.bairrosDesejados ?? []).join(", "))
   const { corretores, checkPhoneDuplicate, userName } = useLocacao()
   const { user } = useAuth()
   const isGestor = isGestorNivel(user?.role ?? "corretor")
@@ -100,11 +100,6 @@ export function LocacaoLeadForm({
     return dup
   }
 
-  function toggleBairro(bairro: string) {
-    const has = v.bairrosDesejados.includes(bairro)
-    set("bairrosDesejados", has ? v.bairrosDesejados.filter((b) => b !== bairro) : [...v.bairrosDesejados, bairro])
-  }
-
   function submit(e: React.FormEvent) {
     e.preventDefault()
     const result = schema.safeParse(v)
@@ -115,7 +110,8 @@ export function LocacaoLeadForm({
     if (showValor && (!v.valorAluguel || v.valorAluguel <= 0)) errs.valorAluguel = "Informe o valor do aluguel."
     setErrors(errs)
     if (Object.values(errs).some(Boolean)) return
-    onSubmit({ ...v, valorAluguel: showValor ? v.valorAluguel : undefined })
+    const bairros = bairrosText.split(/[,;\n]/).map((b) => b.trim()).filter(Boolean)
+    onSubmit({ ...v, bairrosDesejados: bairros, valorAluguel: showValor ? v.valorAluguel : undefined })
   }
 
   const err = (k: string) => errors[k] && <span className="text-xs text-destructive">{errors[k]}</span>
@@ -226,24 +222,8 @@ export function LocacaoLeadForm({
           </Select>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <Label>Bairros de interesse</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {BAIRROS_LOCACAO.map((b) => (
-              <button
-                type="button"
-                key={b}
-                onClick={() => toggleBairro(b)}
-                className={cn(
-                  "rounded-full border px-2.5 py-1 text-xs font-medium transition",
-                  v.bairrosDesejados.includes(b)
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-muted text-muted-foreground hover:border-primary/40",
-                )}
-              >
-                {b}
-              </button>
-            ))}
-          </div>
+          <Label htmlFor="bairros">Bairros de interesse</Label>
+          <Input id="bairros" value={bairrosText} onChange={(e) => setBairrosText(e.target.value)} aria-label="Bairros de interesse" placeholder="Ex: Centro, Jardim América" />
         </div>
         {showValor && (
           <div className="flex flex-col gap-1">

@@ -91,6 +91,30 @@ export default function DashboardGestaoPage() {
     return () => clearTimeout(t)
   }, [])
 
+  // Filtro de período aplicado aos gráficos (tendência, funil, performance, distribuições)
+  const periodoRange = rangePeriodo(periodo)
+  const periodoLabel = PERIODOS.find((p) => p.key === periodo)?.label ?? ""
+
+  const leadsFiltrados = useMemo(() => {
+    const naoArquivados = leads.filter((l) => !l.arquivadoEm)
+    if (!periodoRange) return naoArquivados
+    return naoArquivados.filter((l) => {
+      const k = (l.criadoEm ?? "").slice(0, 10)
+      return k >= periodoRange.start && k <= periodoRange.end
+    })
+  }, [leads, periodoRange])
+
+  // Fechamentos do período pela DATA DE FECHAMENTO (fechadoEm ?? atualizadoEm) — mesmo critério
+  // da página Fechamentos. Assim o total e o valor por corretor batem com o fechamento real.
+  const fechadosNoPeriodo = useMemo(() => {
+    const fechados = leads.filter((l) => l.status === "fechado")
+    if (!periodoRange) return fechados
+    return fechados.filter((l) => {
+      const k = (l.fechadoEm ?? l.atualizadoEm ?? "").slice(0, 10)
+      return k >= periodoRange.start && k <= periodoRange.end
+    })
+  }, [leads, periodoRange])
+
   const kpis = useMemo(() => {
     const naoArquivados = leads.filter((l) => !l.arquivadoEm)
     const ativos = naoArquivados.filter((l) => !["fechado", "perdido"].includes(l.status)).length
@@ -102,21 +126,9 @@ export default function DashboardGestaoPage() {
     }).length
     const emProposta = naoArquivados.filter((l) => l.status === "negociando")
     const valorPropostas = emProposta.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
-    const valorFechado = naoArquivados.filter((l) => l.status === "fechado").reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
+    const valorFechado = fechadosNoPeriodo.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
     return { ativos, visitasSemana, valorPropostas, valorFechado }
-  }, [leads, visits])
-
-  // Filtro de período aplicado aos gráficos (tendência, funil, performance, distribuições)
-  const periodoRange = rangePeriodo(periodo)
-  const periodoLabel = PERIODOS.find((p) => p.key === periodo)?.label ?? ""
-  const leadsFiltrados = useMemo(() => {
-    const naoArquivados = leads.filter((l) => !l.arquivadoEm)
-    if (!periodoRange) return naoArquivados
-    return naoArquivados.filter((l) => {
-      const k = (l.criadoEm ?? "").slice(0, 10)
-      return k >= periodoRange.start && k <= periodoRange.end
-    })
-  }, [leads, periodoRange])
+  }, [leads, visits, fechadosNoPeriodo])
 
   const leadsPorCorretor = useMemo(
     () => corretores.map((c) => ({ nome: c.nome.split(" ")[0], total: leadsFiltrados.filter((l) => l.corretorId === c.id).length })),
@@ -204,7 +216,7 @@ export default function DashboardGestaoPage() {
       corretores
         .map((c) => {
           const lista = leadsFiltrados.filter((l) => l.corretorId === c.id)
-          const fechados = lista.filter((l) => l.status === "fechado")
+          const fechados = fechadosNoPeriodo.filter((l) => l.corretorId === c.id)
           return {
             id: c.id,
             nome: c.nome.split(" ")[0],
@@ -214,8 +226,8 @@ export default function DashboardGestaoPage() {
             valor: fechados.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0),
           }
         })
-        .filter((r) => r.total > 0),
-    [leadsFiltrados, corretores],
+        .filter((r) => r.total > 0 || r.fechados > 0),
+    [leadsFiltrados, fechadosNoPeriodo, corretores],
   )
 
   const propostasAndamento = leads.filter((l) => !l.arquivadoEm && l.status === "negociando")
