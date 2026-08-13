@@ -42,7 +42,7 @@ export interface LocacaoLeadFormValues {
 const schema = z.object({
   nome: z.string().trim().min(1, "Informe o nome do lead."),
   telefone: z.string().trim().min(1, "Informe o telefone."),
-  origem: z.enum(["Instagram", "Indicação", "Tráfego Pago", "WhatsApp", "Outro"]),
+  origem: z.enum(["Instagram", "Indicação", "Tráfego Pago", "WhatsApp", "Marketplace", "Outro"]),
   email: z.string().email("E-mail inválido.").or(z.literal("")),
 })
 
