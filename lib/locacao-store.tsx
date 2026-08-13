@@ -44,6 +44,8 @@ interface Store {
   getLead: (id: string) => LocacaoLead | undefined
   assumirLead: (leadId: string) => Promise<{ ok: boolean; error?: string }>
   addVisit: (v: Omit<LocacaoVisit, "id">) => void
+  updateVisit: (id: string, patch: Partial<Pick<LocacaoVisit, "data" | "hora" | "referencias" | "observacoes">>) => Promise<{ ok: boolean; error?: string }>
+  removeVisit: (id: string) => Promise<{ ok: boolean; error?: string }>
   notify: (texto: string, opts?: NotifyOpts) => void
   markNotificationsRead: () => void
   logAudit: (e: AuditInput) => void
@@ -380,15 +382,47 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
     await loadVisits()
   }
 
+  const updateVisit: Store["updateVisit"] = async (id, patch) => {
+    const visita = visits.find((v) => v.id === id)
+    const row: Record<string, unknown> = {}
+    if (patch.data !== undefined) row.data = patch.data
+    if (patch.hora !== undefined) row.horario = patch.hora
+    if (patch.referencias !== undefined) row.referencias = patch.referencias
+    if (patch.observacoes !== undefined) row.observacoes = patch.observacoes
+    const { error } = await supabase.from("locacao_visitas").update(row).eq("id", id)
+    if (error) return { ok: false, error: error.message }
+    if (visita) {
+      const lead = leads.find((l) => l.id === visita.leadId)
+      const dataFmt = (patch.data ?? visita.data).split("-").reverse().join("/")
+      logAudit({ leadId: visita.leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? userName(visita.corretorId), tipo: "locacao_visita", descricao: `Visita de locação reagendada para ${dataFmt} às ${patch.hora ?? visita.hora}`, referencias: patch.referencias ?? visita.referencias })
+    }
+    await loadVisits()
+    return { ok: true }
+  }
+
+  const removeVisit: Store["removeVisit"] = async (id) => {
+    const visita = visits.find((v) => v.id === id)
+    const { error } = await supabase.from("locacao_visitas").delete().eq("id", id)
+    if (error) return { ok: false, error: error.message }
+    if (visita) {
+      const lead = leads.find((l) => l.id === visita.leadId)
+      const dataFmt = visita.data.split("-").reverse().join("/")
+      logAudit({ leadId: visita.leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? userName(visita.corretorId), tipo: "locacao_visita", descricao: `Visita de locação de ${dataFmt} às ${visita.hora} cancelada; lead retornou para em atendimento`, referencias: visita.referencias })
+      await updateLead(visita.leadId, { status: "em_atendimento" })
+    }
+    await loadVisits()
+    return { ok: true }
+  }
+
   const value = useMemo(
     () => ({
       leads, visits, notifications, users, ready, corretores, userName,
       checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead, assumirLead,
-      addVisit, notify, markNotificationsRead, logAudit, logChange,
+      addVisit, updateVisit, removeVisit, notify, markNotificationsRead, logAudit, logChange,
     }),
     [leads, visits, notifications, users, ready, corretores, userName,
       checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead, assumirLead,
-      addVisit, notify, markNotificationsRead, logAudit, logChange],
+      addVisit, updateVisit, removeVisit, notify, markNotificationsRead, logAudit, logChange],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

@@ -66,6 +66,8 @@ interface Store {
   getLead: (id: string) => Lead | undefined
   assumirLead: (leadId: string) => Promise<{ ok: boolean; error?: string }>
   addVisit: (v: Omit<Visit, "id">) => void
+  updateVisit: (id: string, patch: Partial<Pick<Visit, "data" | "hora" | "referencias" | "observacoes">>) => Promise<{ ok: boolean; error?: string }>
+  removeVisit: (id: string) => Promise<{ ok: boolean; error?: string }>
   notify: (texto: string, opts?: NotifyOpts) => void
   sendAdminNotification: (input: { mensagem: string; modulo?: Modulo | null; paraRole?: Role | null; paraUsuarioId?: string | null }) => Promise<{ ok: boolean; error?: string }>
   markNotificationsRead: () => void
@@ -552,6 +554,38 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     await loadVisits()
   }
 
+  const updateVisit: Store["updateVisit"] = async (id, patch) => {
+    const visita = visits.find((v) => v.id === id)
+    const row: Record<string, unknown> = {}
+    if (patch.data !== undefined) row.data = patch.data
+    if (patch.hora !== undefined) row.horario = patch.hora
+    if (patch.referencias !== undefined) row.referencias = patch.referencias
+    if (patch.observacoes !== undefined) row.observacoes = patch.observacoes
+    const { error } = await supabase.from("visitas").update(row).eq("id", id)
+    if (error) return { ok: false, error: error.message }
+    if (visita) {
+      const lead = leads.find((l) => l.id === visita.leadId)
+      const dataFmt = (patch.data ?? visita.data).split("-").reverse().join("/")
+      logAudit({ leadId: visita.leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? userName(visita.corretorId), tipo: "visita", descricao: `Visita reagendada para ${dataFmt} às ${patch.hora ?? visita.hora}`, referencias: patch.referencias ?? visita.referencias })
+    }
+    await loadVisits()
+    return { ok: true }
+  }
+
+  const removeVisit: Store["removeVisit"] = async (id) => {
+    const visita = visits.find((v) => v.id === id)
+    const { error } = await supabase.from("visitas").delete().eq("id", id)
+    if (error) return { ok: false, error: error.message }
+    if (visita) {
+      const lead = leads.find((l) => l.id === visita.leadId)
+      const dataFmt = visita.data.split("-").reverse().join("/")
+      logAudit({ leadId: visita.leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? userName(visita.corretorId), tipo: "visita", descricao: `Visita de ${dataFmt} às ${visita.hora} cancelada; lead retornou para em atendimento`, referencias: visita.referencias })
+      await updateLead(visita.leadId, { status: "em_atendimento" })
+    }
+    await loadVisits()
+    return { ok: true }
+  }
+
   const addJustification: Store["addJustification"] = async (leadId, motivo, observacao) => {
     const lead = leads.find((item) => item.id === leadId)
     if (!lead || !user || (!isGestorNivel(user.role) && lead.corretorId !== user.id)) return { ok: false, error: "Você não tem permissão para justificar este lead." }
@@ -637,7 +671,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       value={{
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, ready, corretores, userName,
         checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead, assumirLead,
-        addVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addUser, updateUser, updateProfile,
+        addVisit, updateVisit, removeVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addUser, updateUser, updateProfile,
       }}
     >
       {children}

@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { ChevronLeft, ChevronRight, Plus, Clock, User, Building, ArrowRight, CalendarDays } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Clock, User, Building, ArrowRight, CalendarDays, Pencil, Trash2 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
+import type { Visit } from "@/lib/mock-data"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
@@ -20,13 +21,15 @@ function ymd(y: number, m: number, d: number) {
 
 export default function AgendaPage() {
   const { user } = useAuth()
-  const { leads, visits, addVisit, updateLead, addInteraction, corretores, userName } = useLeads()
+  const { leads, visits, addVisit, updateVisit, removeVisit, updateLead, addInteraction, corretores, userName } = useLeads()
   const toast = useToast()
   const today = new Date()
   const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() })
   const [selected, setSelected] = useState(ymd(today.getFullYear(), today.getMonth(), today.getDate()))
   const [filterCorretor, setFilterCorretor] = useState("todos")
   const [novo, setNovo] = useState(false)
+  const [editing, setEditing] = useState<Visit | null>(null)
+  const [delVisit, setDelVisit] = useState<Visit | null>(null)
 
   if (user && !podeVendas(user.role)) return null
   const isGestor = isGestorNivel(user?.role ?? "corretor")
@@ -89,6 +92,36 @@ export default function AgendaPage() {
     toast("Visita agendada. Status do lead atualizado.")
     setSelected(data)
     setNovo(false)
+  }
+
+  function openEditar(v: Visit) {
+    setEditing(v)
+    setData(v.data)
+    setHora(v.hora)
+    setRefs(v.referencias ?? v.imovelRef ?? "")
+    setObs(v.observacoes ?? "")
+  }
+
+  function confirmEditar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editing) return
+    if (!refs.trim()) {
+      toast("Informe a(s) referência(s) do imóvel da visita.", "error")
+      return
+    }
+    updateVisit(editing.id, { data, hora, referencias: refs.trim(), observacoes: obs })
+    addInteraction(editing.leadId, { corretor: userName(editing.corretorId), texto: `Visita reagendada para ${data.split("-").reverse().join("/")} às ${hora}.` })
+    toast("Visita atualizada.")
+    setSelected(data)
+    setEditing(null)
+  }
+
+  function confirmDelete() {
+    if (!delVisit) return
+    removeVisit(delVisit.id)
+    addInteraction(delVisit.leadId, { corretor: userName(delVisit.corretorId), texto: `Visita de ${delVisit.data.split("-").reverse().join("/")} às ${delVisit.hora} cancelada.` })
+    toast("Visita excluída.")
+    setDelVisit(null)
   }
 
   return (
@@ -171,6 +204,10 @@ export default function AgendaPage() {
                         <span className="flex items-center gap-1.5"><User className="size-3.5" />{userName(v.corretorId)}</span>
                       </div>
                       {v.observacoes && <p className="mt-1.5 text-xs text-muted-foreground">{v.observacoes}</p>}
+                      <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => openEditar(v)}><Pencil className="size-3.5" /> Reagendar</Button>
+                        <Button type="button" variant="destructive" size="sm" onClick={() => setDelVisit(v)}><Trash2 className="size-3.5" /> Excluir</Button>
+                      </div>
                     </div>
                   )
                 })}
@@ -220,6 +257,50 @@ export default function AgendaPage() {
             <Button type="submit">Agendar</Button>
           </div>
         </form>
+      </Dialog>
+
+      <Dialog open={!!editing} onClose={() => setEditing(null)} title="Reagendar Visita">
+        <form onSubmit={confirmEditar} className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            {leads.find((l) => l.id === editing?.leadId)?.nome ?? "Lead"} · {editing ? refsTexto(leads.find((l) => l.id === editing.leadId)!) : ""}
+          </p>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="er">Referência(s) do imóvel *</Label>
+            <Input id="er" value={refs} onChange={(e) => setRefs(e.target.value)} placeholder="Ex: AP-1006, CA-2005" required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="ed">Data *</Label>
+              <Input id="ed" type="date" value={data} onChange={(e) => setData(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="eh">Horário *</Label>
+              <Input id="eh" type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="eo">Observações</Label>
+            <Textarea id="eo" value={obs} onChange={(e) => setObs(e.target.value)} />
+          </div>
+          <div className="mt-1 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
+            <Button type="submit">Salvar</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={!!delVisit} onClose={() => setDelVisit(null)} title="Excluir Visita">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            Deseja realmente excluir a visita de{" "}
+            <span className="font-medium text-foreground">{leads.find((l) => l.id === delVisit?.leadId)?.nome ?? "Lead"}</span>{" "}
+            em {delVisit ? `${delVisit.data.split("-").reverse().join("/")} às ${delVisit.hora}` : ""}?
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setDelVisit(null)}>Cancelar</Button>
+            <Button type="button" variant="destructive" onClick={confirmDelete}><Trash2 className="size-4" /> Excluir</Button>
+          </div>
+        </div>
       </Dialog>
     </div>
   )
