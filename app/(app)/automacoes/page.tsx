@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Zap, MessageCircle, Users, CheckCircle2, XCircle, Clock, Eye, BarChart3, ArrowRight, AlertTriangle, Shield } from "lucide-react"
+import { Zap, MessageCircle, Users, CheckCircle2, XCircle, Clock, Eye, BarChart3, ArrowRight, AlertTriangle, Shield, Play } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent, Badge, Skeleton } from "@/components/ui/primitives"
 import { useAutomation, type DashboardMetrics } from "@/lib/automation-store"
 import { useLeads } from "@/lib/leads-store"
@@ -17,6 +17,8 @@ export default function AutomacoesPage() {
   const { users, leads } = useLeads()
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
+  const [workerRunning, setWorkerRunning] = useState(false)
+  const [workerResult, setWorkerResult] = useState<string | null>(null)
 
   useEffect(() => {
     if (!storeReady) return
@@ -31,6 +33,24 @@ export default function AutomacoesPage() {
 
   function userName(id: string) { return users.find((u) => u.id === id)?.nome ?? "—" }
   function leadName(id: string) { return leads.find((l) => l.id === id)?.nome ?? "—" }
+
+  async function runWorker() {
+    setWorkerRunning(true)
+    setWorkerResult(null)
+    try {
+      const res = await fetch("/api/automation/worker", { method: "POST" })
+      const data = await res.json()
+      if (data.ok) {
+        const r = data.results
+        setWorkerResult(`✓ Avaliados: ${r.evaluated} | Jobs criados: ${r.created} | Processados: ${r.processed} | Enviados: ${r.sent} | Cancelados: ${r.cancelled} | Falhas: ${r.failed}`)
+      } else {
+        setWorkerResult(`✗ Erro: ${data.error}`)
+      }
+    } catch {
+      setWorkerResult("✗ Falha de conexão ao executar worker")
+    }
+    setWorkerRunning(false)
+  }
 
   if (loading && !metrics) {
     return (
@@ -55,6 +75,10 @@ export default function AutomacoesPage() {
           <p className="text-sm text-muted-foreground">Dashboard de automações e métricas de envio</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={runWorker} disabled={workerRunning}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50">
+            <Play className="size-4" /> {workerRunning ? "Executando..." : "Executar Worker"}
+          </button>
           <Link href="/automacoes/regras" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">
             <Zap className="size-4" /> Ver Regras
           </Link>
@@ -63,6 +87,13 @@ export default function AutomacoesPage() {
           </Link>
         </div>
       </div>
+
+      {/* Resultado do worker */}
+      {workerResult && (
+        <div className={"rounded-lg border p-3 text-sm " + (workerResult.startsWith("✓") ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700")}>
+          {workerResult}
+        </div>
+      )}
 
       {/* Métricas principais */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
