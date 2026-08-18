@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, UserCircle, UsersRound, X, Handshake, UserPlus } from "lucide-react"
+import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, UserCircle, UsersRound, X, Handshake, UserPlus, Zap } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
 import { ToastProvider } from "@/components/ui/primitives"
 import { LeadsProvider, useLeads } from "@/lib/leads-store"
 import { LocacaoProvider } from "@/lib/locacao-store"
+import { AutomationProvider } from "@/lib/automation-store"
 import { PresenceProvider } from "@/lib/presence"
 import { ColucciLogo } from "@/components/colucci-logo"
 import { NotificationBell } from "@/components/notification-bell"
@@ -50,6 +51,13 @@ const NAV_LOCACAO: { href: string; label: string; icon: any; roles: Role[] }[] =
   { href: "/locacao/auditoria", label: "Registros de Auditoria", icon: ScrollText, roles: ["gestor"] },
 ]
 
+const NAV_AUTOMACOES: { href: string; label: string; icon: any; roles: Role[] }[] = [
+  { href: "/automacoes", label: "Dashboard Automações", icon: LayoutDashboard, roles: ["gestor"] },
+  { href: "/automacoes/regras", label: "Regras de Automação", icon: Zap, roles: ["gestor"] },
+  { href: "/automacoes/fila", label: "Fila de Envios", icon: ClipboardCheck, roles: ["gestor"] },
+  { href: "/automacoes/logs", label: "Logs de Automação", icon: ScrollText, roles: ["gestor"] },
+]
+
 const NAV2: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/admin", label: "Administração", icon: Shield, roles: ["gestor"] },
   { href: "/admin/notificacoes", label: "Disparador de Notificações", icon: BellRing, roles: ["gestor"] },
@@ -85,6 +93,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const canNivel = (roles: Role[]) => roles.includes(nivelName as Role)
   const items = NAV.filter((n) => podeVendas(user.role) && canNivel(n.roles))
   const itemsLocacao = NAV_LOCACAO.filter((n) => podeLocacao(user.role) && canNivel(n.roles))
+  const itemsAutomacoes = NAV_AUTOMACOES.filter((n) => isAdminRole(user.role))
   const items2 = NAV2.filter((n) => isAdminRole(user.role))
   // Gestor de módulo (ex.: gestor_locacao) vê Gestão de Acessos na seção do seu módulo
   const isModuleGestor = isGestorNivel(user.role) && !isAdminRole(user.role)
@@ -136,6 +145,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {renderItems(itemsLocacao)}
           </>
         )}
+        {itemsAutomacoes.length > 0 && (
+          <>
+            <span className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">Automações</span>
+            {renderItems(itemsAutomacoes)}
+          </>
+        )}
         {items2.length > 0 && (
           <>
             <span className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">Administração</span>
@@ -155,6 +170,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <ToastProvider>
       <SaleCelebrationProvider>
       <LeadsProvider>
+      <AutomationProvider>
       <LocacaoProvider>
       <PresenceProvider>
       <DailySummary />
@@ -205,6 +221,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       </PresenceProvider>
       </LocacaoProvider>
+      </AutomationProvider>
       </LeadsProvider>
       </SaleCelebrationProvider>
     </ToastProvider>

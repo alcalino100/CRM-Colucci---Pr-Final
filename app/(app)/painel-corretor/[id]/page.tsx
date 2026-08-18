@@ -3,7 +3,7 @@
 import { useState, use } from "react"
 import Link from "next/link"
 import useSWR from "swr"
-import { ArrowLeft, Clock, MessageSquarePlus, Phone, Mail, Home, ShieldCheck, Megaphone } from "lucide-react"
+import { ArrowLeft, Clock, MessageSquarePlus, Phone, Mail, Home, ShieldCheck, Megaphone, Zap } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
@@ -12,6 +12,7 @@ import { Badge, Card, CardContent, CardHeader, CardTitle, Select, Textarea, useT
 
 const metaFetcher = (u: string) => fetch(u).then((r) => r.json())
 import { AUDIT_TIPO_LABEL, AUDIT_TIPO_VARIANT, brl, fmtDateTime, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/labels"
+import { LeadAutomacoesTab } from "@/components/lead-automacoes-tab"
 import type { AuditTipo } from "@/lib/mock-data"
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -192,7 +193,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   }}
                   disabled={!qualiTexto.trim()}
                 >
-                  Registrar observa��ão
+                  Registrar observação
                 </Button>
               </div>
             </div>
@@ -210,6 +211,19 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Automações — visível SOMENTE para gestores */}
+      {isGestor && (
+        <Card>
+          <CardHeader className="flex-row items-center gap-2">
+            <Zap className="size-4 text-primary" />
+            <CardTitle>Automações <span className="text-xs font-normal text-muted-foreground">(gestão)</span></CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LeadAutomacoesTab leadId={lead.id} />
           </CardContent>
         </Card>
       )}
