@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 
 export default function AutomacoesPage() {
   const { user } = useAuth()
-  const { automations, jobs, ready: storeReady } = useAutomation()
+  const { automations, jobs, ready: storeReady, loadDashboardMetrics } = useAutomation()
   const { users, leads } = useLeads()
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -22,10 +22,11 @@ export default function AutomacoesPage() {
 
   useEffect(() => {
     if (!storeReady) return
-    const store = (window as any).__automationStoreRef
     setLoading(true)
-    useAutomation().loadDashboardMetrics().then((m) => { setMetrics(m); setLoading(false) }).catch(() => setLoading(false))
-  }, [storeReady])
+    loadDashboardMetrics()
+      .then((m) => { setMetrics(m); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [storeReady, loadDashboardMetrics])
 
   const activeAutomations = automations.filter((a) => a.status === "active")
   const scheduledJobs = jobs.filter((j) => ["scheduled", "pending_validation"].includes(j.status))

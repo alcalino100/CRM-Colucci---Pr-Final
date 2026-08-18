@@ -354,19 +354,25 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
 
   // ---------- Init + Realtime ----------
   useEffect(() => {
-    Promise.all([loadAutomations(), loadTemplates(), loadGlobalSettings(), loadJobs()])
-      .finally(() => setReady(true))
+    Promise.all([
+      loadAutomations().catch(() => {}),
+      loadTemplates().catch(() => {}),
+      loadGlobalSettings().catch(() => {}),
+      loadJobs().catch(() => {}),
+    ]).finally(() => setReady(true))
 
-    const channel = supabase
-      .channel("automations-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "automations" }, loadAutomations)
-      .on("postgres_changes", { event: "*", schema: "public", table: "automation_jobs" }, () => loadJobs())
-      .on("postgres_changes", { event: "*", schema: "public", table: "automation_logs" }, () => loadLogs())
-      .on("postgres_changes", { event: "*", schema: "public", table: "automation_message_templates" }, loadTemplates)
-      .on("postgres_changes", { event: "*", schema: "public", table: "automation_global_settings" }, loadGlobalSettings)
-      .subscribe()
+    try {
+      const channel = supabase
+        .channel("automations-realtime")
+        .on("postgres_changes", { event: "*", schema: "public", table: "automations" }, loadAutomations)
+        .on("postgres_changes", { event: "*", schema: "public", table: "automation_jobs" }, () => loadJobs())
+        .on("postgres_changes", { event: "*", schema: "public", table: "automation_logs" }, () => loadLogs())
+        .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+      return () => { supabase.removeChannel(channel) }
+    } catch {
+      setReady(true)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
