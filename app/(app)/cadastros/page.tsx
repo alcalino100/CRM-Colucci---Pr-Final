@@ -264,7 +264,7 @@ export default function CadastrosPage() {
           compareTitle={comparativo ? `Anterior: ${fmtDia(comparativo.prevIni)} — ${fmtDia(comparativo.prevFim)}` : undefined} />
       </div>
 
-      {/* Funil de ROI — Tráfego Pago */}
+      {/* Funil de Conversão — pipeline completo */}
       <FunilROI leads={filtrados} investimento={investimentoMeta} loadingMeta={loadingMeta} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
