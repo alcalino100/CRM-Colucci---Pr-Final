@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import useSWR from "swr"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts"
 import { UserPlus, CalendarRange, Activity, CheckCircle2, TrendingUp, TrendingDown } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
@@ -12,6 +13,9 @@ import { PageHeading } from "@/components/ui/page-heading"
 import { LEAD_STATUSES, refsTexto, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/labels"
 import { ORIGENS, type Lead, type LeadStatus, type Origem } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
+import { FunilROI } from "@/components/funil-roi"
+
+const fetcher = (u: string) => fetch(u).then((r) => r.json())
 
 type Periodo = { ini: string; fim: string }
 
@@ -71,6 +75,17 @@ export default function CadastrosPage() {
   const [corretor, setCorretor] = useState("todos")
   const [origem, setOrigem] = useState<Origem | "todas">("todas")
   const [status, setStatus] = useState<LeadStatus | "todos">("todos")
+
+  // Meta Ads: buscar contas e insights do período
+  const { data: contasData } = useSWR("/api/meta?op=accounts", fetcher)
+  const contaIds = useMemo(() => (contasData?.data ?? []).map((c: any) => c.id), [contasData])
+  const insightsKey = contaIds.length > 0 ? `/api/meta?op=insights&node=${contaIds[0]}&since=${dataInicio}&until=${dataFim}` : null
+  const { data: insightsData, isLoading: loadingMeta } = useSWR(insightsKey, fetcher)
+
+  const investimentoMeta = useMemo(() => {
+    if (!insightsData?.data) return null
+    return insightsData.data.reduce((s: number, r: any) => s + Number(r.spend || 0), 0)
+  }, [insightsData])
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 500)
@@ -248,6 +263,9 @@ export default function CadastrosPage() {
           variacao={comparativo ? variacao(comparativo.fechados.cur, comparativo.fechados.prev) : null}
           compareTitle={comparativo ? `Anterior: ${fmtDia(comparativo.prevIni)} — ${fmtDia(comparativo.prevFim)}` : undefined} />
       </div>
+
+      {/* Funil de ROI — Tráfego Pago */}
+      <FunilROI leads={filtrados} investimento={investimentoMeta} loadingMeta={loadingMeta} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Cadastros por dia */}
