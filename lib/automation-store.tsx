@@ -35,6 +35,7 @@ interface AutomationStore {
   // Jobs
   loadJobs: (filters?: JobFilters) => Promise<void>
   cancelJob: (jobId: string, reason: string) => Promise<{ ok: boolean; error?: string }>
+  clearQueue: (reason?: string) => Promise<{ ok: boolean; cancelled?: number; error?: string }>
   rerunJob: (jobId: string) => Promise<{ ok: boolean; error?: string }>
   pauseLead: (leadId: string, reason: string) => Promise<{ ok: boolean; error?: string }>
   resumeLead: (leadId: string) => Promise<{ ok: boolean; error?: string }>
@@ -299,6 +300,19 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     return { ok: true }
   }
 
+  const clearQueue: AutomationStore["clearQueue"] = async (reason = "Fila limpa manualmente pelo gestor") => {
+    const terminalStatuses = ["sent", "delivered", "read", "responded", "cancelled_human", "cancelled_condition", "cancelled_manual"]
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from("automation_jobs")
+      .update({ status: "cancelled_manual", cancelled_at: now, cancellation_reason: reason })
+      .not("status", "in", `(${terminalStatuses.join(",")})`)
+      .select("id")
+    if (error) return { ok: false, error: error.message }
+    await loadJobs()
+    return { ok: true, cancelled: data?.length ?? 0 }
+  }
+
   const rerunJob: AutomationStore["rerunJob"] = async (jobId) => {
     const { error } = await supabase
       .from("automation_jobs")
@@ -380,7 +394,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
       automations, jobs, logs, templates, globalSettings, leadSettings, ready,
       loadAutomations, addAutomation, updateAutomation, deleteAutomation, toggleAutomation,
       loadTemplates, addTemplate, updateTemplate,
-      loadJobs, cancelJob: cancelJobFn, rerunJob, pauseLead, resumeLead, blockLead,
+      loadJobs, cancelJob: cancelJobFn, clearQueue, rerunJob, pauseLead, resumeLead, blockLead,
       loadLogs, loadGlobalSettings, updateGlobalSettings, loadLeadSettings,
       loadDashboardMetrics,
     }}>

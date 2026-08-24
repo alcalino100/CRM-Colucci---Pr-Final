@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Clock, Search, Filter, ExternalLink, XCircle, RotateCcw, MessageCircle, Eye } from "lucide-react"
+import { Clock, Search, Filter, ExternalLink, XCircle, RotateCcw, MessageCircle, Eye, Trash2 } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent, Badge, Table, THead, TR, TH, TD, Input, Select, Label } from "@/components/ui/primitives"
 import { useAutomation } from "@/lib/automation-store"
 import { useLeads } from "@/lib/leads-store"
@@ -9,7 +9,7 @@ import { AUTOMATION_JOB_STATUS_LABEL, AUTOMATION_JOB_STATUS_VARIANT, type Automa
 import { fmtDateTime } from "@/lib/labels"
 
 export default function FilaPage() {
-  const { jobs, automations, cancelJob, rerunJob } = useAutomation()
+  const { jobs, automations, cancelJob, clearQueue, rerunJob } = useAutomation()
   const { users, leads } = useLeads()
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [filterAutomation, setFilterAutomation] = useState<string>("all")
@@ -40,6 +40,15 @@ export default function FilaPage() {
     await rerunJob(jobId)
   }
 
+  async function handleClearQueue() {
+    const activeJobs = jobs.filter((j) => !["sent", "delivered", "read", "responded", "cancelled_human", "cancelled_condition", "cancelled_manual"].includes(j.status))
+    if (activeJobs.length === 0) return alert("Não há jobs ativos na fila.")
+    if (!confirm(`Tem certeza que deseja cancelar ${activeJobs.length} job(s) da fila? Isso desbloqueará os leads para novas automações.`)) return
+    const result = await clearQueue()
+    if (result.ok) alert(`${result.cancelled ?? 0} job(s) cancelados com sucesso.`)
+    else alert(`Erro: ${result.error}`)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -47,6 +56,10 @@ export default function FilaPage() {
           <h1 className="font-display text-2xl font-bold tracking-tight">Fila de Envios</h1>
           <p className="text-sm text-muted-foreground">{jobs.length} jobs no histórico · {filtered.length} exibidos</p>
         </div>
+        <button onClick={handleClearQueue}
+          className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-100">
+          <Trash2 className="size-4" /> Limpar Fila
+        </button>
       </div>
 
       {/* Filtros */}
