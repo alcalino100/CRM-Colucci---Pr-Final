@@ -73,6 +73,11 @@ function rowToLead(r: any): LocacaoLead {
     aluguelMax: r.aluguel_max ?? undefined,
     quartos: r.quartos ?? "",
     garantia: r.garantia ?? "",
+    vagas: r.vagas ?? undefined,
+    metragemMin: r.metragem_min ?? undefined,
+    aceitaCondominio: r.aceita_condominio ?? undefined,
+    salas: r.salas ?? undefined,
+    atividadeComercial: r.atividade_comercial ?? "",
     valorAluguel: r.valor_proposta ?? undefined,
     valorComissao: r.valor_comissao ?? undefined,
     corretorId: r.corretor_id ?? "",
@@ -102,6 +107,11 @@ function leadPatchToRow(p: Partial<LocacaoLead>): Record<string, any> {
   if (p.aluguelMax !== undefined) row.aluguel_max = p.aluguelMax ?? null
   if (p.quartos !== undefined) row.quartos = p.quartos || null
   if (p.garantia !== undefined) row.garantia = p.garantia || null
+  if (p.vagas !== undefined) row.vagas = p.vagas ?? null
+  if (p.metragemMin !== undefined) row.metragem_min = p.metragemMin ?? null
+  if (p.aceitaCondominio !== undefined) row.aceita_condominio = p.aceitaCondominio ?? null
+  if (p.salas !== undefined) row.salas = p.salas ?? null
+  if (p.atividadeComercial !== undefined) row.atividade_comercial = p.atividadeComercial || null
   if (p.valorAluguel !== undefined) row.valor_proposta = p.valorAluguel ?? null
   if (p.valorComissao !== undefined) row.valor_comissao = p.valorComissao ?? null
   if (p.corretorId !== undefined) row.corretor_id = p.corretorId || null
@@ -296,6 +306,11 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
       aluguel_max: l.aluguelMax ?? null,
       quartos: l.quartos,
       garantia: l.garantia,
+      vagas: l.vagas ?? null,
+      metragem_min: l.metragemMin ?? null,
+      aceita_condominio: l.aceitaCondominio ?? null,
+      salas: l.salas ?? null,
+      atividade_comercial: l.atividadeComercial || null,
       corretor_id: l.corretorId || null,
     }).select("id").maybeSingle()
     if (error) return { ok: false, error: "Não foi possível cadastrar o lead de locação. Tente novamente." }

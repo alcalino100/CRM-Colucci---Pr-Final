@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel, podeLocacao } from "@/lib/roles"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
-import { LOCACAO_STATUSES, refsTexto, LOCACAO_STATUS_LABEL, LOCACAO_STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/locacao-labels"
+import { LOCACAO_STATUSES, refsTexto, LOCACAO_STATUS_LABEL, LOCACAO_STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT, resumoPreferencias } from "@/lib/locacao-labels"
 import { ORIGENS, type Origem } from "@/lib/mock-data"
 import type { LocacaoLead, LocacaoStatus } from "@/lib/locacao-labels"
 import { cn } from "@/lib/utils"
@@ -320,6 +320,7 @@ export default function LocacaoLeadsPage() {
                   {refsTexto(l) && <Badge variant="gray">{refsTexto(l)}</Badge>}
                   <Badge variant={LOCACAO_STATUS_VARIANT[l.status]}>{LOCACAO_STATUS_LABEL[l.status]}</Badge>
                   <Badge variant={TEMP_VARIANT[l.temperatura]}>{TEMP_LABEL[l.temperatura]}</Badge>
+                  <span className="hidden rounded-md bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline">{resumoPreferencias(l)}</span>
                   <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
                     <span>{l.origem}</span>
                     <span>{userName(l.corretorId)}</span>

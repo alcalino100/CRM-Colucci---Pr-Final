@@ -16,6 +16,10 @@ import {
   TEMPERATURAS,
   TEMP_LABEL,
   TIPOS_IMOVEL_LOCACAO,
+  VAGAS_OPCOES,
+  SALAS_OPCOES,
+  CONDOMINIO_OPCOES,
+  CONDOMINIO_LABEL,
   type LocacaoStatus,
 } from "@/lib/locacao-labels"
 import { ORIGENS, type Origem, type Temperatura } from "@/lib/mock-data"
@@ -35,6 +39,11 @@ export interface LocacaoLeadFormValues {
   aluguelMax?: number
   quartos: string
   garantia: string
+  vagas?: number | null
+  metragemMin?: number | null
+  aceitaCondominio?: boolean | null
+  salas?: number | null
+  atividadeComercial?: string
   valorAluguel?: number
   corretorId: string
 }
@@ -79,11 +88,18 @@ export function LocacaoLeadForm({
     aluguelMax: initial?.aluguelMax,
     quartos: initial?.quartos ?? "",
     garantia: initial?.garantia ?? "",
+    vagas: initial?.vagas ?? null,
+    metragemMin: initial?.metragemMin ?? null,
+    aceitaCondominio: initial?.aceitaCondominio ?? null,
+    salas: initial?.salas ?? null,
+    atividadeComercial: initial?.atividadeComercial ?? "",
     valorAluguel: initial?.valorAluguel,
     corretorId: initial?.corretorId ?? defaultCorretorId,
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [bairrosText, setBairrosText] = useState((initial?.bairrosDesejados ?? []).join(", "))
+  const condominioToSelect = (v?: boolean | null) => v === true ? "sim" : v === false ? "nao" : "indiferente"
+  const selectToCondominio = (v: string): boolean | null => v === "sim" ? true : v === "nao" ? false : null
   const { corretores, checkPhoneDuplicate, userName } = useLocacao()
   const { user } = useAuth()
   const isGestor = isGestorNivel(user?.role ?? "corretor")
@@ -111,7 +127,7 @@ export function LocacaoLeadForm({
     setErrors(errs)
     if (Object.values(errs).some(Boolean)) return
     const bairros = bairrosText.split(/[,;\n]/).map((b) => b.trim()).filter(Boolean)
-    onSubmit({ ...v, bairrosDesejados: bairros, valorAluguel: showValor ? v.valorAluguel : undefined })
+    onSubmit({ ...v, bairrosDesejados: bairros, valorAluguel: showValor ? v.valorAluguel : undefined, vagas: v.vagas, metragemMin: v.metragemMin, aceitaCondominio: v.aceitaCondominio, salas: v.salas, atividadeComercial: v.atividadeComercial })
   }
 
   const err = (k: string) => errors[k] && <span className="text-xs text-destructive">{errors[k]}</span>
@@ -195,7 +211,7 @@ export function LocacaoLeadForm({
       </div>
 
       {/* Campos específicos de locação */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="flex flex-col gap-1">
           <Label htmlFor="tipoImovel">Tipo de imóvel desejado</Label>
           <Select id="tipoImovel" value={v.tipoImovelDesejado} onChange={(e) => set("tipoImovelDesejado", e.target.value)} aria-label="Tipo de imóvel">
@@ -213,6 +229,34 @@ export function LocacaoLeadForm({
         <div className="flex flex-col gap-1">
           <Label htmlFor="aluguelMax">Aluguel máximo (R$)</Label>
           <Input id="aluguelMax" type="number" value={v.aluguelMax ?? ""} onChange={(e) => set("aluguelMax", e.target.value ? Number(e.target.value) : undefined)} aria-label="Aluguel máximo" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="vagas">Vagas</Label>
+          <Select id="vagas" value={v.vagas ?? ""} onChange={(e) => set("vagas", e.target.value ? Number(e.target.value) : null)} aria-label="Vagas">
+            <option value="">Indiferente</option>
+            {VAGAS_OPCOES.map((v) => <option key={v} value={v}>{v} vaga(s)</option>)}
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="metragemMin">Metragem mínima (m²)</Label>
+          <Input id="metragemMin" type="number" value={v.metragemMin ?? ""} onChange={(e) => set("metragemMin", e.target.value ? Number(e.target.value) : null)} aria-label="Metragem mínima" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="aceitaCondominio">Aceita condomínio</Label>
+          <Select id="aceitaCondominio" value={condominioToSelect(v.aceitaCondominio)} onChange={(e) => set("aceitaCondominio", selectToCondominio(e.target.value))} aria-label="Aceita condomínio">
+            {CONDOMINIO_OPCOES.map((c) => <option key={c} value={c}>{CONDOMINIO_LABEL[c]}</option>)}
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="salas">Salas (comercial)</Label>
+          <Select id="salas" value={v.salas ?? ""} onChange={(e) => set("salas", e.target.value ? Number(e.target.value) : null)} aria-label="Salas">
+            <option value="">Indiferente</option>
+            {SALAS_OPCOES.map((s) => <option key={s} value={s}>{s} sala(s)</option>)}
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <Label htmlFor="atividadeComercial">Atividade comercial</Label>
+          <Input id="atividadeComercial" value={v.atividadeComercial ?? ""} onChange={(e) => set("atividadeComercial", e.target.value)} aria-label="Atividade comercial" placeholder="Ex: Escritório, Clínica, Loja" />
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="garantia">Garantia preferida</Label>

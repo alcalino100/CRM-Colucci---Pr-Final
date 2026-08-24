@@ -13,7 +13,7 @@ import { supabase } from "@/lib/supabase/client"
 import { useLocacao } from "@/lib/locacao-store"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
-import { LOCACAO_STATUSES, MOTIVOS_EXCLUSAO, LOCACAO_STATUS_ACCENT, LOCACAO_STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, normalizePhone, refsTexto } from "@/lib/locacao-labels"
+import { LOCACAO_STATUSES, MOTIVOS_EXCLUSAO, LOCACAO_STATUS_ACCENT, LOCACAO_STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, TIPOS_IMOVEL_LOCACAO, QUARTOS_OPCOES, brl, normalizePhone, refsTexto } from "@/lib/locacao-labels"
 import { ORIGENS, type Origem, type Temperatura } from "@/lib/mock-data"
 import type { LocacaoLead, LocacaoStatus } from "@/lib/locacao-labels"
 import { cn } from "@/lib/utils"
@@ -51,6 +51,10 @@ export function KanbanBoardLocacao({
   const [origemFilter, setOrigemFilter] = useState<Origem | "todas">("todas")
   const [statusFilter, setStatusFilter] = useState<LocacaoStatus | "todos">("todos")
   const [corretorFilter, setCorretorFilter] = useState<string>("todos")
+  const [tipoFilter, setTipoFilter] = useState<string>("todos")
+  const [quartosFilter, setQuartosFilter] = useState<string>("todos")
+  const [aluguelMaxFilter, setAluguelMaxFilter] = useState<string>("")
+  const [bairrosFilter, setBairrosFilter] = useState("")
   const [query, setQuery] = useState("")
   const [showArchived, setShowArchived] = useState(false)
 
@@ -67,7 +71,7 @@ export function KanbanBoardLocacao({
       return
     }
     setSubmitting(true)
-    const fields: (keyof LocacaoLeadFormValues)[] = ["nome", "telefone", "email", "imovelRef", "origem", "observacoes", "status", "valorAluguel", "corretorId", "temperatura"]
+    const fields: (keyof LocacaoLeadFormValues)[] = ["nome", "telefone", "email", "imovelRef", "origem", "observacoes", "status", "valorAluguel", "corretorId", "temperatura", "tipoImovelDesejado", "quartos", "aluguelMax", "garantia", "vagas", "metragemMin", "aceitaCondominio", "salas", "atividadeComercial"]
     for (const f of fields) {
       const before = (editLead as any)[f]
       const after = (v as any)[f]
@@ -339,14 +343,18 @@ export function KanbanBoardLocacao({
       (origemFilter === "todas" || l.origem === origemFilter) &&
       (statusFilter === "todos" || l.status === statusFilter) &&
       (corretorFilter === "todos" || l.corretorId === corretorFilter) &&
+      (tipoFilter === "todos" || l.tipoImovelDesejado === tipoFilter) &&
+      (quartosFilter === "todos" || l.quartos === quartosFilter) &&
+      (!aluguelMaxFilter || (l.aluguelMax != null && l.aluguelMax <= Number(aluguelMaxFilter))) &&
+      (!bairrosFilter || l.bairrosDesejados.some((b) => b.toLowerCase().includes(bairrosFilter.toLowerCase()))) &&
       matchesQuery(l),
   )
   const byStatus = (s: LocacaoStatus) => filtered.filter((l) => l.status === s)
-  const temFiltros = tempFilter !== "todas" || origemFilter !== "todas" || statusFilter !== "todos" || corretorFilter !== "todos" || !!q
+  const temFiltros = tempFilter !== "todas" || origemFilter !== "todas" || statusFilter !== "todos" || corretorFilter !== "todos" || tipoFilter !== "todos" || quartosFilter !== "todos" || !!aluguelMaxFilter || !!bairrosFilter || !!q
   const noResults = temFiltros && filtered.length === 0
 
   const limparFiltros = () => {
-    setQuery(""); setTempFilter("todas"); setOrigemFilter("todas"); setStatusFilter("todos"); setCorretorFilter("todos")
+    setQuery(""); setTempFilter("todas"); setOrigemFilter("todas"); setStatusFilter("todos"); setCorretorFilter("todos"); setTipoFilter("todos"); setQuartosFilter("todos"); setAluguelMaxFilter(""); setBairrosFilter("")
   }
 
   const chip = (active: boolean, color?: string) =>
@@ -411,6 +419,31 @@ export function KanbanBoardLocacao({
               {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </Select>
           )}
+          <span className="ml-2 h-5 w-px bg-border" aria-hidden />
+          <Select value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)} aria-label="Filtrar por tipo" className="w-40 text-xs">
+            <option value="todos">Tipo: todos</option>
+            {TIPOS_IMOVEL_LOCACAO.map((t) => <option key={t} value={t}>{t}</option>)}
+          </Select>
+          <Select value={quartosFilter} onChange={(e) => setQuartosFilter(e.target.value)} aria-label="Filtrar por quartos" className="w-36 text-xs">
+            <option value="todos">Quartos: todos</option>
+            {QUARTOS_OPCOES.map((q) => <option key={q} value={q}>{q} quarto(s)</option>)}
+          </Select>
+          <input
+            type="number"
+            value={aluguelMaxFilter}
+            onChange={(e) => setAluguelMaxFilter(e.target.value)}
+            placeholder="Aluguel máx."
+            aria-label="Filtrar por aluguel máximo"
+            className="h-7 w-28 rounded-lg border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+          />
+          <input
+            type="text"
+            value={bairrosFilter}
+            onChange={(e) => setBairrosFilter(e.target.value)}
+            placeholder="Bairros"
+            aria-label="Filtrar por bairros"
+            className="h-7 w-28 rounded-lg border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+          />
           {temFiltros && (
             <button type="button" onClick={limparFiltros} className="rounded-full border border-dashed border-border px-3 py-1 text-xs font-medium text-primary transition hover:border-primary/40 hover:bg-primary/5">
               Limpar filtros

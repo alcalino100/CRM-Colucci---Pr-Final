@@ -100,6 +100,31 @@ export default function LocacaoLeadDetailPage({ params }: { params: Promise<{ id
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Garantia</span><span className="font-medium">{lead.garantia || "—"}</span>
             </div>
+            {lead.vagas != null && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Vagas</span><span className="font-medium">{lead.vagas} vaga(s)</span>
+              </div>
+            )}
+            {lead.metragemMin != null && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Metragem mínima</span><span className="font-medium">{lead.metragemMin} m²</span>
+              </div>
+            )}
+            {lead.aceitaCondominio != null && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Aceita condomínio</span><span className="font-medium">{lead.aceitaCondominio ? "Sim" : "Não"}</span>
+              </div>
+            )}
+            {lead.salas != null && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Salas</span><span className="font-medium">{lead.salas} sala(s)</span>
+              </div>
+            )}
+            {lead.atividadeComercial && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Atividade comercial</span><span className="font-medium">{lead.atividadeComercial}</span>
+              </div>
+            )}
             {lead.valorAluguel != null && (
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Valor do aluguel</span><span className="font-medium text-primary">{brl(lead.valorAluguel)}</span>

@@ -1,12 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, Camera, Users, Megaphone, Store, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Archive, ArchiveRestore } from "lucide-react"
+import { AlertTriangle, Camera, Users, Megaphone, Store, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Archive, ArchiveRestore, Home } from "lucide-react"
 import { Badge } from "@/components/ui/primitives"
 import { useLocacao } from "@/lib/locacao-store"
 import { usePresenca } from "@/lib/presence"
 import { OnlineDot } from "@/components/online-dot"
-import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate } from "@/lib/locacao-labels"
+import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate, resumoPreferencias } from "@/lib/locacao-labels"
 import { type Origem } from "@/lib/mock-data"
 import type { LocacaoLead } from "@/lib/locacao-labels"
 import { cn } from "@/lib/utils"
@@ -150,6 +150,10 @@ export function LeadCard({
             </div>
           )}
         </div>
+      </div>
+      <div className="mt-2 flex items-center gap-1.5 rounded-md bg-muted/60 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+        <Home className="size-3 shrink-0" />
+        <span className="truncate">{resumoPreferencias(lead)}</span>
       </div>
       <div className="mt-2 flex flex-col gap-1.5 text-xs text-muted-foreground">
         {lead.telefone && (

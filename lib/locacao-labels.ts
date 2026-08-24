@@ -27,6 +27,11 @@ export interface LocacaoLead {
   aluguelMax?: number
   quartos: string
   garantia: string
+  vagas?: number | null
+  metragemMin?: number | null
+  aceitaCondominio?: boolean | null
+  salas?: number | null
+  atividadeComercial?: string
   valorAluguel?: number
   valorComissao?: number | null
   corretorId: string
@@ -147,6 +152,36 @@ export const GARANTIAS_LOCACAO = [
   "Título de capitalização",
   "Depósito",
 ] as const
+
+export const VAGAS_OPCOES = ["1", "2", "3", "4+"] as const
+
+export const SALAS_OPCOES = ["1", "2", "3", "4+"] as const
+
+export const CONDOMINIO_OPCOES = ["sim", "nao", "indiferente"] as const
+
+export const CONDOMINIO_LABEL: Record<string, string> = {
+  sim: "Aceita",
+  nao: "Não aceita",
+  indiferente: "Indiferente",
+}
+
+export function resumoPreferencias(l: {
+  tipoImovelDesejado?: string
+  aluguelMax?: number
+  quartos?: string
+  vagas?: number | null
+  metragemMin?: number | null
+  bairrosDesejados?: string[]
+}): string {
+  const parts: string[] = []
+  if (l.tipoImovelDesejado) parts.push(l.tipoImovelDesejado.toUpperCase())
+  if (l.aluguelMax) parts.push(`ATÉ ${brl(l.aluguelMax)}`)
+  if (l.quartos) parts.push(`${l.quartos}D`)
+  if (l.vagas) parts.push(`${l.vagas}V`)
+  if (l.metragemMin) parts.push(`${l.metragemMin}m²`)
+  if (l.bairrosDesejados?.length) parts.push(l.bairrosDesejados.slice(0, 2).join(", "))
+  return parts.length ? parts.join(" | ") : "Sem preferências definidas"
+}
 
 export const MOTIVOS_EXCLUSAO = [
   "Lead duplicado",
