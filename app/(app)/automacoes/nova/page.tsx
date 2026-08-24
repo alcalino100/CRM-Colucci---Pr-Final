@@ -48,7 +48,7 @@ export default function NovaAutomacaoPage() {
   const searchParams = useSearchParams()
   const editId = searchParams.get("id")
   const { user } = useAuth()
-  const { automations, addAutomation, updateAutomation, templates, loadTemplates } = useAutomation()
+  const { automations, addAutomation, updateAutomation, templates, loadTemplates, updateTemplate } = useAutomation()
   const { users, leads } = useLeads()
 
   const [step, setStep] = useState(0)
@@ -203,6 +203,15 @@ export default function NovaAutomacaoPage() {
     }
 
     const result = editId ? await updateAutomation(editId, data) : await addAutomation(data)
+
+    // Salvar conteúdo editado da mensagem no template
+    if (result.ok && messageTemplateId && messageContent) {
+      const tmpl = templates.find((t) => t.id === messageTemplateId)
+      if (tmpl && tmpl.content !== messageContent) {
+        await updateTemplate(messageTemplateId, { content: messageContent })
+      }
+    }
+
     setSaving(false)
     if (result.ok) router.push("/automacoes/regras")
     else alert(result.error)
