@@ -61,6 +61,7 @@ interface Store {
   checkPhoneDuplicate: (phone: string, excludeId?: string) => { nome: string; corretorId: string; status: LeadStatus } | null
   addLead: (l: Omit<Lead, "id" | "criadoEm" | "atualizadoEm" | "interacoes">) => Promise<{ ok: boolean; error?: string }>
   updateLead: (id: string, patch: Partial<Lead>) => Promise<{ ok: boolean; error?: string }>
+  updateLeadsBulk: (ids: string[], patch: Partial<Lead>) => Promise<{ ok: boolean; updated?: number; error?: string }>
   deleteLead: (id: string, motivo: string, motivoDetalhe?: string) => Promise<{ ok: boolean; error?: string }>
   addInteraction: (leadId: string, i: Omit<Interaction, "id" | "timestamp">) => void
   getLead: (id: string) => Lead | undefined
@@ -483,6 +484,29 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     return { ok: true }
   }
 
+  const updateLeadsBulk: Store["updateLeadsBulk"] = async (ids, patch) => {
+    if (ids.length === 0) return { ok: true, updated: 0 }
+    const agora = new Date().toISOString()
+    const row = leadPatchToRow(patch)
+    row.atualizado_em = agora
+    let { data, error } = await supabase.from("leads").update(row).in("id", ids).select("id")
+    if (error && String(error.message).includes("does not exist")) {
+      delete row.fechado_em
+      delete row.negociando_em
+      delete row.valor_comissao
+      delete row.utm_campaign
+      delete row.utm_adset
+      delete row.utm_ad
+      delete row.fbc
+      delete row.fbp
+      delete row.tipo_imovel_vendido
+      ;({ data, error } = await supabase.from("leads").update(row).in("id", ids).select("id"))
+    }
+    if (error) return { ok: false, error: error.message }
+    await loadLeads()
+    return { ok: true, updated: data?.length ?? 0 }
+  }
+
   const assumirLead: Store["assumirLead"] = async (leadId) => {
     const { error } = await supabase.from("leads").update({ gestor_responsavel: user?.id || null }).eq("id", leadId)
     if (error) return { ok: false, error: error.message }
@@ -670,7 +694,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     <Ctx.Provider
       value={{
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, ready, corretores, userName,
-        checkPhoneDuplicate, addLead, updateLead, deleteLead, addInteraction, getLead, assumirLead,
+        checkPhoneDuplicate, addLead, updateLead, updateLeadsBulk, deleteLead, addInteraction, getLead, assumirLead,
         addVisit, updateVisit, removeVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addUser, updateUser, updateProfile,
       }}
     >

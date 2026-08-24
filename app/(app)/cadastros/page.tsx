@@ -4,16 +4,17 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import useSWR from "swr"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts"
-import { UserPlus, CalendarRange, Activity, CheckCircle2, TrendingUp, TrendingDown } from "lucide-react"
+import { UserPlus, CalendarRange, Activity, CheckCircle2, TrendingUp, TrendingDown, Pencil } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel, podeVendas } from "@/lib/roles"
-import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton } from "@/components/ui/primitives"
+import { Card, CardContent, CardHeader, CardTitle, Badge, Select, Skeleton, Dialog, useToast } from "@/components/ui/primitives"
 import { PageHeading } from "@/components/ui/page-heading"
 import { LEAD_STATUSES, refsTexto, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/labels"
 import { ORIGENS, type Lead, type LeadStatus, type Origem } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 import { FunilROI } from "@/components/funil-roi"
+import { LeadBulkEditForm } from "@/components/lead-bulk-edit-form"
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json())
 
@@ -68,13 +69,17 @@ function fmtDia(key: string): string {
 
 export default function CadastrosPage() {
   const { user } = useAuth()
-  const { leads, corretores, userName } = useLeads()
+  const { leads, corretores, userName, updateLeadsBulk } = useLeads()
+  const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [dataInicio, setDataInicio] = useState(() => ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
   const [dataFim, setDataFim] = useState(() => ymd(new Date()))
   const [corretor, setCorretor] = useState("todos")
   const [origem, setOrigem] = useState<Origem | "todas">("todas")
   const [status, setStatus] = useState<LeadStatus | "todos">("todos")
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
+  const [bulkSubmitting, setBulkSubmitting] = useState(false)
 
   // Meta Ads: buscar contas e insights do período
   const { data: contasData } = useSWR("/api/meta?op=accounts", fetcher)
@@ -175,6 +180,37 @@ export default function CadastrosPage() {
       .filter((r) => r.total > 0)
       .sort((a, b) => b.total - a.total)
   }, [filtrados])
+
+  const allFilteredSelected = filtrados.length > 0 && filtrados.every((l) => selectedIds.has(l.id))
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      if (allFilteredSelected) return new Set()
+      return new Set(filtrados.map((l) => l.id))
+    })
+  }
+
+  async function handleBulkSubmit(patch: Record<string, unknown>) {
+    setBulkSubmitting(true)
+    const result = await updateLeadsBulk(Array.from(selectedIds), patch)
+    setBulkSubmitting(false)
+    if (result.ok) {
+      toast(`✓ ${result.updated ?? selectedIds.size} lead${selectedIds.size !== 1 ? "s" : ""} atualizado${selectedIds.size !== 1 ? "s" : ""}`)
+      setSelectedIds(new Set())
+      setBulkEditOpen(false)
+    } else {
+      toast(result.error ?? "Erro ao atualizar leads", "error")
+    }
+  }
 
   if (!user || !isGestorNivel(user.role) || !podeVendas(user.role)) {
     return <p className="py-16 text-center text-muted-foreground">Acesso restrito aos gestores.</p>
@@ -329,8 +365,31 @@ export default function CadastrosPage() {
             <p className="py-10 text-center text-sm text-muted-foreground">Nenhum lead cadastrado com os filtros atuais</p>
           ) : (
             <div className="flex flex-col gap-2">
+              {/* Select all */}
+              <label className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm font-medium cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={allFilteredSelected}
+                  onChange={toggleSelectAll}
+                  className="size-4 accent-primary"
+                />
+                Selecionar todos ({filtrados.length})
+                {selectedIds.size > 0 && !allFilteredSelected && (
+                  <span className="ml-1 text-xs text-muted-foreground">· {selectedIds.size} selecionado{selectedIds.size !== 1 ? "s" : ""}</span>
+                )}
+              </label>
+
               {filtrados.map((l) => (
-                <div key={l.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3">
+                <div key={l.id} className={cn(
+                  "flex flex-wrap items-center gap-2 rounded-lg border border-border p-3 transition",
+                  selectedIds.has(l.id) && "border-primary bg-primary/5",
+                )}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(l.id)}
+                    onChange={() => toggleSelect(l.id)}
+                    className="size-4 accent-primary"
+                  />
                   <Link href={`/painel-corretor/${l.id}`} className="min-w-0 font-medium hover:text-primary">
                     {l.nome}
                   </Link>
@@ -348,6 +407,33 @@ export default function CadastrosPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Barra de ação fixa quando há seleção */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-border bg-background p-3 shadow-lg">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium">{selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} selecionado{selectedIds.size !== 1 ? "s" : ""}</span>
+            <button onClick={() => setBulkEditOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">
+              <Pencil className="size-4" /> Editar em massa
+            </button>
+            <button onClick={() => setSelectedIds(new Set())}
+              className="rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-muted">
+              Limpar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog de edição em massa */}
+      <Dialog open={bulkEditOpen} onClose={() => setBulkEditOpen(false)} title="Editar leads em massa">
+        <LeadBulkEditForm
+          count={selectedIds.size}
+          submitting={bulkSubmitting}
+          onSubmit={handleBulkSubmit}
+          onCancel={() => setBulkEditOpen(false)}
+        />
+      </Dialog>
     </div>
   )
 }
