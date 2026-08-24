@@ -18,7 +18,7 @@ export default function AutomacoesPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [workerRunning, setWorkerRunning] = useState(false)
-  const [workerResult, setWorkerResult] = useState<string | null>(null)
+  const [workerResult, setWorkerResult] = useState<{ ok: boolean; message: string; details?: any } | null>(null)
 
   useEffect(() => {
     if (!storeReady) return
@@ -43,12 +43,29 @@ export default function AutomacoesPage() {
       const data = await res.json()
       if (data.ok) {
         const r = data.results
-        setWorkerResult(`✓ Avaliados: ${r.evaluated} | Jobs criados: ${r.created} | Processados: ${r.processed} | Enviados: ${r.sent} | Cancelados: ${r.cancelled} | Falhas: ${r.failed}`)
+        const rej = data.rejections ?? {}
+        const parts = [
+          `Avaliados: ${r.evaluated}`,
+          `Jobs criados: ${r.created}`,
+          `Bloqueados (horário): ${r.blocked_hour ?? 0}`,
+          `Processados: ${r.processed}`,
+          `Enviados: ${r.sent}`,
+          `Cancelados: ${r.cancelled}`,
+          `Falhas: ${r.failed}`,
+        ]
+        const rejParts = []
+        if (rej.has_active_job) rejParts.push(`Job ativo: ${rej.has_active_job}`)
+        if (rej.conditions_not_met) rejParts.push(`Condições: ${rej.conditions_not_met}`)
+        if (rej.human_interaction_recent) rejParts.push(`Interação recente: ${rej.human_interaction_recent}`)
+        if (rej.insert_error) rejParts.push(`Erro insert: ${rej.insert_error}`)
+        if (rej.no_leads_found) rejParts.push(`Sem leads: ${rej.no_leads_found}`)
+        const msg = parts.join(" | ") + (rejParts.length ? `\nRejeições: ${rejParts.join(" | ")}` : "")
+        setWorkerResult({ ok: true, message: msg, details: data })
       } else {
-        setWorkerResult(`✗ Erro: ${data.error}`)
+        setWorkerResult({ ok: false, message: `Erro: ${data.error}` })
       }
     } catch {
-      setWorkerResult("✗ Falha de conexão ao executar worker")
+      setWorkerResult({ ok: false, message: "Falha de conexão ao executar worker" })
     }
     setWorkerRunning(false)
   }
@@ -91,8 +108,23 @@ export default function AutomacoesPage() {
 
       {/* Resultado do worker */}
       {workerResult && (
-        <div className={"rounded-lg border p-3 text-sm " + (workerResult.startsWith("✓") ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700")}>
-          {workerResult}
+        <div className={"rounded-lg border p-4 text-sm " + (workerResult.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700")}>
+          <div className="whitespace-pre-wrap font-medium">{workerResult.message}</div>
+          {workerResult.details?.rejection_details?.length > 0 && (
+            <div className="mt-3 border-t border-emerald-200 pt-3">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-70">Detalhes das rejeições (primeiros 20)</p>
+              <div className="max-h-48 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-left opacity-70"><th className="pr-4 pb-1">Lead</th><th>Motivo</th></tr></thead>
+                  <tbody>
+                    {workerResult.details.rejection_details.slice(0, 20).map((d: any, i: number) => (
+                      <tr key={i} className="border-t border-emerald-200/50"><td className="pr-4 py-1 font-medium">{d.lead_nome}</td><td className="py-1">{d.reason}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
