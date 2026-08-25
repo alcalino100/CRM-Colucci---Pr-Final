@@ -347,12 +347,47 @@ export function isWithinAllowedSchedule(waitConfig: AutomationWaitConfig): boole
 // ---------- Cálculo do scheduled_at ----------
 
 export function calculateScheduledAt(waitConfig: AutomationWaitConfig): string {
+  const tz = waitConfig.timezone ?? "America/Sao_Paulo"
   const now = new Date()
   const amount = waitConfig.amount ?? 10
   const unit = waitConfig.unit ?? "minutes"
 
+  // Obter hora atual no timezone configurado
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(now)
+  const currentHour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10)
+  const currentMinute = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10)
+  const currentTimeMinutes = currentHour * 60 + currentMinute
+
+  const [startH, startM] = (waitConfig.allowed_start_hour ?? "08:00").split(":").map(Number)
+  const [endH, endM] = (waitConfig.allowed_end_hour ?? "18:00").split(":").map(Number)
+  const startTimeMinutes = (startH ?? 8) * 60 + (startM ?? 0)
+  const endTimeMinutes = (endH ?? 18) * 60 + (endM ?? 0)
+
   const ms = unit === "minutes" ? amount * 60000 : unit === "hours" ? amount * 3600000 : amount * 86400000
-  const scheduled = new Date(now.getTime() + ms)
+
+  let scheduled: Date
+
+  if (currentTimeMinutes >= startTimeMinutes && currentTimeMinutes <= endTimeMinutes) {
+    // Dentro do horário permitido → agendar para hoje (now + wait)
+    scheduled = new Date(now.getTime() + ms)
+  } else if (currentTimeMinutes > endTimeMinutes) {
+    // Depois do horário → amanhã no início do horário permitido
+    scheduled = new Date(now)
+    scheduled.setDate(scheduled.getDate() + 1)
+    scheduled.setHours(startH ?? 8, startM ?? 0, 0, 0)
+    scheduled = new Date(scheduled.getTime() + ms)
+  } else {
+    // Antes do horário → hoje no início do horário permitido
+    scheduled = new Date(now)
+    scheduled.setHours(startH ?? 8, startM ?? 0, 0, 0)
+    scheduled = new Date(scheduled.getTime() + ms)
+  }
 
   return scheduled.toISOString()
 }
@@ -386,16 +421,44 @@ export async function getActiveAutomations(): Promise<Automation[]> {
 // ---------- Buscar jobs agendados para processar ----------
 
 export async function getJobsToProcess(): Promise<AutomationJob[]> {
-  const now = new Date().toISOString()
-  const { data } = await wsupabase
+  const now = new Date()
+  const nowIso = now.toISOString()
+
+  // Buscar jobs cujo scheduled_at já chegou (case tradicional)
+  const { data: readyJobs } = await wsupabase
     .from("automation_jobs")
     .select("*")
     .in("status", ["scheduled", "pending_validation", "retrying"])
-    .lte("scheduled_at", now)
+    .lte("scheduled_at", nowIso)
     .order("scheduled_at", { ascending: true })
     .limit(50)
 
-  return (data ?? []) as AutomationJob[]
+  // Buscar jobs agendados para hoje (scheduled_at no futuro mas ainda hoje) — processar imediatamente
+  const todayStart = new Date(now)
+  todayStart.setHours(0, 0, 0, 0)
+  const todayEnd = new Date(now)
+  todayEnd.setHours(23, 59, 59, 999)
+
+  const { data: todayJobs } = await wsupabase
+    .from("automation_jobs")
+    .select("*")
+    .in("status", ["scheduled"])
+    .gt("scheduled_at", nowIso)
+    .lte("scheduled_at", todayEnd.toISOString())
+    .order("scheduled_at", { ascending: true })
+    .limit(50)
+
+  // Combinar e deduplicar por id
+  const allJobs = [...(readyJobs ?? [])]
+  const seenIds = new Set(allJobs.map((j) => j.id))
+  for (const job of todayJobs ?? []) {
+    if (!seenIds.has(job.id)) {
+      allJobs.push(job)
+      seenIds.add(job.id)
+    }
+  }
+
+  return allJobs as AutomationJob[]
 }
 
 // ---------- Lock transacional ----------
