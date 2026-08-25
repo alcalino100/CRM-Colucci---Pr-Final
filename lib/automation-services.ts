@@ -313,6 +313,75 @@ export async function createLog(input: {
   }
 }
 
+// ---------- Retorno da conversa para o job (resposta / entrega / leitura) ----------
+
+// Marca como "respondido" o job de automação enviado a este lead quando ele responde no
+// WhatsApp. Liga a resposta ao envio: só considera jobs já enviados (sent/delivered/read),
+// ainda sem responded_at, cujo envio ocorreu ANTES da resposta. Pega o mais recente.
+// Idempotente: se não houver job elegível, não faz nada.
+export async function registrarRespostaDeLead(leadId: string, quandoISO: string): Promise<void> {
+  const { data: job } = await wsupabase
+    .from("automation_jobs")
+    .select("id, automation_id, status, sent_at")
+    .eq("lead_id", leadId)
+    .in("status", ["sent", "delivered", "read"])
+    .is("responded_at", null)
+    .not("sent_at", "is", null)
+    .lte("sent_at", quandoISO)
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!job) return
+
+  await wsupabase
+    .from("automation_jobs")
+    .update({ status: "responded", responded_at: quandoISO })
+    .eq("id", job.id)
+
+  await createLog({
+    automation_id: job.automation_id,
+    job_id: job.id,
+    lead_id: leadId,
+    event_type: "lead_responded",
+    event_title: "Lead respondeu",
+    event_description: "Resposta recebida no WhatsApp após o envio da automação.",
+    previous_status: job.status as AutomationJobStatus,
+    new_status: "responded",
+    actor_type: "lead",
+    payload: { responded_at: quandoISO },
+  })
+}
+
+// Registra recibo de entrega/leitura vindo da Evolution, casando pelo provider_message_id.
+// Avança o status apenas para frente (sent -> delivered -> read) e nunca sobrescreve um
+// carimbo já existente. Se o lead já respondeu, mantém "responded" (estado mais forte).
+export async function registrarStatusEntrega(providerMessageId: string, tipo: "delivered" | "read"): Promise<void> {
+  if (!providerMessageId) return
+  const { data: job } = await wsupabase
+    .from("automation_jobs")
+    .select("id, status, delivered_at, read_at")
+    .eq("provider_message_id", providerMessageId)
+    .limit(1)
+    .maybeSingle()
+  if (!job) return
+
+  const agora = new Date().toISOString()
+  const patch: Record<string, unknown> = {}
+  const jaTerminal = job.status === "responded" || job.status === "read"
+
+  if (tipo === "delivered") {
+    if (!job.delivered_at) patch.delivered_at = agora
+    if (job.status === "sent") patch.status = "delivered"
+  } else {
+    if (!job.read_at) patch.read_at = agora
+    if (!job.delivered_at) patch.delivered_at = agora
+    if (!jaTerminal) patch.status = "read"
+  }
+  if (Object.keys(patch).length === 0) return
+  await wsupabase.from("automation_jobs").update(patch).eq("id", job.id)
+}
+
 // ---------- Verificação de horário permitido ----------
 
 export function isWithinAllowedSchedule(waitConfig: AutomationWaitConfig): boolean {

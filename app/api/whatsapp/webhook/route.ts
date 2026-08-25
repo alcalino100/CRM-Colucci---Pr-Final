@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { normalizePhone } from "@/lib/labels"
 import { baixarEArmazenarMidia, detectarMidia, mapConnectionState, notifyDisconnection, onlyDigits, wsupabase, type MidiaDetectada } from "@/lib/whatsapp/server"
+import { registrarRespostaDeLead, registrarStatusEntrega } from "@/lib/automation-services"
 import { enviarLeadCapi } from "@/lib/meta/capi"
 
 export const runtime = "nodejs"
@@ -207,6 +208,11 @@ async function handleMessageUpsert(payload: any) {
   // Nomes internos (esposa/parentes de corretores): ignora completamente — sem lead, sem mensagem, sem notificação
   if (isBlockedName(nome)) return
 
+  // Este contato já é um lead? Se sim e houver automação enviada a ele, ESTA mensagem é a
+  // resposta — liga a resposta ao job. Resolvido uma única vez e reaproveitado no insert abaixo.
+  const leadIdExistente = await encontrarLeadPorTelefone(telefone)
+  if (leadIdExistente) await registrarRespostaDeLead(leadIdExistente, new Date().toISOString())
+
   // Código de rastreio (ponte /r): o texto pré-preenchido termina com "Código: XXXXXXXX".
   // Mesmo sem contexto CTWA da Meta, o código casa o clique com o lead.
   const codigo = /(?:codigo|código)[:.\s-]*([A-Z0-9]{6,10})\s*[.!]?\s*$/i.exec(corpo.trim())?.[1] ?? null
@@ -239,7 +245,7 @@ async function handleMessageUpsert(payload: any) {
       telefone,
       nome_contato: nome,
       corpo,
-      lead_id: await encontrarLeadPorTelefone(telefone),
+      lead_id: leadIdExistente,
       veio_de_anuncio: false,
       mensagem_id: mensagemId,
       ...camposMidia(midia),
@@ -453,6 +459,26 @@ async function handleMessageUpsert(payload: any) {
   await preencherMidiaUrl(instanceName, mensagemId, midia)
 }
 
+// Recibo de entrega/leitura (evento messages.update da Evolution). A Evolution reporta o
+// status como número (Baileys: 3=entregue, 4=lido, 5=reproduzido) ou string equivalente.
+function mapStatusEntrega(s: unknown): "delivered" | "read" | null {
+  if (s === 3 || s === "3" || s === "DELIVERY_ACK") return "delivered"
+  if (s === 4 || s === "4" || s === "READ" || s === 5 || s === "5" || s === "PLAYED") return "read"
+  return null
+}
+
+async function handleMessageStatusUpdate(payload: any) {
+  const itens = Array.isArray(payload?.data) ? payload.data : [payload?.data]
+  for (const item of itens) {
+    if (!item) continue
+    const providerMessageId: string | null = item?.key?.id ?? item?.keyId ?? null
+    if (!providerMessageId) continue
+    const tipo = mapStatusEntrega(item?.update?.status ?? item?.status)
+    if (!tipo) continue
+    await registrarStatusEntrega(providerMessageId, tipo)
+  }
+}
+
 export async function POST(request: Request) {
   try {
     // Se um segredo estiver configurado, exige-o na query ou header
@@ -468,6 +494,7 @@ export async function POST(request: Request) {
 
     const event: string = payload.event ?? payload.type ?? ""
     if (event.includes("connection")) await handleConnectionUpdate(payload)
+    else if (event.includes("messages") && event.includes("update")) await handleMessageStatusUpdate(payload)
     else if (event.includes("messages")) {
       // Processa TODAS as mensagens do lote (não só data[0])
       const itens = Array.isArray(payload?.data) ? payload.data : [payload?.data]
