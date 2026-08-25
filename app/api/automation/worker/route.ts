@@ -106,8 +106,8 @@ interface RejectionBreakdown {
   insert_error: number
 }
 
-// POST = processamento do worker
-export async function POST() {
+// Núcleo do worker — chamado pelo botão manual (POST) e pelo cron (GET autenticado).
+async function runWorker() {
   const runStart = Date.now()
   try {
     const automations = await getActiveAutomations()
@@ -568,8 +568,22 @@ export async function POST() {
   }
 }
 
-// GET = status do worker + logs recentes
-export async function GET() {
+// POST = disparo manual (botão "Executar Worker" no painel)
+export async function POST() {
+  return runWorker()
+}
+
+// GET autenticado pelo cron (Vercel Cron envia Authorization: Bearer CRON_SECRET) executa o
+// worker — é o que torna a automação autônoma. GET sem o segredo devolve só o status (usado
+// pelo painel). As automações pausadas continuam sendo ignoradas pelo worker.
+export async function GET(req: Request) {
+  const secret = process.env.CRON_SECRET
+  const url = new URL(req.url)
+  const auth = req.headers.get("authorization")
+  const qs = url.searchParams.get("secret")
+  const ehCron = !!secret && (auth === `Bearer ${secret}` || qs === secret)
+  if (ehCron) return runWorker()
+
   const [automationsRes, jobsRes, logsRes] = await Promise.all([
     wsupabase.from("automations").select("id, name, status").is("deleted_at", null),
     wsupabase.from("automation_jobs").select("status").in("status", ["scheduled", "processing", "retrying"]),
