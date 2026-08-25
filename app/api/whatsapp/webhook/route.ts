@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { normalizePhone } from "@/lib/labels"
-import { mapConnectionState, notifyDisconnection, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
+import { baixarEArmazenarMidia, detectarMidia, mapConnectionState, notifyDisconnection, onlyDigits, wsupabase, type MidiaDetectada } from "@/lib/whatsapp/server"
 import { enviarLeadCapi } from "@/lib/meta/capi"
 
 export const runtime = "nodejs"
@@ -145,6 +145,24 @@ async function encontrarLeadPorTelefone(telefone: string): Promise<string | null
   return lead?.id ?? null
 }
 
+// Colunas de mídia para o insert (a URL entra depois, quando o arquivo termina de baixar).
+function camposMidia(midia: MidiaDetectada | null) {
+  if (!midia) return {}
+  return { tipo_midia: midia.tipo, mime_type: midia.mimeType, nome_arquivo: midia.nomeArquivo }
+}
+
+// Após inserir a mensagem, baixa o arquivo da Evolution e preenche midia_url (best-effort).
+// A conversa já mostrou a mensagem; a mídia aparece assim que o upload conclui (via Realtime).
+async function preencherMidiaUrl(instanceName: string, mensagemId: string | null, midia: MidiaDetectada | null) {
+  if (!midia || !mensagemId) return
+  const armazenado = await baixarEArmazenarMidia(instanceName, mensagemId, midia)
+  if (!armazenado) return
+  await wsupabase
+    .from("whatsapp_mensagens")
+    .update({ midia_url: armazenado.url, mime_type: armazenado.mimeType ?? midia.mimeType })
+    .eq("mensagem_id", mensagemId)
+}
+
 async function handleMessageUpsert(payload: any) {
   const instanceName = getInstanceName(payload)
   if (!instanceName) return
@@ -158,11 +176,14 @@ async function handleMessageUpsert(payload: any) {
   if (!telefone) return
   // Números internos bloqueados: ignora completamente (sem lead, sem mensagem, sem notificação)
   if (isBlocked(telefone)) return
+  const mensagemId: string | null = msg?.key?.id ?? null
+  const midia = detectarMidia(msg?.message)
+  // Corpo: texto puro, ou a legenda da mídia (imagem/vídeo/documento podem ter legenda).
+  // Sem mídia e sem texto, mantém o rótulo antigo por segurança.
   const corpo =
     msg?.message?.conversation ??
     msg?.message?.extendedTextMessage?.text ??
-    "[mídia]"
-  const mensagemId: string | null = msg?.key?.id ?? null
+    (midia ? (midia.legenda ?? "") : "[mídia]")
 
   // Mensagem enviada pelo corretor (pelo CRM ou pelo próprio celular): só registra para
   // aparecer no chat do gestor, ligada ao lead quando o telefone bate. Não passa pela
@@ -176,7 +197,9 @@ async function handleMessageUpsert(payload: any) {
       lead_id: await encontrarLeadPorTelefone(telefone),
       de_mim: true,
       mensagem_id: mensagemId,
+      ...camposMidia(midia),
     })
+    await preencherMidiaUrl(instanceName, mensagemId, midia)
     return
   }
 
@@ -219,7 +242,9 @@ async function handleMessageUpsert(payload: any) {
       lead_id: await encontrarLeadPorTelefone(telefone),
       veio_de_anuncio: false,
       mensagem_id: mensagemId,
+      ...camposMidia(midia),
     })
+    await preencherMidiaUrl(instanceName, mensagemId, midia)
     return
   }
 
@@ -423,7 +448,9 @@ async function handleMessageUpsert(payload: any) {
     anuncio_id: anuncioId,
     anuncio_titulo: anuncioTitulo,
     mensagem_id: mensagemId,
+    ...camposMidia(midia),
   })
+  await preencherMidiaUrl(instanceName, mensagemId, midia)
 }
 
 export async function POST(request: Request) {

@@ -13,12 +13,19 @@ export async function GET(request: Request) {
 
   const { data: mensagens, error } = await wsupabase
     .from("whatsapp_mensagens")
-    .select("lead_id, telefone, nome_contato, corpo, de_mim, criado_em")
+    .select("lead_id, telefone, nome_contato, corpo, de_mim, criado_em, tipo_midia")
     .eq("instance_name", instanceName)
     .not("lead_id", "is", null)
     .order("criado_em", { ascending: false })
     .limit(4000)
   if (error) return NextResponse.json({ error: "Não foi possível carregar as conversas." }, { status: 500 })
+
+  // Rótulo curto para a prévia da conversa quando a última mensagem é mídia sem legenda.
+  const rotuloMidia: Record<string, string> = {
+    image: "📷 Foto", audio: "🎤 Áudio", video: "🎬 Vídeo", document: "📄 Documento", sticker: "🌟 Figurinha",
+  }
+  const previa = (m: { corpo: string | null; tipo_midia: string | null }) =>
+    m.corpo?.trim() ? m.corpo : m.tipo_midia ? (rotuloMidia[m.tipo_midia] ?? "Mídia") : (m.corpo ?? "")
 
   // Agrupa por lead (a lista já vem da mais recente para a mais antiga)
   const porLead = new Map<string, { leadId: string; telefone: string; ultima: string; ultimaEm: string; ultimaDeMim: boolean; total: number }>()
@@ -30,7 +37,7 @@ export async function GET(request: Request) {
       porLead.set(m.lead_id, {
         leadId: m.lead_id,
         telefone: m.telefone,
-        ultima: m.corpo ?? "",
+        ultima: previa(m),
         ultimaEm: m.criado_em,
         ultimaDeMim: !!m.de_mim,
         total: 1,

@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await wsupabase
     .from("whatsapp_mensagens")
-    .select("id, corpo, de_mim, criado_em, veio_de_anuncio, anuncio_titulo")
+    .select("id, corpo, de_mim, criado_em, veio_de_anuncio, anuncio_titulo, tipo_midia, midia_url, mime_type, nome_arquivo")
     .eq("instance_name", instanceName)
     .eq("lead_id", leadId)
     .order("criado_em", { ascending: true })

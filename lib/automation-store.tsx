@@ -373,6 +373,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
       loadTemplates().catch(() => {}),
       loadGlobalSettings().catch(() => {}),
       loadJobs().catch(() => {}),
+      loadLogs().catch(() => {}),
     ]).finally(() => setReady(true))
 
     try {

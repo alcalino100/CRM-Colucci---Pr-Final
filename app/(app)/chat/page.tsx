@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, MessageCircle, Search, Send, Smartphone } from "lucide-react"
+import { FileText, Loader2, MessageCircle, Search, Send, Smartphone } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
 import { supabase } from "@/lib/supabase/client"
@@ -30,6 +30,10 @@ type Mensagem = {
   criado_em: string
   veio_de_anuncio?: boolean
   anuncio_titulo?: string | null
+  tipo_midia?: "image" | "audio" | "video" | "document" | "sticker" | null
+  midia_url?: string | null
+  mime_type?: string | null
+  nome_arquivo?: string | null
 }
 
 function horaCurta(iso: string) {
@@ -291,7 +295,8 @@ export default function ChatPage() {
                               Via anúncio{m.anuncio_titulo ? ` · ${m.anuncio_titulo.slice(0, 40)}` : ""}
                             </p>
                           )}
-                          <p className="whitespace-pre-wrap break-words">{m.corpo}</p>
+                          {m.tipo_midia && <MidiaBolha m={m} />}
+                          {m.corpo?.trim() && <p className="whitespace-pre-wrap break-words">{m.corpo}</p>}
                           <p className={cn("mt-1 text-right text-[10px]", m.de_mim ? "text-primary-foreground/60" : "text-muted-foreground")}>
                             {horaCurta(m.criado_em)}
                           </p>
@@ -325,5 +330,35 @@ export default function ChatPage() {
         </div>
       )}
     </div>
+  )
+}
+
+// Renderiza a mídia de uma mensagem. Enquanto o arquivo ainda está sendo baixado da
+// Evolution (midia_url ainda nula), mostra um espaço de carregamento.
+function MidiaBolha({ m }: { m: Mensagem }) {
+  const url = m.midia_url
+  if (!url) {
+    return (
+      <div className="mb-1 flex items-center gap-2 rounded-lg bg-black/5 px-3 py-2 text-xs opacity-80">
+        <Loader2 className="size-3.5 animate-spin" /> carregando mídia…
+      </div>
+    )
+  }
+  if (m.tipo_midia === "image" || m.tipo_midia === "sticker") {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="Imagem" className={cn("mb-1 rounded-lg object-cover", m.tipo_midia === "sticker" ? "size-28" : "max-h-64 w-full")} /></a>
+  }
+  if (m.tipo_midia === "audio") {
+    return <audio controls src={url} className="mb-1 w-56 max-w-full" />
+  }
+  if (m.tipo_midia === "video") {
+    return <video controls src={url} className="mb-1 max-h-64 w-full rounded-lg" />
+  }
+  // document e outros
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 rounded-lg bg-black/5 px-3 py-2 text-sm underline-offset-2 hover:underline">
+      <FileText className="size-4 shrink-0" />
+      <span className="truncate">{m.nome_arquivo || "Abrir documento"}</span>
+    </a>
   )
 }

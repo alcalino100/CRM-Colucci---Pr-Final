@@ -11,6 +11,100 @@ export function evolutionConfig() {
   return { url, key, ok: Boolean(url && key) }
 }
 
+// Cliente privilegiado para gravar no Storage (a chave publishable não tem permissão de
+// escrita em objetos; o webhook roda no servidor e pode usar a chave secreta).
+function storageClient() {
+  const secret = process.env.SUPABASE_SECRET_KEY
+  if (!secret) return null
+  return createClient(SUPABASE_URL, secret, { auth: { persistSession: false } })
+}
+
+// ---------------------------------------------------------------------------
+// Mídia recebida/enviada (imagem, áudio, vídeo, documento, figurinha)
+// ---------------------------------------------------------------------------
+const BUCKET_MIDIA = "whatsapp-midia"
+
+export type TipoMidia = "image" | "audio" | "video" | "document" | "sticker"
+
+export interface MidiaDetectada {
+  tipo: TipoMidia
+  legenda: string | null
+  mimeType: string | null
+  nomeArquivo: string | null
+}
+
+// Identifica o tipo de mídia a partir do objeto message da Evolution/Baileys.
+// Retorna null quando a mensagem é de texto puro (segue o fluxo normal).
+export function detectarMidia(message: any): MidiaDetectada | null {
+  if (!message) return null
+  const m = message.ephemeralMessage?.message ?? message.viewOnceMessage?.message ?? message
+  if (m.imageMessage) return { tipo: "image", legenda: m.imageMessage.caption ?? null, mimeType: m.imageMessage.mimetype ?? "image/jpeg", nomeArquivo: null }
+  if (m.audioMessage) return { tipo: "audio", legenda: null, mimeType: m.audioMessage.mimetype ?? "audio/ogg", nomeArquivo: null }
+  if (m.videoMessage) return { tipo: "video", legenda: m.videoMessage.caption ?? null, mimeType: m.videoMessage.mimetype ?? "video/mp4", nomeArquivo: null }
+  if (m.documentMessage) return { tipo: "document", legenda: m.documentMessage.caption ?? null, mimeType: m.documentMessage.mimetype ?? "application/octet-stream", nomeArquivo: m.documentMessage.fileName ?? null }
+  if (m.stickerMessage) return { tipo: "sticker", legenda: null, mimeType: m.stickerMessage.mimetype ?? "image/webp", nomeArquivo: null }
+  return null
+}
+
+// Extensão de arquivo a partir do mime type (para nomear o objeto no Storage).
+function extDoMime(mime: string | null): string {
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+    "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/amr": "amr",
+    "video/mp4": "mp4", "video/3gpp": "3gp",
+    "application/pdf": "pdf",
+  }
+  return map[(mime ?? "").split(";")[0].trim()] ?? "bin"
+}
+
+// Pede à Evolution o conteúdo de uma mensagem de mídia (base64). Best-effort: retorna null
+// se a mídia já expirou ou a instância recusar.
+async function baixarMidiaBase64(instanceName: string, mensagemId: string): Promise<{ base64: string; mimeType: string | null } | null> {
+  const cfg = evolutionConfig()
+  if (!cfg.ok) return null
+  try {
+    const res = await fetch(`${cfg.url}/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: cfg.key },
+      body: JSON.stringify({ message: { key: { id: mensagemId } }, convertToMp4: false }),
+    })
+    if (!res.ok) return null
+    const json = await res.json().catch(() => null)
+    const base64 = json?.base64 ?? json?.media ?? null
+    if (!base64 || typeof base64 !== "string") return null
+    return { base64, mimeType: json?.mimetype ?? null }
+  } catch {
+    return null
+  }
+}
+
+// Baixa a mídia da Evolution e guarda no Storage; retorna a URL pública (ou null se falhar).
+export async function baixarEArmazenarMidia(
+  instanceName: string,
+  mensagemId: string,
+  midia: MidiaDetectada,
+): Promise<{ url: string; mimeType: string | null } | null> {
+  const storage = storageClient()
+  if (!storage) return null
+  const baixado = await baixarMidiaBase64(instanceName, mensagemId)
+  if (!baixado) return null
+  const mimeType = baixado.mimeType ?? midia.mimeType
+  const ext = extDoMime(mimeType)
+  const caminho = `${instanceName}/${mensagemId}.${ext}`
+  try {
+    const buffer = Buffer.from(baixado.base64, "base64")
+    const { error } = await storage.storage.from(BUCKET_MIDIA).upload(caminho, buffer, {
+      contentType: mimeType ?? "application/octet-stream",
+      upsert: true,
+    })
+    if (error) return null
+    const { data } = storage.storage.from(BUCKET_MIDIA).getPublicUrl(caminho)
+    return { url: data.publicUrl, mimeType }
+  } catch {
+    return null
+  }
+}
+
 // Transforma o nome do corretor em um slug seguro para nome de instância
 export function slugify(v: string) {
   return (v || "")
