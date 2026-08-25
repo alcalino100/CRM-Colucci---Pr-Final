@@ -83,6 +83,11 @@ async function criarJobsFollowup(automation: any, results: { created: number }):
     const { eligible } = await evaluateConditions(lead.id, automation.conditions, automation.id)
     if (!eligible) continue
 
+    // Corretor assumiu? Se houve interação humana registrada DEPOIS do envio da 1ª mensagem,
+    // não faz follow-up — evita atropelar quem já está cuidando do lead.
+    const ultima = await getLastHumanInteraction(lead.id)
+    if (ultima.timestamp && new Date(ultima.timestamp).getTime() > new Date(pj.sent_at).getTime()) continue
+
     const scheduledAt = calculateScheduledAt(automation.wait_config)
     const { error } = await wsupabase.from("automation_jobs").insert({
       automation_id: automation.id,
