@@ -24,6 +24,80 @@ import type { AutomationJob, AutomationJobStatus } from "@/lib/automation-types"
 
 const WORKER_ID = `worker-${Date.now()}`
 
+// Cria jobs de follow-up: pega os leads que receberam a mensagem da automação-mãe e não
+// responderam há mais de N horas, e agenda um novo envio (a fase de processamento cuida do
+// disparo). Garante no máximo 1 follow-up por lead e só para leads ainda elegíveis.
+// A automação de follow-up é identificada por trigger_type = "no_response_followup" e traz
+// em trigger_config: { parent_automation_id, no_response_hours }.
+async function criarJobsFollowup(automation: any, results: { created: number }): Promise<void> {
+  const cfg = automation.trigger_config ?? {}
+  const parentId: string | undefined = cfg.parent_automation_id
+  const horas: number = cfg.no_response_hours ?? 24
+  if (!parentId) {
+    await createLog({
+      automation_id: automation.id,
+      event_type: "lead_not_eligible",
+      event_title: "Follow-up sem automação-mãe configurada",
+      event_description: "trigger_config.parent_automation_id ausente.",
+    })
+    return
+  }
+
+  const cutoff = new Date(Date.now() - horas * 3600_000).toISOString()
+
+  // Jobs da automação-mãe: enviados, sem resposta, antigos o suficiente.
+  const { data: parentJobs } = await wsupabase
+    .from("automation_jobs")
+    .select("lead_id, sent_at")
+    .eq("automation_id", parentId)
+    .in("status", ["sent", "delivered", "read"])
+    .is("responded_at", null)
+    .lte("sent_at", cutoff)
+
+  for (const pj of parentJobs ?? []) {
+    // Máximo 1 follow-up por lead: pula se já existir qualquer job de follow-up para ele.
+    const { count } = await wsupabase
+      .from("automation_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("automation_id", automation.id)
+      .eq("lead_id", pj.lead_id)
+    if ((count ?? 0) > 0) continue
+
+    // Lead ainda elegível (não respondeu, não mudou de etapa, não fechou/arquivou).
+    const { data: lead } = await wsupabase
+      .from("leads")
+      .select("id, nome, status, origem, corretor_id, arquivado_em, fechado_em")
+      .eq("id", pj.lead_id)
+      .maybeSingle()
+    if (!lead || lead.status !== "novo" || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) continue
+
+    const scheduledAt = calculateScheduledAt(automation.wait_config)
+    const { error } = await wsupabase.from("automation_jobs").insert({
+      automation_id: automation.id,
+      lead_id: lead.id,
+      assigned_agent_id: lead.corretor_id || null,
+      supervisor_user_id: automation.supervisor_user_id,
+      status: "scheduled",
+      scheduled_at: scheduledAt,
+      eligible_at: new Date().toISOString(),
+      max_attempts: automation.limits_config?.max_sends_per_lead ?? 1,
+    })
+    if (!error) {
+      results.created++
+      await createLog({
+        automation_id: automation.id,
+        job_id: null,
+        lead_id: lead.id,
+        event_type: "job_created",
+        event_title: "Follow-up agendado",
+        event_description: `Lead ${lead.nome} sem resposta há ${horas}h — follow-up agendado para ${new Date(scheduledAt).toLocaleString("pt-BR")}.`,
+        new_status: "scheduled",
+        payload: { parent_automation_id: parentId, scheduled_at: scheduledAt },
+      })
+    }
+  }
+}
+
 interface RejectionBreakdown {
   has_active_job: number
   conditions_not_met: number
@@ -55,8 +129,12 @@ export async function POST() {
     }
     const rejectionDetails: { lead_id: string; lead_nome: string; reason: string }[] = []
 
+    // Follow-up tem gatilho próprio (jobs sem resposta), não o pool bruto de leads.
+    const automacoesNormais = automations.filter((a) => a.trigger_type !== "no_response_followup")
+    const automacoesFollowup = automations.filter((a) => a.trigger_type === "no_response_followup")
+
     // FASE 1: Avaliar leads elegíveis e criar jobs
-    for (const automation of automations) {
+    for (const automation of automacoesNormais) {
       const { data: leads, error: leadsErr } = await wsupabase
         .from("leads")
         .select("id, nome, telefone, temperatura, status, origem, corretor_id, criado_em, gestor_responsavel, arquivado_em, fechado_em")
@@ -209,6 +287,11 @@ export async function POST() {
         event_description: `Avaliados: ${results.evaluated} | Jobs criados: ${results.created} | Bloqueados (horário): ${results.blocked_hour}`,
         payload: { rejections },
       })
+    }
+
+    // FASE 1-B: Criar jobs de follow-up (leads sem resposta da automação-mãe)
+    for (const automation of automacoesFollowup) {
+      await criarJobsFollowup(automation, results)
     }
 
     // FASE 2: Processar jobs agendados
