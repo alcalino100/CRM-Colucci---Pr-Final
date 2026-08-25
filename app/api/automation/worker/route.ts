@@ -69,13 +69,19 @@ async function criarJobsFollowup(automation: any, results: { created: number }):
       .eq("lead_id", pj.lead_id)
     if ((count ?? 0) > 0) continue
 
-    // Lead ainda elegível (não respondeu, não mudou de etapa, não fechou/arquivou).
+    // Guarda mínima (targeting do follow-up): lead ainda novo, de tráfego pago, não fechado/arquivado.
     const { data: lead } = await wsupabase
       .from("leads")
       .select("id, nome, status, origem, corretor_id, arquivado_em, fechado_em")
       .eq("id", pj.lead_id)
       .maybeSingle()
     if (!lead || lead.status !== "novo" || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) continue
+
+    // Honra as MESMAS condições em dados da automação (telefone válido, não-perdido,
+    // não-bloqueado, etc.) — mesmo motor usado pela reativação. Assim o follow-up herda
+    // todas as guardas configuradas na regra, e não só as fixas acima.
+    const { eligible } = await evaluateConditions(lead.id, automation.conditions, automation.id)
+    if (!eligible) continue
 
     const scheduledAt = calculateScheduledAt(automation.wait_config)
     const { error } = await wsupabase.from("automation_jobs").insert({
