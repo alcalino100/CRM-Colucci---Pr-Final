@@ -18,3 +18,7 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 .vercel
 .env*
+
+.claude-flow/
+.claude/
+ruvector.db
