@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Eye, EyeOff, Pencil } from "lucide-react"
+import { Plus, Pencil } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { isMaster, modulosRole, podeGerenciarEquipe, ROLE_GROUPS, ROLE_LABEL } from "@/lib/roles"
 import type { Modulo } from "@/lib/mock-data"
@@ -19,7 +19,6 @@ export default function AcessosPage() {
   const { user } = useAuth()
   const { users, addUser, updateUser } = useLeads()
   const toast = useToast()
-  const [showSenha, setShowSenha] = useState<Record<string, boolean>>({})
   const [editing, setEditing] = useState<User | null>(null)
   const [novo, setNovo] = useState(false)
   const [form, setForm] = useState<FormState>(empty)
@@ -53,24 +52,28 @@ export default function AcessosPage() {
       setError("Você não pode editar um Gestor Master.")
       return
     }
-    setForm({ nome: u.nome, email: u.email, senha: u.senha, role: u.role, ativo: u.ativo }); setError(""); setEditing(u)
+    // Senha nunca é prefiltrada (só existe como hash) — em branco na edição = manter a atual.
+    setForm({ nome: u.nome, email: u.email, senha: "", role: u.role, ativo: u.ativo }); setError(""); setEditing(u)
   }
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((s) => ({ ...s, [k]: v }))
   }
 
-  function validate() {
+  function validate(isEdit: boolean) {
     if (!form.nome.trim()) return "Informe o nome."
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) return "E-mail inválido."
-    if (form.senha.length < 6) return "A senha deve ter ao menos 6 caracteres."
+    // Na edição, campo em branco = manter a senha atual; se digitado, vale a regra de tamanho mínimo.
+    if (!isEdit || form.senha) {
+      if (form.senha.length < 6) return "A senha deve ter ao menos 6 caracteres."
+    }
     if (form.role === "gestor_master" && !canManageMaster) return "Você não pode atribuir o perfil Gestor Master."
     return ""
   }
 
   async function submitNovo(e: React.FormEvent) {
     e.preventDefault()
-    const v = validate()
+    const v = validate(false)
     if (v) { setError(v); return }
     const res = await addUser(form)
     if (!res.ok) { setError(res.error!); return }
@@ -79,7 +82,7 @@ export default function AcessosPage() {
   }
   async function submitEdit(e: React.FormEvent) {
     e.preventDefault()
-    const v = validate()
+    const v = validate(true)
     if (v) { setError(v); return }
     const res = await updateUser(editing!.id, form)
     if (!res.ok) { setError(res.error!); return }
@@ -97,21 +100,13 @@ export default function AcessosPage() {
       <Card>
         <Table>
           <THead>
-            <TR><TH>Nome</TH><TH>E-mail</TH><TH>Senha</TH><TH>Perfil</TH><TH>Status</TH><TH>Ações</TH></TR>
+            <TR><TH>Nome</TH><TH>E-mail</TH><TH>Perfil</TH><TH>Status</TH><TH>Ações</TH></TR>
           </THead>
           <tbody>
             {users.map((u) => (
               <TR key={u.id}>
                 <TD className="font-medium">{u.nome}</TD>
                 <TD className="text-muted-foreground">{u.email}</TD>
-                <TD>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-muted-foreground">{showSenha[u.id] ? u.senha : "••••••"}</span>
-                    <button onClick={() => setShowSenha((s) => ({ ...s, [u.id]: !s[u.id] }))} aria-label="Mostrar senha" className="text-muted-foreground hover:text-foreground">
-                      {showSenha[u.id] ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                    </button>
-                  </div>
-                </TD>
                 <TD><Badge variant={ROLE_VARIANT[u.role]}>{ROLE_LABEL[u.role]}</Badge></TD>
                 <TD><Badge variant={u.ativo ? "green" : "gray"}>{u.ativo ? "Ativo" : "Inativo"}</Badge></TD>
                 <TD><Button variant="outline" size="sm" disabled={u.role === "gestor_master" && !canManageMaster} onClick={() => openEdit(u)}><Pencil className="size-3.5" /> Editar</Button></TD>
@@ -122,17 +117,17 @@ export default function AcessosPage() {
       </Card>
 
       <Dialog open={novo} onClose={() => setNovo(false)} title="Novo Usuário">
-        <UserForm form={form} set={set} error={error} onSubmit={submitNovo} onCancel={() => setNovo(false)} submitLabel="Cadastrar" canManageMaster={canManageMaster} roleGroups={roleGroups} />
+        <UserForm form={form} set={set} error={error} onSubmit={submitNovo} onCancel={() => setNovo(false)} submitLabel="Cadastrar" canManageMaster={canManageMaster} roleGroups={roleGroups} isEdit={false} />
       </Dialog>
       <Dialog open={!!editing} onClose={() => setEditing(null)} title="Editar Usuário">
-        <UserForm form={form} set={set} error={error} onSubmit={submitEdit} onCancel={() => setEditing(null)} submitLabel="Salvar alterações" canManageMaster={canManageMaster} roleGroups={roleGroups} />
+        <UserForm form={form} set={set} error={error} onSubmit={submitEdit} onCancel={() => setEditing(null)} submitLabel="Salvar alterações" canManageMaster={canManageMaster} roleGroups={roleGroups} isEdit />
       </Dialog>
     </div>
   )
 }
 
 function UserForm({
-  form, set, error, onSubmit, onCancel, submitLabel, canManageMaster, roleGroups,
+  form, set, error, onSubmit, onCancel, submitLabel, canManageMaster, roleGroups, isEdit,
 }: {
   form: FormState
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void
@@ -142,6 +137,7 @@ function UserForm({
   submitLabel: string
   canManageMaster: boolean
   roleGroups: { label: string; roles: Role[] }[]
+  isEdit: boolean
 }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3" noValidate>
@@ -155,8 +151,8 @@ function UserForm({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <Label htmlFor="us">Senha *</Label>
-          <Input id="us" value={form.senha} onChange={(e) => set("senha", e.target.value)} />
+          <Label htmlFor="us">{isEdit ? "Nova senha" : "Senha *"}</Label>
+          <Input id="us" type="password" autoComplete="new-password" placeholder={isEdit ? "Deixe em branco para manter a atual" : undefined} value={form.senha} onChange={(e) => set("senha", e.target.value)} />
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="ur">Perfil</Label>

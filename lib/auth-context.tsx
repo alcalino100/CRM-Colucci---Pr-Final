@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useState } from "react"
 import type { Role, User } from "./mock-data"
-import { supabase } from "./supabase/client"
 
 type SessionUser = Omit<User, "senha">
 
@@ -30,25 +29,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   async function login(email: string, senha: string) {
-    // Busca o usuário na tabela `usuarios` do Supabase.
-    // Modo transitório: compara senha_hash === senha (texto puro).
-    const { data, error } = await supabase
-      .from("usuarios")
-      .select("id, nome, email, role, status, senha_hash, criado_em")
-      .eq("email", email.trim().toLowerCase())
-      .eq("status", "ativo")
-      .maybeSingle()
+    // A verificação de senha roda no servidor (app/api/auth/login), que é o
+    // único lugar com acesso à coluna senha_hash e faz a comparação com bcrypt.
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, senha }),
+    })
+    if (!res.ok) return { ok: false }
+    const { ok, user: data } = await res.json()
+    if (!ok || !data) return { ok: false }
 
-    if (error || !data || data.senha_hash !== senha) return { ok: false }
-
-    // Converte a linha do banco para o formato que o app usa (SessionUser)
     const session: SessionUser = {
       id: data.id,
       nome: data.nome,
       email: data.email,
       role: data.role as Role,
-      ativo: data.status === "ativo",
-      criadoEm: data.criado_em,
+      ativo: data.ativo,
+      criadoEm: data.criadoEm,
     }
     setUser(session)
     localStorage.setItem(KEY, JSON.stringify(session))

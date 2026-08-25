@@ -15,7 +15,7 @@ import { brl, fmtDate, fmtDuracao, STATUS_ACCENT, STATUS_LABEL, STATUS_VARIANT }
 import { ORIGENS, type LeadStatus, type Origem } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 
-const COLORS = ["#b22222", "#54595f", "#c41e24", "#a1a1aa"]
+const COLORS = ["#b22222", "#54595f", "#c41e24", "#a1a1aa", "#d4d4d8", "#e4a11b"]
 
 // Probabilidade de fechamento por etapa (usada na previsão ponderada do pipeline)
 const PIPELINE_PROB: Record<LeadStatus, number> = {
@@ -290,14 +290,35 @@ export default function DashboardGestaoPage() {
         <Card>
           <CardHeader><CardTitle>Origem dos leads</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={origemData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={(e: any) => `${e.name} (${e.value})`}>
-                  {origemData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            {origemData.length === 0 ? (
+              <p className="py-16 text-center text-sm text-muted-foreground">Sem leads no período</p>
+            ) : (
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+                <div className="h-[180px] w-[180px] shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={origemData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={false} isAnimationActive={false}>
+                        {origemData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex w-full min-w-0 flex-col gap-2">
+                  {origemData.map((d, i) => {
+                    const total = origemData.reduce((s, x) => s + x.value, 0)
+                    const pct = total ? Math.round((d.value / total) * 100) : 0
+                    return (
+                      <div key={d.name} className="flex items-center gap-2 text-sm">
+                        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                        <span className="min-w-0 flex-1 truncate text-foreground">{d.name}</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{d.value}</span> · {pct}%</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

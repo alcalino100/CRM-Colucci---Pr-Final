@@ -62,11 +62,7 @@ export default function PerfilPage() {
 
   async function onChangeSenha(e: React.FormEvent) {
     e.preventDefault()
-    if (!me) return
-    if (senhaAtual !== me.senha) {
-      toast("Senha atual incorreta.", "error")
-      return
-    }
+    if (!user) return
     if (novaSenha.length < 6) {
       toast("A nova senha deve ter pelo menos 6 caracteres.", "error")
       return
@@ -76,15 +72,20 @@ export default function PerfilPage() {
       return
     }
     setSavingSenha(true)
-    const res = await updateProfile({ senha: novaSenha })
+    const res = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.id, senhaAtual, novaSenha }),
+    })
+    const data = await res.json().catch(() => ({ ok: false }))
     setSavingSenha(false)
-    if (res.ok) {
+    if (data.ok) {
       toast("Senha alterada com sucesso.")
       setSenhaAtual("")
       setNovaSenha("")
       setConfirma("")
     } else {
-      toast(res.error ?? "Erro ao salvar.", "error")
+      toast(data.error ?? "Erro ao salvar.", "error")
     }
   }
 

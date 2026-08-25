@@ -72,11 +72,6 @@ export default function LoginPage() {
             {loading ? <><Loader2 className="size-4 animate-spin" /> Entrando...</> : "Entrar"}
           </Button>
         </form>
-
-        <div className="mt-6 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-          <p className="font-medium text-foreground">Contas de teste (senha: 123456)</p>
-          <p className="mt-1">Gestor: ana@imob.com · Corretor: beatriz@imob.com</p>
-        </div>
       </div>
     </main>
   )

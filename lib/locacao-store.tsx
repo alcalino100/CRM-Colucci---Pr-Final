@@ -188,7 +188,8 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
     if (data) setVisits(data.map(rowToVisit))
   }, [])
   const loadUsers = useCallback(async () => {
-    const { data } = await supabase.from("usuarios").select("*").order("criado_em", { ascending: true })
+    // Não seleciona senha_hash: a senha nunca deve trafegar para o navegador.
+    const { data } = await supabase.from("usuarios").select("id, nome, email, role, status, avatar, criado_em").order("criado_em", { ascending: true })
     if (data) setUsers(data.map(rowToUser))
   }, [])
   const loadNotifications = useCallback(async () => {

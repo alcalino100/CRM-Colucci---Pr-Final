@@ -20,6 +20,7 @@ import {
   type User,
   type Visit,
 } from "./mock-data"
+import bcrypt from "bcryptjs"
 import { isCorretorDe, isGestorNivel, isMaster, modulosRole } from "./roles"
 import { supabase } from "./supabase/client"
 import { useAuth } from "./auth-context"
@@ -77,7 +78,7 @@ interface Store {
   addQualityNote: (leadId: string, texto: string) => void
   addUser: (u: Omit<User, "id" | "criadoEm">) => Promise<{ ok: boolean; error?: string }>
   updateUser: (id: string, patch: Partial<User>) => Promise<{ ok: boolean; error?: string }>
-  updateProfile: (patch: { avatar?: string; senha?: string }) => Promise<{ ok: boolean; error?: string }>
+  updateProfile: (patch: { avatar?: string }) => Promise<{ ok: boolean; error?: string }>
 }
 
 const Ctx = createContext<Store | null>(null)
@@ -258,7 +259,8 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (data) setVisits(data.map(rowToVisit))
   }, [])
   const loadUsers = useCallback(async () => {
-    const { data } = await supabase.from("usuarios").select("*").order("criado_em", { ascending: true })
+    // Não seleciona senha_hash: a senha nunca deve trafegar para o navegador.
+    const { data } = await supabase.from("usuarios").select("id, nome, email, role, status, avatar, criado_em").order("criado_em", { ascending: true })
     if (data) setUsers(data.map(rowToUser))
   }, [])
   const loadNotifications = useCallback(async () => {
@@ -652,8 +654,9 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (u.role === "gestor_master" && !isMaster(userRole)) return { ok: false, error: "Apenas o Gestor Master pode criar outros Gestores Master." }
     const email = u.email.trim().toLowerCase()
     if (users.some((x) => x.email.toLowerCase() === email)) return { ok: false, error: "E-mail já cadastrado." }
+    const senhaHash = await bcrypt.hash(u.senha, 10)
     const { error } = await supabase.from("usuarios").insert({
-      nome: u.nome, email, senha_hash: u.senha, role: u.role, status: u.ativo ? "ativo" : "inativo",
+      nome: u.nome, email, senha_hash: senhaHash, role: u.role, status: u.ativo ? "ativo" : "inativo",
     })
     if (error) return { ok: false, error: `Não foi possível salvar: ${error.message}` }
     await loadUsers()
@@ -666,7 +669,8 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     const row: Record<string, any> = {}
     if (patch.nome !== undefined) row.nome = patch.nome
     if (email !== undefined) row.email = email
-    if (patch.senha !== undefined) row.senha_hash = patch.senha
+    // Campo em branco = manter a senha atual (nunca prefiltrada, pois é hash).
+    if (patch.senha) row.senha_hash = await bcrypt.hash(patch.senha, 10)
     if (patch.role !== undefined) row.role = patch.role
     if (patch.avatar !== undefined) row.avatar = patch.avatar
     if (patch.ativo !== undefined) row.status = patch.ativo ? "ativo" : "inativo"
@@ -676,12 +680,11 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     return { ok: true }
   }
 
-  // Perfil do usuário logado (foto/senha)
+  // Perfil do usuário logado (só foto — senha tem fluxo próprio em /api/auth/change-password)
   const updateProfile: Store["updateProfile"] = async (patch) => {
     if (!userId) return { ok: false, error: "Sessão inválida." }
     const row: Record<string, any> = {}
     if (patch.avatar !== undefined) row.avatar = patch.avatar
-    if (patch.senha !== undefined) row.senha_hash = patch.senha
     const { error } = await supabase.from("usuarios").update(row).eq("id", userId)
     if (error) return { ok: false, error: "Não foi possível salvar. Tente novamente." }
     await loadUsers()
