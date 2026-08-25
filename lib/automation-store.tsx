@@ -86,6 +86,8 @@ export interface DashboardMetrics {
   response_rate: number
   cancel_rate: number
   failure_rate: number
+  follow_up_pool: number
+  median_response_minutes: number
 }
 
 const Ctx = createContext<AutomationStore | null>(null)
@@ -185,10 +187,10 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
 
     const [automationsRes, jobsRes] = await Promise.all([
       supabase.from("automations").select("id", { count: "exact", head: true }).eq("status", "active").is("deleted_at", null),
-      supabase.from("automation_jobs").select("status, created_at"),
+      supabase.from("automation_jobs").select("status, created_at, sent_at, responded_at"),
     ])
 
-    const allJobs = (jobsRes.data ?? []) as { status: string; created_at: string }[]
+    const allJobs = (jobsRes.data ?? []) as { status: string; created_at: string; sent_at: string | null; responded_at: string | null }[]
     const todayJobs = allJobs.filter((j) => new Date(j.created_at) >= hoje)
 
     const counts: Record<string, number> = {}
@@ -201,12 +203,29 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     const cancelRate = allJobs.length > 0 ? ((counts.cancelled_human ?? 0) / allJobs.length) * 100 : 0
     const failureRate = allJobs.length > 0 ? ((counts.failed ?? 0) / allJobs.length) * 100 : 0
 
+    // Enviados hoje: baseado em sent_at (não no status), senão jobs que já responderam
+    // deixariam de ser contados como enviados.
+    const sentToday = allJobs.filter((j) => j.sent_at && new Date(j.sent_at) >= hoje).length
+
+    // Fila de follow-up: enviados que ainda não responderam (candidatos a uma próxima automação).
+    const followUpPool = (counts.sent ?? 0) + (counts.delivered ?? 0) + (counts.read ?? 0)
+
+    // Tempo mediano até responder (minutos), entre os que responderam.
+    const responseMinutes = allJobs
+      .filter((j) => j.responded_at && j.sent_at)
+      .map((j) => (new Date(j.responded_at as string).getTime() - new Date(j.sent_at as string).getTime()) / 60000)
+      .filter((m) => m >= 0)
+      .sort((a, b) => a - b)
+    const medianResponse = responseMinutes.length
+      ? responseMinutes[Math.floor((responseMinutes.length - 1) / 2)]
+      : 0
+
     return {
       active_automations: (automationsRes.count ?? 0),
       leads_analyzed_today: todayJobs.length,
       leads_eligible_today: (todayCounts.scheduled ?? 0) + (todayCounts.pending_validation ?? 0),
       messages_scheduled: (counts.scheduled ?? 0) + (counts.pending_validation ?? 0),
-      messages_sent_today: (todayCounts.sent ?? 0),
+      messages_sent_today: sentToday,
       messages_delivered: (counts.delivered ?? 0),
       messages_read: (counts.read ?? 0),
       leads_responded: (counts.responded ?? 0),
@@ -216,6 +235,8 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
       response_rate: Math.round(responseRate * 10) / 10,
       cancel_rate: Math.round(cancelRate * 10) / 10,
       failure_rate: Math.round(failureRate * 10) / 10,
+      follow_up_pool: followUpPool,
+      median_response_minutes: Math.round(medianResponse),
     }
   }, [])
 

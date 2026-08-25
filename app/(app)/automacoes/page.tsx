@@ -177,6 +177,28 @@ export default function AutomacoesPage() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex size-10 items-center justify-center rounded-full bg-sky-100 text-sky-600">
+              <Clock className="size-5" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{metrics?.median_response_minutes ?? 0} min</p>
+              <p className="text-xs text-muted-foreground">Tempo mediano até responder</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <Users className="size-5" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{metrics?.follow_up_pool ?? 0}</p>
+              <p className="text-xs text-muted-foreground">Fila de follow-up (enviados sem resposta)</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Automações ativas + Próximos envios */}
