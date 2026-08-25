@@ -22,6 +22,12 @@ import {
 import { wsupabase } from "@/lib/whatsapp/server"
 import type { AutomationJob, AutomationJobStatus } from "@/lib/automation-types"
 
+// O worker faz várias consultas + envios; sem isto cairia no limite padrão de 10s do Hobby
+// e poderia ser morto no meio de um envio. 60s é o teto do Hobby.
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const maxDuration = 60
+
 const WORKER_ID = `worker-${Date.now()}`
 
 // Cria jobs de follow-up: pega os leads que receberam a mensagem da automação-mãe e não
