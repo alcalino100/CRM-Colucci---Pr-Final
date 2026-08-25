@@ -69,13 +69,13 @@ async function criarJobsFollowup(automation: any, results: { created: number }):
       .eq("lead_id", pj.lead_id)
     if ((count ?? 0) > 0) continue
 
-    // Guarda mínima (targeting do follow-up): lead ainda novo, de tráfego pago, não fechado/arquivado.
+    // Guarda mínima (targeting do follow-up): lead em atendimento ou novo, de tráfego pago, não fechado/arquivado.
     const { data: lead } = await wsupabase
       .from("leads")
       .select("id, nome, status, origem, corretor_id, arquivado_em, fechado_em")
       .eq("id", pj.lead_id)
       .maybeSingle()
-    if (!lead || lead.status !== "novo" || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) continue
+    if (!lead || !["novo", "em_atendimento"].includes(lead.status) || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) continue
 
     // Honra as MESMAS condições em dados da automação (telefone válido, não-perdido,
     // não-bloqueado, etc.) — mesmo motor usado pela reativação. Assim o follow-up herda
@@ -432,7 +432,7 @@ async function runWorker() {
           if (automation.supervision_enabled && automation.supervisor_user_id) {
             const { error: supErr } = await wsupabase
               .from("leads")
-              .update({ gestor_responsavel: automation.supervisor_user_id })
+              .update({ gestor_responsavel: automation.supervisor_user_id, status: "em_atendimento" })
               .eq("id", job.lead_id)
 
             if (supErr) {
