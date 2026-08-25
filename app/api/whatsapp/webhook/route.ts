@@ -138,11 +138,18 @@ function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId:
   return { veioDeAnuncio: false, anuncioId: null, anuncioTitulo: null }
 }
 
+// Acha o lead cujo telefone bate com o do contato (para vincular a mensagem ao registro do CRM).
+async function encontrarLeadPorTelefone(telefone: string): Promise<string | null> {
+  const { data: candidatos } = await wsupabase.from("leads").select("id, telefone")
+  const lead = (candidatos ?? []).find((l) => normalizePhone(l.telefone) === normalizePhone(telefone))
+  return lead?.id ?? null
+}
+
 async function handleMessageUpsert(payload: any) {
   const instanceName = getInstanceName(payload)
   if (!instanceName) return
   const msg = Array.isArray(payload?.data) ? payload.data[0] : payload?.data
-  if (!msg || msg?.key?.fromMe === true) return
+  if (!msg) return
 
   const remoteJid: string = msg?.key?.remoteJid ?? ""
   // Ignora grupos e transmissões
@@ -151,13 +158,31 @@ async function handleMessageUpsert(payload: any) {
   if (!telefone) return
   // Números internos bloqueados: ignora completamente (sem lead, sem mensagem, sem notificação)
   if (isBlocked(telefone)) return
-  const nome = msg?.pushName || telefone
-  // Nomes internos (esposa/parentes de corretores): ignora completamente — sem lead, sem mensagem, sem notificação
-  if (isBlockedName(nome)) return
   const corpo =
     msg?.message?.conversation ??
     msg?.message?.extendedTextMessage?.text ??
     "[mídia]"
+  const mensagemId: string | null = msg?.key?.id ?? null
+
+  // Mensagem enviada pelo corretor (pelo CRM ou pelo próprio celular): só registra para
+  // aparecer no chat do gestor, ligada ao lead quando o telefone bate. Não passa pela
+  // detecção de anúncio nem cria lead — essa lógica é só para mensagens recebidas.
+  if (msg?.key?.fromMe === true) {
+    await wsupabase.from("whatsapp_mensagens").insert({
+      instance_name: instanceName,
+      telefone,
+      nome_contato: null,
+      corpo,
+      lead_id: await encontrarLeadPorTelefone(telefone),
+      de_mim: true,
+      mensagem_id: mensagemId,
+    })
+    return
+  }
+
+  const nome = msg?.pushName || telefone
+  // Nomes internos (esposa/parentes de corretores): ignora completamente — sem lead, sem mensagem, sem notificação
+  if (isBlockedName(nome)) return
 
   // Código de rastreio (ponte /r): o texto pré-preenchido termina com "Código: XXXXXXXX".
   // Mesmo sem contexto CTWA da Meta, o código casa o clique com o lead.
@@ -183,15 +208,17 @@ async function handleMessageUpsert(payload: any) {
   const { veioDeAnuncio, anuncioId, anuncioTitulo } = detectAd(msg, corpo)
   const veioDeAnuncioEfetivo = veioDeAnuncio || !!clique
 
-  // Mensagem orgânica: só registra para referência, não cria lead nem notifica.
+  // Mensagem orgânica: não cria lead nem notifica, mas vincula ao lead existente
+  // (se o telefone bater com algum já cadastrado) para aparecer no chat do gestor.
   if (!veioDeAnuncioEfetivo) {
     await wsupabase.from("whatsapp_mensagens").insert({
       instance_name: instanceName,
       telefone,
       nome_contato: nome,
       corpo,
-      lead_id: null,
+      lead_id: await encontrarLeadPorTelefone(telefone),
       veio_de_anuncio: false,
+      mensagem_id: mensagemId,
     })
     return
   }
@@ -395,6 +422,7 @@ async function handleMessageUpsert(payload: any) {
     veio_de_anuncio: true,
     anuncio_id: anuncioId,
     anuncio_titulo: anuncioTitulo,
+    mensagem_id: mensagemId,
   })
 }
 
