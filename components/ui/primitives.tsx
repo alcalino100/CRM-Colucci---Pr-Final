@@ -7,9 +7,8 @@ import { cn } from "@/lib/utils"
 /* Card */
 export function Card({ className, children, ...p }: React.ComponentProps<"div">) {
   return (
-    <div className={cn("relative rounded-xl border border-border bg-card text-card-foreground shadow-sm", className)} {...p}>
+    <div className={cn("relative rounded-xl border border-border bg-card text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.04)]", className)} {...p}>
       {children}
-      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-primary/0 via-primary/70 to-primary/0" />
     </div>
   )
 }

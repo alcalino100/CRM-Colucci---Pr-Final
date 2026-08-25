@@ -209,11 +209,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </header>
 
           <main className="relative min-w-0 flex-1 overflow-x-hidden p-4 lg:p-6">
-            {/* Aurora de fundo global */}
+            {/* Leve toque de cor de fundo, discreto */}
             <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-              <div className="absolute -top-24 left-1/4 h-80 w-[34rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-              <div className="absolute right-[-4rem] top-1/3 h-64 w-64 rounded-full bg-accent/8 blur-3xl" />
-              <div className="absolute bottom-[-6rem] left-[-4rem] h-72 w-72 rounded-full bg-secondary/10 blur-3xl" />
+              <div className="absolute -top-32 left-1/2 h-96 w-[40rem] -translate-x-1/2 rounded-full bg-primary/[0.04] blur-3xl" />
             </div>
             <div className="relative z-10">{children}</div>
           </main>

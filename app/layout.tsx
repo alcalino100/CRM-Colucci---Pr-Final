@@ -1,11 +1,11 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
+import { Inter, Space_Grotesk } from 'next/font/google'
 import { AuthProvider } from '@/lib/auth-context'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
-const jakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-jakarta' })
+const jakarta = Space_Grotesk({ subsets: ['latin'], variable: '--font-jakarta' })
 
 export const metadata: Metadata = {
   title: 'Colucci Imóveis — CRM',
