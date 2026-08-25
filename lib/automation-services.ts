@@ -369,24 +369,25 @@ export function calculateScheduledAt(waitConfig: AutomationWaitConfig): string {
   const startTimeMinutes = (startH ?? 8) * 60 + (startM ?? 0)
   const endTimeMinutes = (endH ?? 18) * 60 + (endM ?? 0)
 
-  const ms = unit === "minutes" ? amount * 60000 : unit === "hours" ? amount * 3600000 : amount * 86400000
+  // Converter wait para minutos (máximo 1 dia = 1440 min)
+  const waitMinutes = unit === "minutes" ? amount : unit === "hours" ? amount * 60 : Math.min(amount * 1440, 1440)
 
   let scheduled: Date
 
   if (currentTimeMinutes >= startTimeMinutes && currentTimeMinutes <= endTimeMinutes) {
-    // Dentro do horário permitido → agendar para hoje (now + wait)
-    scheduled = new Date(now.getTime() + ms)
+    // Dentro do horário → agendar para HOJE, mas não passar do fim do horário
+    const targetMinutes = Math.min(currentTimeMinutes + waitMinutes, endTimeMinutes)
+    scheduled = new Date(now)
+    scheduled.setHours(Math.floor(targetMinutes / 60), targetMinutes % 60, 0, 0)
   } else if (currentTimeMinutes > endTimeMinutes) {
-    // Depois do horário → amanhã no início do horário permitido
+    // Depois do horário → AMANHÃ no início do horário
     scheduled = new Date(now)
     scheduled.setDate(scheduled.getDate() + 1)
     scheduled.setHours(startH ?? 8, startM ?? 0, 0, 0)
-    scheduled = new Date(scheduled.getTime() + ms)
   } else {
-    // Antes do horário → hoje no início do horário permitido
+    // Antes do horário → HOJE no início do horário
     scheduled = new Date(now)
     scheduled.setHours(startH ?? 8, startM ?? 0, 0, 0)
-    scheduled = new Date(scheduled.getTime() + ms)
   }
 
   return scheduled.toISOString()
