@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Zap, MessageCircle, Users, CheckCircle2, XCircle, Clock, Eye, BarChart3, ArrowRight, AlertTriangle, Shield, Play } from "lucide-react"
+import { Zap, MessageCircle, Users, CheckCircle2, XCircle, Clock, Eye, BarChart3, ArrowRight, AlertTriangle, Shield, Play, Pause, Activity } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent, Badge, Skeleton } from "@/components/ui/primitives"
 import { useAutomation, type DashboardMetrics } from "@/lib/automation-store"
 import { useLeads } from "@/lib/leads-store"
@@ -13,12 +13,13 @@ import { cn } from "@/lib/utils"
 
 export default function AutomacoesPage() {
   const { user } = useAuth()
-  const { automations, jobs, ready: storeReady, loadDashboardMetrics } = useAutomation()
+  const { automations, jobs, ready: storeReady, loadDashboardMetrics, toggleAutomation } = useAutomation()
   const { users, leads } = useLeads()
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [workerRunning, setWorkerRunning] = useState(false)
   const [workerResult, setWorkerResult] = useState<{ ok: boolean; message: string; details?: any } | null>(null)
+  const [lastRun, setLastRun] = useState<{ timestamp: string; description?: string } | null>(null)
 
   useEffect(() => {
     if (!storeReady) return
@@ -28,9 +29,48 @@ export default function AutomacoesPage() {
       .catch(() => setLoading(false))
   }, [storeReady, loadDashboardMetrics])
 
-  const activeAutomations = automations.filter((a) => a.status === "active")
+  // Status do piloto automático (última execução do worker — manual ou pelo cron)
+  useEffect(() => {
+    let vivo = true
+    const buscar = () =>
+      fetch("/api/automation/worker")
+        .then((r) => r.json())
+        .then((d) => { if (vivo) setLastRun(d.last_run ?? null) })
+        .catch(() => {})
+    buscar()
+    const t = setInterval(buscar, 60_000) // atualiza a cada minuto
+    return () => { vivo = false; clearInterval(t) }
+  }, [])
+
+  const ordemAutomacoes = [...automations].sort((a, b) => (a.status === "active" ? -1 : 1) - (b.status === "active" ? -1 : 1))
   const scheduledJobs = jobs.filter((j) => ["scheduled", "pending_validation"].includes(j.status))
-  const nextSends = scheduledJobs.slice(0, 8)
+  const nextSends = scheduledJobs
+    .slice()
+    .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+    .slice(0, 8)
+
+  // "há X min" desde a última execução — base da transparência do piloto automático
+  const minutosDesdeUltima = lastRun ? Math.floor((Date.now() - new Date(lastRun.timestamp).getTime()) / 60000) : null
+  const pilotoStatus =
+    minutosDesdeUltima === null ? { label: "Sem execução ainda", tone: "muted" as const }
+    : minutosDesdeUltima <= 30 ? { label: "Ativo", tone: "good" as const }
+    : minutosDesdeUltima <= 90 ? { label: "Sem rodar há um tempo", tone: "warn" as const }
+    : { label: "Parado?", tone: "crit" as const }
+
+  function haQuanto(min: number | null): string {
+    if (min === null) return "—"
+    if (min < 1) return "agora mesmo"
+    if (min < 60) return `há ${min} min`
+    const h = Math.floor(min / 60)
+    return h < 24 ? `há ${h}h` : `há ${Math.floor(h / 24)}d`
+  }
+  function rotuloDia(iso: string): string {
+    const d = new Date(iso), hoje = new Date()
+    const amanha = new Date(hoje); amanha.setDate(hoje.getDate() + 1)
+    if (d.toDateString() === hoje.toDateString()) return "Hoje"
+    if (d.toDateString() === amanha.toDateString()) return "Amanhã"
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+  }
 
   function userName(id: string) { return users.find((u) => u.id === id)?.nome ?? "—" }
   function leadName(id: string) { return leads.find((l) => l.id === id)?.nome ?? "—" }
@@ -128,9 +168,39 @@ export default function AutomacoesPage() {
         </div>
       )}
 
+      {/* Piloto automático — transparência de que o worker roda sozinho */}
+      <Card className={cn(
+        "border-l-4",
+        pilotoStatus.tone === "good" ? "border-l-emerald-500" : pilotoStatus.tone === "warn" ? "border-l-amber-500" : pilotoStatus.tone === "crit" ? "border-l-red-500" : "border-l-border",
+      )}>
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "relative flex size-10 shrink-0 items-center justify-center rounded-full",
+              pilotoStatus.tone === "good" ? "bg-emerald-100 text-emerald-600" : pilotoStatus.tone === "warn" ? "bg-amber-100 text-amber-600" : pilotoStatus.tone === "crit" ? "bg-red-100 text-red-600" : "bg-muted text-muted-foreground",
+            )}>
+              <Activity className="size-5" />
+              {pilotoStatus.tone === "good" && <span className="absolute right-0 top-0 size-2.5 animate-pulse rounded-full bg-emerald-500 ring-2 ring-card" />}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold">Piloto automático</p>
+                <Badge variant={pilotoStatus.tone === "good" ? "green" : pilotoStatus.tone === "warn" ? "amber" : pilotoStatus.tone === "crit" ? "red" : "gray"}>{pilotoStatus.label}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {lastRun ? <>Última execução {haQuanto(minutosDesdeUltima)} · roda sozinho a cada ~15 min em horário comercial</> : "Aguardando a primeira execução automática"}
+              </p>
+            </div>
+          </div>
+          {lastRun?.description && (
+            <p className="max-w-md truncate text-xs text-muted-foreground sm:text-right" title={lastRun.description}>{lastRun.description}</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Métricas principais */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-        <MetricCard icon={Zap} label="Automações Ativas" value={metrics?.active_automations ?? activeAutomations.length} color="text-primary" />
+        <MetricCard icon={Zap} label="Automações Ativas" value={metrics?.active_automations ?? 0} color="text-primary" />
         <MetricCard icon={Users} label="Leads Analisados Hoje" value={metrics?.leads_analyzed_today ?? 0} color="text-sky-600" />
         <MetricCard icon={CheckCircle2} label="Leads Elegíveis" value={metrics?.leads_eligible_today ?? 0} color="text-emerald-600" />
         <MetricCard icon={MessageCircle} label="Enviados Hoje" value={metrics?.messages_sent_today ?? 0} color="text-blue-600" />
@@ -203,24 +273,41 @@ export default function AutomacoesPage() {
 
       {/* Automações ativas + Próximos envios */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Automações ativas */}
+        {/* Automações (ativas e pausadas) com controle inline */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Automações Ativas</CardTitle>
+            <CardTitle>Automações</CardTitle>
             <Link href="/automacoes/regras" className="text-xs font-medium text-primary hover:underline">Ver todas</Link>
           </CardHeader>
           <CardContent>
-            {activeAutomations.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma automação ativa</p>
+            {ordemAutomacoes.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma automação cadastrada</p>
             ) : (
               <div className="space-y-2">
-                {activeAutomations.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+                {ordemAutomacoes.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 p-3">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{a.name}</p>
-                      <p className="text-xs text-muted-foreground">{a.trigger_type === "lead_inactive" ? "Lead inativo" : a.trigger_type} · Espera {a.wait_config.amount} {a.wait_config.unit}</p>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("size-2 shrink-0 rounded-full", a.status === "active" ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+                        <p className="truncate text-sm font-medium">{a.name}</p>
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {a.trigger_type === "no_response_followup" ? "Follow-up (sem resposta)" : a.trigger_type === "lead_inactive" ? "Lead inativo" : a.trigger_type} · Espera {a.wait_config.amount} {a.wait_config.unit}
+                      </p>
                     </div>
-                    <Badge variant={AUTOMATION_STATUS_VARIANT[a.status]}>{AUTOMATION_STATUS_LABEL[a.status]}</Badge>
+                    {a.status !== "draft" && (
+                      <button
+                        onClick={() => toggleAutomation(a.id)}
+                        className={cn(
+                          "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition",
+                          a.status === "active"
+                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                        )}
+                      >
+                        {a.status === "active" ? <><Pause className="size-3.5" /> Pausar</> : <><Play className="size-3.5" /> Ativar</>}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -232,24 +319,32 @@ export default function AutomacoesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Próximos Envios</CardTitle>
-            <Link href="/automacoes/fila" className="text-xs font-medium text-primary hover:underline">Ver fila</Link>
+            <Link href="/automacoes/fila" className="text-xs font-medium text-primary hover:underline">
+              {scheduledJobs.length > 0 ? `Ver fila (${scheduledJobs.length})` : "Ver fila"}
+            </Link>
           </CardHeader>
           <CardContent>
             {nextSends.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Nenhum envio agendado</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">Nada agendado no momento</p>
             ) : (
               <div className="space-y-2">
                 {nextSends.map((job) => (
-                  <div key={job.id} className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+                  <div key={job.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 p-3">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{leadName(job.lead_id)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {userName(job.assigned_agent_id ?? "")} · Agendado: {fmtDateTime(job.scheduled_at)}
+                      <p className="truncate text-xs text-muted-foreground">
+                        {userName(job.assigned_agent_id ?? "")} · {fmtDateTime(job.scheduled_at)}
                       </p>
                     </div>
-                    <Badge variant={AUTOMATION_JOB_STATUS_VARIANT[job.status]}>
-                      {AUTOMATION_JOB_STATUS_LABEL[job.status]}
-                    </Badge>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className={cn(
+                        "rounded-md px-2 py-0.5 text-[11px] font-semibold",
+                        rotuloDia(job.scheduled_at) === "Hoje" ? "bg-emerald-100 text-emerald-700" : rotuloDia(job.scheduled_at) === "Amanhã" ? "bg-sky-100 text-sky-700" : "bg-muted text-muted-foreground",
+                      )}>{rotuloDia(job.scheduled_at)}</span>
+                      <Badge variant={AUTOMATION_JOB_STATUS_VARIANT[job.status]}>
+                        {AUTOMATION_JOB_STATUS_LABEL[job.status]}
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>
