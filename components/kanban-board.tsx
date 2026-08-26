@@ -520,7 +520,7 @@ export function KanbanBoard({
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="kanban-scroll w-full flex-1 overflow-x-auto overflow-y-hidden pb-3">
           <div className={`flex w-max flex-nowrap gap-4 ${heightClass}`}>
-          {LEAD_STATUSES.map((status) => {
+          {(isGestor ? LEAD_STATUSES : LEAD_STATUSES.filter((s) => s !== "em_followup")).map((status) => {
             const col = byStatus(status)
             return (
               <Droppable droppableId={status} key={status}>

@@ -101,6 +101,12 @@ async function criarJobsFollowup(automation: any, results: { created: number }):
     })
     if (!error) {
       results.created++
+      // Mover lead para em_followup (se ainda estiver em_atendimento)
+      await wsupabase
+        .from("leads")
+        .update({ status: "em_followup" })
+        .eq("id", lead.id)
+        .eq("status", "em_atendimento")
       await createLog({
         automation_id: automation.id,
         job_id: null,

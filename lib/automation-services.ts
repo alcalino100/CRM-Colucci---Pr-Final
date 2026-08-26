@@ -339,6 +339,13 @@ export async function registrarRespostaDeLead(leadId: string, quandoISO: string)
     .update({ status: "responded", responded_at: quandoISO })
     .eq("id", job.id)
 
+  // Se lead está em follow-up, voltar para em_atendimento
+  await wsupabase
+    .from("leads")
+    .update({ status: "em_atendimento" })
+    .eq("id", leadId)
+    .eq("status", "em_followup")
+
   await createLog({
     automation_id: job.automation_id,
     job_id: job.id,

@@ -21,6 +21,7 @@ const COLORS = ["#b22222", "#54595f", "#c41e24", "#a1a1aa", "#d4d4d8", "#e4a11b"
 const PIPELINE_PROB: Record<LeadStatus, number> = {
   novo: 0.1,
   "em_atendimento": 0.2,
+  "em_followup": 0.15,
   "escolhendo opcoes": 0.3,
   "imovel necessidade": 0.3,
   permuta: 0.4,
@@ -29,7 +30,7 @@ const PIPELINE_PROB: Record<LeadStatus, number> = {
   fechado: 1,
   perdido: 0,
 }
-const ETAPAS_PIPELINE: LeadStatus[] = ["novo", "em_atendimento", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "negociando"]
+const ETAPAS_PIPELINE: LeadStatus[] = ["novo", "em_atendimento", "em_followup", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "negociando"]
 const FUNIL: LeadStatus[] = ["novo", "em_atendimento", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "negociando", "fechado"]
 
 function ymdLocal(d: Date) {

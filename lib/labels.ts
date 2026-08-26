@@ -50,6 +50,7 @@ export function refsTexto(l: Pick<Lead, "referencias" | "imovelRef">) {
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   novo: "Novo Lead",
   "em_atendimento": "Em Atendimento",
+  "em_followup": "Em Follow-up",
   "escolhendo opcoes": "Separando Opções",
   "imovel necessidade": "Imóvel - Necessidade",
   permuta: "Permuta",
@@ -61,6 +62,7 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
 export const STATUS_VARIANT: Record<LeadStatus, string> = {
   novo: "blue",
   "em_atendimento": "indigo",
+  "em_followup": "orange",
   "escolhendo opcoes": "slate",
   "imovel necessidade": "teal",
   permuta: "purple",
@@ -73,6 +75,7 @@ export const STATUS_VARIANT: Record<LeadStatus, string> = {
 export const STATUS_ACCENT: Record<LeadStatus, string> = {
   novo: "#0ea5e9",
   "em_atendimento": "#4f46e5",
+  "em_followup": "#f97316",
   "escolhendo opcoes": "#54595f",
   "imovel necessidade": "#0d9488",
   permuta: "#9333ea",
@@ -84,6 +87,7 @@ export const STATUS_ACCENT: Record<LeadStatus, string> = {
 export const LEAD_STATUSES: LeadStatus[] = [
   "novo",
   "em_atendimento",
+  "em_followup",
   "escolhendo opcoes",
   "visita agendada",
   "negociando",
@@ -95,6 +99,7 @@ export const LEAD_STATUSES: LeadStatus[] = [
 // Mapeia status legados do banco para os atuais
 export function normalizeStatus(s: string): LeadStatus {
   if (s === "em atendimento") return "escolhendo opcoes"
+  if (s === "em followup") return "em_followup"
   if (s === "proposta enviada") return "negociando"
   return (LEAD_STATUSES as string[]).includes(s) ? (s as LeadStatus) : "novo"
 }
