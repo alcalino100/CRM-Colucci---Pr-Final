@@ -134,11 +134,12 @@ export async function getLastHumanInteraction(leadId: string): Promise<{ timesta
     .order("created_at", { ascending: false })
     .limit(1)
 
-  // Busca também na auditoria por ações recentes no lead
+  // Busca também na auditoria por ações recentes no lead (exclui edições do Sistema/worker)
   const { data: audits } = await wsupabase
     .from("auditoria")
     .select("criado_em, usuario_nome, tipo")
     .eq("lead_id", leadId)
+    .neq("usuario_nome", "Sistema")
     .order("criado_em", { ascending: false })
     .limit(1)
 
