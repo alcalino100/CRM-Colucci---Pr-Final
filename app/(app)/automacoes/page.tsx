@@ -65,11 +65,12 @@ export default function AutomacoesPage() {
     return h < 24 ? `há ${h}h` : `há ${Math.floor(h / 24)}d`
   }
   function rotuloDia(iso: string): string {
+    const fmt = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
     const d = new Date(iso), hoje = new Date()
     const amanha = new Date(hoje); amanha.setDate(hoje.getDate() + 1)
-    if (d.toDateString() === hoje.toDateString()) return "Hoje"
-    if (d.toDateString() === amanha.toDateString()) return "Amanhã"
-    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+    if (fmt(d) === fmt(hoje)) return "Hoje"
+    if (fmt(d) === fmt(amanha)) return "Amanhã"
+    return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" })
   }
 
   function userName(id: string) { return users.find((u) => u.id === id)?.nome ?? "—" }

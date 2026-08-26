@@ -34,9 +34,7 @@ const ETAPAS_PIPELINE: LeadStatus[] = ["novo", "em_atendimento", "em_followup", 
 const FUNIL: LeadStatus[] = ["novo", "em_atendimento", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "negociando", "fechado"]
 
 function ymdLocal(d: Date) {
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const dia = String(d.getDate()).padStart(2, "0")
-  return `${d.getFullYear()}-${m}-${dia}`
+  return d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
 }
 function inicioSemana(d: Date) {
   const x = new Date(d)

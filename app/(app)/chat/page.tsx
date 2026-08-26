@@ -37,12 +37,13 @@ type Mensagem = {
 }
 
 function horaCurta(iso: string) {
+  const BRT = "America/Sao_Paulo"
+  const fmt = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: BRT })
   const d = new Date(iso)
-  const hoje = new Date()
-  const mesmoDia = d.toDateString() === hoje.toDateString()
+  const mesmoDia = fmt(d) === fmt(new Date())
   return mesmoDia
-    ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+    ? d.toLocaleTimeString("pt-BR", { timeZone: BRT, hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString("pt-BR", { timeZone: BRT, day: "2-digit", month: "2-digit" })
 }
 
 export default function ChatPage() {

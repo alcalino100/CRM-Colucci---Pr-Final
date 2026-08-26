@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
 import { ToastProvider } from "@/components/ui/primitives"
+import { BRTClock } from "@/lib/timezone"
 import { LeadsProvider, useLeads } from "@/lib/leads-store"
 import { LocacaoProvider } from "@/lib/locacao-store"
 import { AutomationProvider } from "@/lib/automation-store"
@@ -197,6 +198,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Menu className="size-5" />
             </button>
             <div className="ml-auto flex items-center gap-3">
+              <BRTClock />
               <NotificationBell />
               <div className="text-right">
                 <p className="text-sm font-medium leading-tight">{user.nome}</p>

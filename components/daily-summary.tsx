@@ -123,7 +123,7 @@ export function DailySummary() {
 
   const ontem = new Date()
   ontem.setDate(ontem.getDate() - 1)
-  const dataLabel = ontem.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })
+  const dataLabel = ontem.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "numeric", month: "long" })
   const visiveis = showAll ? ontemLeads : ontemLeads.slice(0, 6)
   const vendasVisiveis = visiveis.filter((i) => i.tipo === "vendas")
   const locacaoVisiveis = visiveis.filter((i) => i.tipo === "locacao")

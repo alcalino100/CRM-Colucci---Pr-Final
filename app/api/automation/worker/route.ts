@@ -133,7 +133,7 @@ async function criarJobsFollowup(automation: any, results: { created: number }):
         lead_id: lead.id,
         event_type: "job_created",
         event_title: "Follow-up agendado",
-        event_description: `Lead ${lead.nome} sem resposta há ${horas}h — follow-up agendado para ${new Date(scheduledAt).toLocaleString("pt-BR")}.`,
+        event_description: `Lead ${lead.nome} sem resposta há ${horas}h — follow-up agendado para ${new Date(scheduledAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.`,
         new_status: "scheduled",
         payload: { parent_automation_id: parentId, scheduled_at: scheduledAt },
       })
@@ -275,7 +275,7 @@ async function runWorker() {
               lead_id: lead.id,
               event_type: "lead_eligible",
               event_title: "Lead elegível — aguardando horário permitido",
-              event_description: `Agendado para ${new Date(scheduledAt).toLocaleString("pt-BR")}`,
+              event_description: `Agendado para ${new Date(scheduledAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`,
               new_status: "blocked_hour",
               payload: { scheduled_at: scheduledAt },
             })
@@ -305,7 +305,7 @@ async function runWorker() {
             lead_id: lead.id,
             event_type: "job_created",
             event_title: "Job criado na fila",
-            event_description: `Lead: ${lead.nome} | Agendado: ${new Date(scheduledAt).toLocaleString("pt-BR")}`,
+            event_description: `Lead: ${lead.nome} | Agendado: ${new Date(scheduledAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`,
             new_status: "scheduled",
             payload: { scheduled_at: scheduledAt, lead_nome: lead.nome },
           })
@@ -482,7 +482,7 @@ async function runWorker() {
               if (automation.create_automatic_note) {
                 const noteText = (automation.automatic_note_template ?? "")
                   .replaceAll("{{nome_automacao}}", automation.name)
-                  .replaceAll("{{data_atual}}", new Date().toLocaleDateString("pt-BR"))
+                  .replaceAll("{{data_atual}}", new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }))
                   .replaceAll("{{hora_atual}}", new Date().toLocaleTimeString("pt-BR"))
                   .replaceAll("{{nome_gestor}}", "Patricia")
 

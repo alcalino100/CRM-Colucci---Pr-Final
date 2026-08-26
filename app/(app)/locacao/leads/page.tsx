@@ -60,7 +60,7 @@ const PRESETS: { label: string; get: () => Periodo }[] = [
 
 function fmtDia(key: string): string {
   const [y, m, d] = key.split("-").map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+  return new Date(y, m - 1, d).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" })
 }
 
 export default function LocacaoLeadsPage() {
@@ -339,7 +339,7 @@ export default function LocacaoLeadsPage() {
 function fmtDateLead(iso: string) {
   const [y, m, d] = (iso || "").slice(0, 10).split("-").map(Number)
   if (!y) return "—"
-  return new Date(y, m - 1, d).toLocaleDateString("pt-BR")
+  return new Date(y, m - 1, d).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
 }
 
 function Kpi({ icon: Icon, label, value, accent, variacao: v, compareTitle }: { icon: any; label: string; value: string; accent?: boolean; variacao?: number | null; compareTitle?: string }) {

@@ -33,9 +33,7 @@ const ETAPAS_PIPELINE: LocacaoStatus[] = ["novo", "em_atendimento", "procurando 
 const FUNIL: LocacaoStatus[] = ["novo", "em_atendimento", "procurando imovel", "visita agendada", "negociando", "locado"]
 
 function ymdLocal(d: Date) {
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const dia = String(d.getDate()).padStart(2, "0")
-  return `${d.getFullYear()}-${m}-${dia}`
+  return d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
 }
 function inicioSemana(d: Date) {
   const x = new Date(d)

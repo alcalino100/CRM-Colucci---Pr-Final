@@ -144,8 +144,8 @@ export default function NovaAutomacaoPage() {
     msg = msg.replaceAll("{{empreendimento_interesse}}", "Residencial Parque")
     msg = msg.replaceAll("{{origem_lead}}", "Tráfego Pago")
     msg = msg.replaceAll("{{telefone_lead}}", "(18) 99999-0000")
-    msg = msg.replaceAll("{{data_atual}}", new Date().toLocaleDateString("pt-BR"))
-    msg = msg.replaceAll("{{hora_atual}}", new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }))
+    msg = msg.replaceAll("{{data_atual}}", new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }))
+    msg = msg.replaceAll("{{hora_atual}}", new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }))
     return msg
   }, [messageContent])
 

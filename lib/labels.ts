@@ -162,10 +162,10 @@ export function brl(v?: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
 }
 export function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR")
+  return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
 }
 export function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+  return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
 }
 export function fmtDayLabel(ymd: string) {
   const [y, m, d] = ymd.split("-").map(Number)
