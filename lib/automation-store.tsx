@@ -322,7 +322,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
   }
 
   const clearQueue: AutomationStore["clearQueue"] = async (reason = "Fila limpa manualmente pelo gestor") => {
-    const terminalStatuses = ["sent", "delivered", "read", "responded", "cancelled_human", "cancelled_condition", "cancelled_manual"]
+    const terminalStatuses = ["sent", "delivered", "read", "responded", "cancelled_human", "cancelled_condition", "cancelled_manual", "blocked_limit"]
     const now = new Date().toISOString()
     const { data, error } = await supabase
       .from("automation_jobs")

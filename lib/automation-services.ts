@@ -247,7 +247,7 @@ export async function cancelJob(
 
   if (fetchErr || !job) return { ok: false, error: "Job não encontrado." }
 
-  const terminalStatuses: AutomationJobStatus[] = ["sent", "delivered", "read", "responded", "cancelled_human", "cancelled_condition", "cancelled_manual"]
+  const terminalStatuses: AutomationJobStatus[] = ["sent", "delivered", "read", "responded", "cancelled_human", "cancelled_condition", "cancelled_manual", "blocked_limit"]
   if (terminalStatuses.includes(job.status as AutomationJobStatus)) {
     return { ok: false, error: `Job já está em status final: ${job.status}` }
   }
@@ -470,7 +470,7 @@ export async function hasActiveJob(leadId: string, automationId: string): Promis
     .select("id", { count: "exact", head: true })
     .eq("lead_id", leadId)
     .eq("automation_id", automationId)
-    .not("status", "in", "(cancelled_human,cancelled_condition,cancelled_manual)")
+    .not("status", "in", "(cancelled_human,cancelled_condition,cancelled_manual,blocked_limit)")
 
   return (count ?? 0) > 0
 }
