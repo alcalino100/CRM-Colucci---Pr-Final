@@ -75,26 +75,38 @@ async function criarJobsFollowup(automation: any, results: { created: number }):
       .select("id", { count: "exact", head: true })
       .eq("automation_id", automation.id)
       .eq("lead_id", pj.lead_id)
-    if ((count ?? 0) > 0) continue
+    if ((count ?? 0) > 0) {
+      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${pj.lead_id.slice(0,8)}: já possui job de follow-up` })
+      continue
+    }
 
-    // Guarda mínima (targeting do follow-up): lead em atendimento ou novo, de tráfego pago, não fechado/arquivado.
+    // Guarda mínima (targeting do follow-up): lead em atendimento/followup/novo, de tráfego pago, não fechado/arquivado.
     const { data: lead } = await wsupabase
       .from("leads")
       .select("id, nome, status, origem, corretor_id, arquivado_em, fechado_em")
       .eq("id", pj.lead_id)
       .maybeSingle()
-    if (!lead || !["novo", "em_atendimento"].includes(lead.status) || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) continue
+    if (!lead || !["novo", "em_atendimento", "em_followup"].includes(lead.status) || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) {
+      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead?.nome ?? pj.lead_id.slice(0,8)}: status=${lead?.status} origem=${lead?.origem} arquivado=${!!lead?.arquivado_em} fechado=${!!lead?.fechado_em}` })
+      continue
+    }
 
     // Honra as MESMAS condições em dados da automação (telefone válido, não-perdido,
     // não-bloqueado, etc.) — mesmo motor usado pela reativação. Assim o follow-up herda
     // todas as guardas configuradas na regra, e não só as fixas acima.
     const { eligible } = await evaluateConditions(lead.id, automation.conditions, automation.id)
-    if (!eligible) continue
+    if (!eligible) {
+      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead.nome}: condições da automação não atendidas` })
+      continue
+    }
 
     // Corretor assumiu? Se houve interação humana registrada DEPOIS do envio da 1ª mensagem,
     // não faz follow-up — evita atropelar quem já está cuidando do lead.
     const ultima = await getLastHumanInteraction(lead.id)
-    if (ultima.timestamp && new Date(ultima.timestamp).getTime() > new Date(pj.sent_at).getTime()) continue
+    if (ultima.timestamp && new Date(ultima.timestamp).getTime() > new Date(pj.sent_at).getTime()) {
+      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead.nome}: interação humana recente (${ultima.event ?? "ação"})` })
+      continue
+    }
 
     const scheduledAt = calculateScheduledAt(automation.wait_config)
     const { error } = await wsupabase.from("automation_jobs").insert({
