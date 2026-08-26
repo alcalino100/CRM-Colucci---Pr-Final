@@ -52,13 +52,21 @@ async function criarJobsFollowup(automation: any, results: { created: number }):
   const cutoff = new Date(Date.now() - horas * 3600_000).toISOString()
 
   // Jobs da automação-mãe: enviados, sem resposta, antigos o suficiente.
-  const { data: parentJobs } = await wsupabase
+  const { data: parentJobs, error: pjErr } = await wsupabase
     .from("automation_jobs")
     .select("lead_id, sent_at")
     .eq("automation_id", parentId)
     .in("status", ["sent", "delivered", "read"])
     .is("responded_at", null)
     .lte("sent_at", cutoff)
+
+  await createLog({
+    automation_id: automation.id,
+    event_type: "lead_evaluated",
+    event_title: "Follow-up: busca de jobs-mãe",
+    event_description: `parentId=${parentId} | cutoff=${cutoff} | parentJobs encontrados: ${parentJobs?.length ?? 0} | erro: ${pjErr?.message ?? "nenhum"}`,
+    payload: { parent_jobs_count: parentJobs?.length ?? 0, cutoff },
+  })
 
   for (const pj of parentJobs ?? []) {
     // Máximo 1 follow-up por lead: pula se já existir qualquer job de follow-up para ele.
@@ -317,6 +325,14 @@ async function runWorker() {
       await criarJobsFollowup(automation, results)
     }
 
+    await createLog({
+      automation_id: null,
+      event_type: "lead_evaluated",
+      event_title: "FASE 1-B follow-up concluída",
+      event_description: `Automações follow-up: ${automacoesFollowup.length} | Jobs follow-up criados nesta run`,
+      payload: { followup_automations: automacoesFollowup.map((a) => a.id) },
+    })
+
     // FASE 2: Processar jobs agendados
     const jobsToProcess = await getJobsToProcess()
 
@@ -340,7 +356,10 @@ async function runWorker() {
           .eq("id", job.lead_id)
           .maybeSingle()
 
-        if (!lead || lead.status !== "novo" || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) {
+        // Automações normais exigem status=novo; follow-up aceita em_atendimento/em_followup
+        const isFollowup = automation.trigger_type === "no_response_followup"
+        const validStatuses = isFollowup ? ["em_atendimento", "em_followup"] : ["novo"]
+        if (!lead || !validStatuses.includes(lead.status) || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) {
           await cancelJob(job.id, "Lead não atende mais às condições", "system")
           results.cancelled++
           continue
