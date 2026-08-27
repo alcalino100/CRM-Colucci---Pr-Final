@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 
 type Instancia = { id: string; instance_name: string; numero: string | null; status: string; corretorNome: string }
 type Conversa = {
-  leadId: string
+  leadId: string | null
   telefone: string
   nome: string
   status: LeadStatus | null
@@ -23,6 +23,7 @@ type Conversa = {
   ultimaDeMim: boolean
   total: number
 }
+type ConversaSel = { leadId: string | null; telefone: string }
 type Mensagem = {
   id: string
   corpo: string
@@ -55,7 +56,7 @@ export default function ChatPage() {
   const [instancias, setInstancias] = useState<Instancia[]>([])
   const [instAtiva, setInstAtiva] = useState<string | null>(null)
   const [conversas, setConversas] = useState<Conversa[]>([])
-  const [leadAtivo, setLeadAtivo] = useState<string | null>(null)
+  const [conversa, setConversa] = useState<ConversaSel | null>(null)
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [busca, setBusca] = useState("")
   const [texto, setTexto] = useState("")
@@ -95,10 +96,13 @@ export default function ChatPage() {
     }
   }, [])
 
-  const carregarMensagens = useCallback(async (instanceName: string, leadId: string) => {
+  const carregarMensagens = useCallback(async (instanceName: string, sel: ConversaSel) => {
     setCarregandoMensagens(true)
     try {
-      const r = await fetch(`/api/whatsapp/chat/mensagens?instanceName=${encodeURIComponent(instanceName)}&leadId=${encodeURIComponent(leadId)}`)
+      const params = sel.leadId
+        ? `&leadId=${encodeURIComponent(sel.leadId)}`
+        : `&telefone=${encodeURIComponent(sel.telefone)}`
+      const r = await fetch(`/api/whatsapp/chat/mensagens?instanceName=${encodeURIComponent(instanceName)}${params}`)
       const j = await r.json()
       setMensagens(j.mensagens ?? [])
     } catch {
@@ -111,15 +115,15 @@ export default function ChatPage() {
   // Troca de instância: recarrega conversas e limpa a thread
   useEffect(() => {
     if (!instAtiva) return
-    setLeadAtivo(null)
+    setConversa(null)
     setMensagens([])
     carregarConversas(instAtiva)
   }, [instAtiva, carregarConversas])
 
   // Troca de conversa: carrega a thread
   useEffect(() => {
-    if (instAtiva && leadAtivo) carregarMensagens(instAtiva, leadAtivo)
-  }, [instAtiva, leadAtivo, carregarMensagens])
+    if (instAtiva && conversa) carregarMensagens(instAtiva, conversa)
+  }, [instAtiva, conversa, carregarMensagens])
 
   // Realtime: qualquer nova mensagem da tabela recarrega a lista e a thread aberta
   useEffect(() => {
@@ -130,21 +134,26 @@ export default function ChatPage() {
         const row: any = payload.new
         if (instAtiva && row?.instance_name === instAtiva) {
           carregarConversas(instAtiva)
-          if (leadAtivo && row?.lead_id === leadAtivo) carregarMensagens(instAtiva, leadAtivo)
+          if (conversa && (conversa.leadId ? row?.lead_id === conversa.leadId : row?.telefone === conversa.telefone)) {
+            carregarMensagens(instAtiva, conversa)
+          }
         }
       })
       .subscribe()
     return () => {
       supabase.removeChannel(canal)
     }
-  }, [isGestor, instAtiva, leadAtivo, carregarConversas, carregarMensagens])
+  }, [isGestor, instAtiva, conversa, carregarConversas, carregarMensagens])
 
   // Rola a thread para o fim quando chegam mensagens
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight
   }, [mensagens])
 
-  const conversaAtiva = useMemo(() => conversas.find((c) => c.leadId === leadAtivo) ?? null, [conversas, leadAtivo])
+  const conversaAtiva = useMemo(
+    () => (conversa ? conversas.find((c) => c.leadId === conversa.leadId && c.telefone === conversa.telefone) ?? null : null),
+    [conversas, conversa],
+  )
   const conversasFiltradas = useMemo(() => {
     const q = busca.trim().toLowerCase()
     if (!q) return conversas
@@ -181,7 +190,7 @@ export default function ChatPage() {
       <PageHeading
         title="Chat"
         badge="WhatsApp"
-        subtitle="Conversas dos leads cadastrados, separadas por instância de cada corretor."
+        subtitle="Todas as conversas do WhatsApp, separadas por instância de cada corretor."
       />
 
       {instancias.length === 0 ? (
@@ -229,15 +238,15 @@ export default function ChatPage() {
               {carregandoConversas ? (
                 <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="size-5 animate-spin" /></div>
               ) : conversasFiltradas.length === 0 ? (
-                <p className="px-4 py-10 text-center text-sm text-muted-foreground">Nenhuma conversa de lead cadastrado nesta instância.</p>
+                <p className="px-4 py-10 text-center text-sm text-muted-foreground">Nenhuma conversa nesta instância.</p>
               ) : (
                 conversasFiltradas.map((c) => (
                   <button
-                    key={c.leadId}
-                    onClick={() => setLeadAtivo(c.leadId)}
+                    key={c.leadId ?? c.telefone}
+                    onClick={() => setConversa({ leadId: c.leadId, telefone: c.telefone })}
                     className={cn(
                       "flex w-full flex-col gap-1 border-b border-border/60 px-4 py-3 text-left transition last:border-0",
-                      c.leadId === leadAtivo ? "bg-primary/5" : "hover:bg-muted",
+                      conversa && c.leadId === conversa.leadId && c.telefone === conversa.telefone ? "bg-primary/5" : "hover:bg-muted",
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
