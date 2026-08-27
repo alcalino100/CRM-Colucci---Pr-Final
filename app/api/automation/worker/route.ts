@@ -467,9 +467,17 @@ async function runWorker() {
           }
 
           if (automation.supervision_enabled && automation.supervisor_user_id) {
+            const isFollowupAutomation = automation.trigger_type === "no_response_followup"
+            const supervisionUpdate: Record<string, unknown> = {
+              gestor_responsavel: automation.supervisor_user_id,
+            }
+            // Follow-up: NÃO força status — lead permanece em_followup até responder
+            if (!isFollowupAutomation) {
+              supervisionUpdate.status = "em_atendimento"
+            }
             const { error: supErr } = await wsupabase
               .from("leads")
-              .update({ gestor_responsavel: automation.supervisor_user_id, status: "em_atendimento" })
+              .update(supervisionUpdate)
               .eq("id", job.lead_id)
 
             if (supErr) {
