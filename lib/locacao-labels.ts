@@ -123,6 +123,7 @@ export const TIPOS_IMOVEL_LOCACAO = [
   "Casa em Condomínio",
   "Sala Comercial",
   "Loja",
+  "Barracão",
   "Terreno",
   "Kitnet",
   "Studio",
