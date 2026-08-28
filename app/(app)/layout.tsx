@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap } from "lucide-react"
+import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
@@ -55,6 +55,7 @@ const NAV_LOCACAO: { href: string; label: string; icon: any; roles: Role[] }[] =
 
 const NAV_AUTOMACOES: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/automacoes", label: "Dashboard Automações", icon: LayoutDashboard, roles: ["gestor"] },
+  { href: "/automacoes/fluxos", label: "Fluxos de Automação", icon: Workflow, roles: ["gestor"] },
   { href: "/automacoes/regras", label: "Regras de Automação", icon: Zap, roles: ["gestor"] },
   { href: "/automacoes/fila", label: "Fila de Envios", icon: ClipboardCheck, roles: ["gestor"] },
   { href: "/automacoes/logs", label: "Logs de Automação", icon: ScrollText, roles: ["gestor"] },
@@ -115,7 +116,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   function renderItems(navItems: { href: string; label: string; icon: any }[]) {
     return navItems.map((item) => {
-      const active = item.href === "/admin" || item.href === "/auditoria" || item.href === "/locacao"
+      const active = item.href === "/admin" || item.href === "/auditoria" || item.href === "/locacao" || item.href === "/automacoes"
         ? pathname === item.href
         : pathname === item.href || pathname.startsWith(item.href + "/")
       return (
