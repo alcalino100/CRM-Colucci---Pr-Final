@@ -13,22 +13,22 @@ importers:
     dependencies:
       '@base-ui/react':
         specifier: ^1.5.0
-        version: 1.5.0(@date-fns/tz@1.4.1)(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 1.5.0(@date-fns/tz@1.4.1)(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)
       '@hello-pangea/dnd':
         specifier: ^18.0.1
-        version: 18.0.1(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 18.0.1(@types/react@19.2.14)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)
       '@hookform/resolvers':
         specifier: ^5.9.1
-        version: 5.9.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.86.0(react@19.2.4))(zod@4.4.3)
+        version: 5.9.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.86.0(react@19.1.9))(zod@4.4.3)
       '@supabase/supabase-js':
         specifier: ^2.45.4
         version: 2.110.6
       '@vercel/analytics':
         specifier: 1.6.1
-        version: 1.6.1(next@16.2.6(@babel/core@7.29.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
+        version: 1.6.1(next@16.2.6(@babel/core@7.29.7)(react-dom@19.1.9(react@19.1.9))(react@19.1.9))(react@19.1.9)
       '@xyflow/react':
         specifier: ^12.11.5
-        version: 12.11.5(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.11)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 12.11.5(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.11)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -40,22 +40,22 @@ importers:
         version: 2.1.1
       lucide-react:
         specifier: ^1.16.0
-        version: 1.17.0(react@19.2.4)
+        version: 1.17.0(react@19.1.9)
       next:
         specifier: 16.2.6
-        version: 16.2.6(@babel/core@7.29.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 16.2.6(@babel/core@7.29.7)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)
       react:
-        specifier: ^19
-        version: 19.2.4
+        specifier: ^19.1.9
+        version: 19.1.9
       react-dom:
-        specifier: ^19
-        version: 19.2.4(react@19.2.4)
+        specifier: ^19.1.9
+        version: 19.1.9(react@19.1.9)
       react-hook-form:
         specifier: ^7.86.0
-        version: 7.86.0(react@19.2.4)
+        version: 7.86.0(react@19.1.9)
       recharts:
         specifier: ^3.9.2
-        version: 3.9.2(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react-is@19.2.7)(react@19.2.4)(redux@5.0.1)
+        version: 3.9.2(@types/react@19.2.14)(react-dom@19.1.9(react@19.1.9))(react-is@19.2.7)(react@19.1.9)(redux@5.0.1)
       server-only:
         specifier: ^0.0.1
         version: 0.0.1
@@ -64,7 +64,7 @@ importers:
         version: 4.10.0(@types/node@24.10.4)(typescript@5.7.3)
       swr:
         specifier: ^2.4.2
-        version: 2.4.2(react@19.2.4)
+        version: 2.4.2(react@19.1.9)
       tailwind-merge:
         specifier: ^3.3.1
         version: 3.4.0
@@ -76,7 +76,7 @@ importers:
         version: 4.4.3
       zustand:
         specifier: ^5.0.15
-        version: 5.0.15(@types/react@19.2.14)(immer@11.1.11)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
+        version: 5.0.15(@types/react@19.2.14)(immer@11.1.11)(react@19.1.9)(use-sync-external-store@1.6.0(react@19.1.9))
     devDependencies:
       '@tailwindcss/postcss':
         specifier: 4.2.0
@@ -2021,10 +2021,10 @@ packages:
     resolution: {integrity: sha512-K5zQjDllxWkf7Z5xJdV0/B0WTNqx6vxG70zJE4N0kBs4LovmEYWJzQGxC9bS9RAKu3bgM40lrd5zoLJ12MQ5BA==}
     engines: {node: '>= 0.10'}
 
-  react-dom@19.2.4:
-    resolution: {integrity: sha512-AXJdLo8kgMbimY95O2aKQqsz2iWi9jMgKJhRBAxECE4IFxfcazB2LmzloIoibJI3C12IlY20+KFaLv+71bUJeQ==}
+  react-dom@19.1.9:
+    resolution: {integrity: sha512-uDpATCDcImkLtNYyqOe1RqW8bNn/dNwyD5/4IBFekbqQ9UKz3xs4+W3pVF0TOw2p2tuVlVc0v4uBnpDglT3gig==}
     peerDependencies:
-      react: ^19.2.4
+      react: ^19.1.9
 
   react-hook-form@7.86.0:
     resolution: {integrity: sha512-4kbWJrh5jPZt1+YqVcXcGKffGcXV/XVbozknLh0Yjh0KhpoAkus21TAQhzRYqNwFkkObmnSvRlZZ3GT+ehoIrA==}
@@ -2047,8 +2047,8 @@ packages:
       redux:
         optional: true
 
-  react@19.2.4:
-    resolution: {integrity: sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ==}
+  react@19.1.9:
+    resolution: {integrity: sha512-vcH++wcuFsbaGkMBoghOSs7Caq9Xg4KbdGwNEC8hWXye9NbV/ryKpxuElvsQxj6/38TmVUw2BofUb7shrdQogA==}
     engines: {node: '>=0.10.0'}
 
   recast@0.23.11:
@@ -2111,8 +2111,8 @@ packages:
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
 
-  scheduler@0.27.0:
-    resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
+  scheduler@0.26.0:
+    resolution: {integrity: sha512-NlHwttCI/l5gCPR3D1nNXtWABUmBwvZpEQiD4IXSbIDq8BzLIK/7Ir5gTFSGZDUu37K5cMNp0hFtzO38sC7gWA==}
 
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
@@ -2640,28 +2640,28 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@base-ui/react@1.5.0(@date-fns/tz@1.4.1)(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@base-ui/react@1.5.0(@date-fns/tz@1.4.1)(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)':
     dependencies:
       '@babel/runtime': 7.29.7
-      '@base-ui/utils': 0.2.9(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@floating-ui/react-dom': 2.1.8(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@base-ui/utils': 0.2.9(@types/react@19.2.14)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)
+      '@floating-ui/react-dom': 2.1.8(react-dom@19.1.9(react@19.1.9))(react@19.1.9)
       '@floating-ui/utils': 0.2.11
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
-      use-sync-external-store: 1.6.0(react@19.2.4)
+      react: 19.1.9
+      react-dom: 19.1.9(react@19.1.9)
+      use-sync-external-store: 1.6.0(react@19.1.9)
     optionalDependencies:
       '@date-fns/tz': 1.4.1
       '@types/react': 19.2.14
       date-fns: 4.1.0
 
-  '@base-ui/utils@0.2.9(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@base-ui/utils@0.2.9(@types/react@19.2.14)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)':
     dependencies:
       '@babel/runtime': 7.29.7
       '@floating-ui/utils': 0.2.11
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
+      react: 19.1.9
+      react-dom: 19.1.9(react@19.1.9)
       reselect: 5.2.0
-      use-sync-external-store: 1.6.0(react@19.2.4)
+      use-sync-external-store: 1.6.0(react@19.1.9)
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -2700,22 +2700,22 @@ snapshots:
       '@floating-ui/core': 1.7.5
       '@floating-ui/utils': 0.2.11
 
-  '@floating-ui/react-dom@2.1.8(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@floating-ui/react-dom@2.1.8(react-dom@19.1.9(react@19.1.9))(react@19.1.9)':
     dependencies:
       '@floating-ui/dom': 1.7.6
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
+      react: 19.1.9
+      react-dom: 19.1.9(react@19.1.9)
 
   '@floating-ui/utils@0.2.11': {}
 
-  '@hello-pangea/dnd@18.0.1(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@hello-pangea/dnd@18.0.1(@types/react@19.2.14)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)':
     dependencies:
       '@babel/runtime': 7.29.7
       css-box-model: 1.2.1
       raf-schd: 4.0.3
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
-      react-redux: 9.3.0(@types/react@19.2.14)(react@19.2.4)(redux@5.0.1)
+      react: 19.1.9
+      react-dom: 19.1.9(react@19.1.9)
+      react-redux: 9.3.0(@types/react@19.2.14)(react@19.1.9)(redux@5.0.1)
       redux: 5.0.1
     transitivePeerDependencies:
       - '@types/react'
@@ -2724,10 +2724,10 @@ snapshots:
     dependencies:
       hono: 4.12.25
 
-  '@hookform/resolvers@5.9.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.86.0(react@19.2.4))(zod@4.4.3)':
+  '@hookform/resolvers@5.9.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.86.0(react@19.1.9))(zod@4.4.3)':
     dependencies:
       '@standard-schema/utils': 0.3.0
-      react-hook-form: 7.86.0(react@19.2.4)
+      react-hook-form: 7.86.0(react@19.1.9)
     optionalDependencies:
       '@standard-schema/spec': 1.1.0
       ajv: 8.20.0
@@ -2964,7 +2964,7 @@ snapshots:
 
   '@open-draft/until@2.1.0': {}
 
-  '@reduxjs/toolkit@2.12.0(react-redux@9.3.0(@types/react@19.2.14)(react@19.2.4)(redux@5.0.1))(react@19.2.4)':
+  '@reduxjs/toolkit@2.12.0(react-redux@9.3.0(@types/react@19.2.14)(react@19.1.9)(redux@5.0.1))(react@19.1.9)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       '@standard-schema/utils': 0.3.0
@@ -2973,8 +2973,8 @@ snapshots:
       redux-thunk: 3.1.0(redux@5.0.1)
       reselect: 5.2.0
     optionalDependencies:
-      react: 19.2.4
-      react-redux: 9.3.0(@types/react@19.2.14)(react@19.2.4)(redux@5.0.1)
+      react: 19.1.9
+      react-redux: 9.3.0(@types/react@19.2.14)(react@19.1.9)(redux@5.0.1)
 
   '@sec-ant/readable-stream@0.4.1': {}
 
@@ -3156,18 +3156,18 @@ snapshots:
 
   '@types/validate-npm-package-name@4.0.2': {}
 
-  '@vercel/analytics@1.6.1(next@16.2.6(@babel/core@7.29.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)':
+  '@vercel/analytics@1.6.1(next@16.2.6(@babel/core@7.29.7)(react-dom@19.1.9(react@19.1.9))(react@19.1.9))(react@19.1.9)':
     optionalDependencies:
-      next: 16.2.6(@babel/core@7.29.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      react: 19.2.4
+      next: 16.2.6(@babel/core@7.29.7)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)
+      react: 19.1.9
 
-  '@xyflow/react@12.11.5(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.11)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@xyflow/react@12.11.5(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.11)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)':
     dependencies:
       '@xyflow/system': 0.0.81
       classcat: 5.0.5
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
-      zustand: 4.5.7(@types/react@19.2.14)(immer@11.1.11)(react@19.2.4)
+      react: 19.1.9
+      react-dom: 19.1.9(react@19.1.9)
+      zustand: 4.5.7(@types/react@19.2.14)(immer@11.1.11)(react@19.1.9)
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
@@ -3892,9 +3892,9 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  lucide-react@1.17.0(react@19.2.4):
+  lucide-react@1.17.0(react@19.1.9):
     dependencies:
-      react: 19.2.4
+      react: 19.1.9
 
   magic-string@0.30.21:
     dependencies:
@@ -3964,16 +3964,16 @@ snapshots:
 
   negotiator@1.0.0: {}
 
-  next@16.2.6(@babel/core@7.29.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+  next@16.2.6(@babel/core@7.29.7)(react-dom@19.1.9(react@19.1.9))(react@19.1.9):
     dependencies:
       '@next/env': 16.2.6
       '@swc/helpers': 0.5.15
       baseline-browser-mapping: 2.9.19
       caniuse-lite: 1.0.30001769
       postcss: 8.4.31
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
-      styled-jsx: 5.1.6(@babel/core@7.29.7)(react@19.2.4)
+      react: 19.1.9
+      react-dom: 19.1.9(react@19.1.9)
+      styled-jsx: 5.1.6(@babel/core@7.29.7)(react@19.1.9)
     optionalDependencies:
       '@next/swc-darwin-arm64': 16.2.6
       '@next/swc-darwin-x64': 16.2.6
@@ -4135,27 +4135,27 @@ snapshots:
       iconv-lite: 0.7.2
       unpipe: 1.0.0
 
-  react-dom@19.2.4(react@19.2.4):
+  react-dom@19.1.9(react@19.1.9):
     dependencies:
-      react: 19.2.4
-      scheduler: 0.27.0
+      react: 19.1.9
+      scheduler: 0.26.0
 
-  react-hook-form@7.86.0(react@19.2.4):
+  react-hook-form@7.86.0(react@19.1.9):
     dependencies:
-      react: 19.2.4
+      react: 19.1.9
 
   react-is@19.2.7: {}
 
-  react-redux@9.3.0(@types/react@19.2.14)(react@19.2.4)(redux@5.0.1):
+  react-redux@9.3.0(@types/react@19.2.14)(react@19.1.9)(redux@5.0.1):
     dependencies:
       '@types/use-sync-external-store': 0.0.6
-      react: 19.2.4
-      use-sync-external-store: 1.6.0(react@19.2.4)
+      react: 19.1.9
+      use-sync-external-store: 1.6.0(react@19.1.9)
     optionalDependencies:
       '@types/react': 19.2.14
       redux: 5.0.1
 
-  react@19.2.4: {}
+  react@19.1.9: {}
 
   recast@0.23.11:
     dependencies:
@@ -4165,21 +4165,21 @@ snapshots:
       tiny-invariant: 1.3.3
       tslib: 2.8.1
 
-  recharts@3.9.2(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react-is@19.2.7)(react@19.2.4)(redux@5.0.1):
+  recharts@3.9.2(@types/react@19.2.14)(react-dom@19.1.9(react@19.1.9))(react-is@19.2.7)(react@19.1.9)(redux@5.0.1):
     dependencies:
-      '@reduxjs/toolkit': 2.12.0(react-redux@9.3.0(@types/react@19.2.14)(react@19.2.4)(redux@5.0.1))(react@19.2.4)
+      '@reduxjs/toolkit': 2.12.0(react-redux@9.3.0(@types/react@19.2.14)(react@19.1.9)(redux@5.0.1))(react@19.1.9)
       clsx: 2.1.1
       decimal.js-light: 2.5.1
       es-toolkit: 1.49.0
       eventemitter3: 5.0.4
       immer: 11.1.11
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
+      react: 19.1.9
+      react-dom: 19.1.9(react@19.1.9)
       react-is: 19.2.7
-      react-redux: 9.3.0(@types/react@19.2.14)(react@19.2.4)(redux@5.0.1)
+      react-redux: 9.3.0(@types/react@19.2.14)(react@19.1.9)(redux@5.0.1)
       reselect: 5.2.0
       tiny-invariant: 1.3.3
-      use-sync-external-store: 1.6.0(react@19.2.4)
+      use-sync-external-store: 1.6.0(react@19.1.9)
       victory-vendor: 37.3.6
     transitivePeerDependencies:
       - '@types/react'
@@ -4226,7 +4226,7 @@ snapshots:
 
   safer-buffer@2.1.2: {}
 
-  scheduler@0.27.0: {}
+  scheduler@0.26.0: {}
 
   semver@6.3.1: {}
 
@@ -4421,18 +4421,18 @@ snapshots:
 
   strip-final-newline@4.0.0: {}
 
-  styled-jsx@5.1.6(@babel/core@7.29.7)(react@19.2.4):
+  styled-jsx@5.1.6(@babel/core@7.29.7)(react@19.1.9):
     dependencies:
       client-only: 0.0.1
-      react: 19.2.4
+      react: 19.1.9
     optionalDependencies:
       '@babel/core': 7.29.7
 
-  swr@2.4.2(react@19.2.4):
+  swr@2.4.2(react@19.1.9):
     dependencies:
       dequal: 2.0.3
-      react: 19.2.4
-      use-sync-external-store: 1.6.0(react@19.2.4)
+      react: 19.1.9
+      use-sync-external-store: 1.6.0(react@19.1.9)
 
   tagged-tag@1.0.0: {}
 
@@ -4503,9 +4503,9 @@ snapshots:
       escalade: 3.2.0
       picocolors: 1.1.1
 
-  use-sync-external-store@1.6.0(react@19.2.4):
+  use-sync-external-store@1.6.0(react@19.1.9):
     dependencies:
-      react: 19.2.4
+      react: 19.1.9
 
   util-deprecate@1.0.2: {}
 
@@ -4583,17 +4583,17 @@ snapshots:
 
   zod@4.4.3: {}
 
-  zustand@4.5.7(@types/react@19.2.14)(immer@11.1.11)(react@19.2.4):
+  zustand@4.5.7(@types/react@19.2.14)(immer@11.1.11)(react@19.1.9):
     dependencies:
-      use-sync-external-store: 1.6.0(react@19.2.4)
+      use-sync-external-store: 1.6.0(react@19.1.9)
     optionalDependencies:
       '@types/react': 19.2.14
       immer: 11.1.11
-      react: 19.2.4
+      react: 19.1.9
 
-  zustand@5.0.15(@types/react@19.2.14)(immer@11.1.11)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)):
+  zustand@5.0.15(@types/react@19.2.14)(immer@11.1.11)(react@19.1.9)(use-sync-external-store@1.6.0(react@19.1.9)):
     optionalDependencies:
       '@types/react': 19.2.14
       immer: 11.1.11
-      react: 19.2.4
-      use-sync-external-store: 1.6.0(react@19.2.4)
+      react: 19.1.9
+      use-sync-external-store: 1.6.0(react@19.1.9)
