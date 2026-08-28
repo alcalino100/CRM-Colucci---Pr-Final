@@ -113,7 +113,8 @@ export default function NodeConfig({ flowId, nodeId, onClose }: Props) {
         </button>
       </div>
 
-      <form onSubmit={onSubmit} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+      <form onSubmit={onSubmit} className="flex flex-1 flex-col">
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
         <Field label="Nome do bloco" required error={errors.nome?.message as string}>
           <input
             {...register("nome")}
@@ -191,24 +192,25 @@ export default function NodeConfig({ flowId, nodeId, onClose }: Props) {
             <span>A soma dos percursos deve ser 100%.</span>
           </div>
         )}
-      </form>
+        </div>
 
-      <div className="flex items-center gap-2 border-t border-zinc-800 px-4 py-3">
-        <button
-          onClick={onDelete}
-          type="button"
-          className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-800 text-zinc-500 hover:border-red-600/60 hover:text-red-400"
-          title="Excluir bloco"
-        >
-          <Trash2 size={15} />
-        </button>
-        <button type="button" onClick={() => onClose(false)} className="flex-1 rounded-lg border border-zinc-800 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200">
-          Cancelar
-        </button>
-        <button type="submit" className="flex-1 rounded-lg bg-cyan-500 py-2 text-xs font-semibold text-zinc-950 hover:bg-cyan-400">
-          Salvar
-        </button>
-      </div>
+        <div className="flex shrink-0 items-center gap-2 border-t border-zinc-800 px-4 py-3">
+          <button
+            onClick={onDelete}
+            type="button"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-800 text-zinc-500 hover:border-red-600/60 hover:text-red-400"
+            title="Excluir bloco"
+          >
+            <Trash2 size={15} />
+          </button>
+          <button type="button" onClick={() => onClose(false)} className="flex-1 rounded-lg border border-zinc-800 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200">
+            Cancelar
+          </button>
+<button type="submit" className="flex-1 rounded-lg bg-cyan-500 py-2 text-xs font-semibold text-zinc-950 hover:bg-cyan-400">
+            Salvar
+          </button>
+        </div>
+      </form>
     </aside>
   )
 }
