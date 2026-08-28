@@ -97,7 +97,7 @@ export default function FlowEditor({ flowId }: { flowId: string }) {
     s === "ativo" ? "text-emerald-400 bg-emerald-500/10 border-emerald-700/40" : s === "rascunho" ? "text-amber-400 bg-amber-500/10 border-amber-700/40" : "text-zinc-400 bg-zinc-700/10 border-zinc-700/40"
 
   return (
-    <div id={EDITOR_ID} className="flex h-[calc(100vh-7rem)] min-h-[540px] flex-col gap-3">
+    <div id={EDITOR_ID} className="flex h-[calc(100vh-12rem)] min-h-[540px] flex-col gap-3">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2.5">
         <Link
