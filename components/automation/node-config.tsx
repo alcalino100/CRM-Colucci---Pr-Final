@@ -205,7 +205,7 @@ export default function NodeConfig({ flowId, nodeId, onClose }: Props) {
         <button type="button" onClick={() => onClose(false)} className="flex-1 rounded-lg border border-zinc-800 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200">
           Cancelar
         </button>
-        <button type="submit" onClick={onSubmit} className="flex-1 rounded-lg bg-cyan-500 py-2 text-xs font-semibold text-zinc-950 hover:bg-cyan-400">
+        <button type="submit" className="flex-1 rounded-lg bg-cyan-500 py-2 text-xs font-semibold text-zinc-950 hover:bg-cyan-400">
           Salvar
         </button>
       </div>

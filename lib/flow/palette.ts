@@ -317,33 +317,33 @@ function parseJsn(v: unknown) {
 }
 
 export function buildNodeSchema(def: NodeTypeDef) {
-  const shape: Record<string, z.ZodTypeAny> = {
-    nome: z.string().trim().min(1, "Nome do nó é obrigatório").max(60, "Máximo de 60 caracteres"),
-  }
+  const configShape: Record<string, z.ZodTypeAny> = {}
   for (const f of def.fields) {
-    const key = `config.${f.key}`
     if (f.kind === "text") {
-      shape[key] = f.required
+      configShape[f.key] = f.required
         ? z.string().trim().min(1, `Campo "${f.label}" é obrigatório`)
         : z.string().optional().or(z.literal(""))
     } else if (f.kind === "textarea") {
-      shape[key] = f.required ? z.string().min(1, `Campo "${f.label}" é obrigatório`) : z.string().optional().or(z.literal(""))
+      configShape[f.key] = f.required ? z.string().min(1, `Campo "${f.label}" é obrigatório`) : z.string().optional().or(z.literal(""))
     } else if (f.kind === "number") {
-      shape[key] = z.coerce.number({ error: "Valor numérico" }).min(0)
+      configShape[f.key] = z.coerce.number({ error: "Valor numérico" }).min(0)
     } else if (f.kind === "percent") {
-      shape[key] = z.coerce.number({ error: "Valor numérico" }).min(0, "Mínimo 0").max(100, "Máximo 100")
+      configShape[f.key] = z.coerce.number({ error: "Valor numérico" }).min(0, "Mínimo 0").max(100, "Máximo 100")
     } else if (f.kind === "select") {
-      shape[key] = f.required ? z.string().min(1, `Selecione ${f.label.toLowerCase()}`) : z.string().optional().or(z.literal(""))
+      configShape[f.key] = f.required ? z.string().min(1, `Selecione ${f.label.toLowerCase()}`) : z.string().optional().or(z.literal(""))
     } else if (f.kind === "json") {
-      shape[key] = z.string().optional().refine(parseJsn, "JSON inválido")
+      configShape[f.key] = z.string().optional().refine(parseJsn, "JSON inválido")
     }
   }
 
-  const base = z.object(shape)
+  const base = z.object({
+    nome: z.string().trim().min(1, "Nome do nó é obrigatório").max(60, "Máximo de 60 caracteres"),
+    config: z.object(configShape),
+  })
   if (def.branching === "split") {
     return base.superRefine((val, ctx) => {
-      const a = Number(val["config.percurso_a"] ?? 0)
-      const b = Number(val["config.percurso_b"] ?? 0)
+      const a = Number(val.config.percurso_a ?? 0)
+      const b = Number(val.config.percurso_b ?? 0)
       if (a + b !== 100) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["config", "percurso_b"], message: "A soma dos percursos deve ser 100%" })
       }
