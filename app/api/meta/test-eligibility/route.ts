@@ -82,31 +82,40 @@ export async function POST(req: Request) {
     let foundId: string | null = null
     let foundPermalink: string | null = null
 
-    // Busca media por shortcode/permalink em cada IG user
-    for (const ig of igUsers) {
-      try {
-        // Tenta buscar por shortcode direto (alguns tokens aceitam)
-        // Depois lista media e filtra por permalink/code
-        const listUrl = `${BASE}/${ig.id}/media?fields=id,shortcode,permalink,media_type,thumbnail_url,caption&limit=100&access_token=${token}`
-        const lr = await fetch(listUrl)
-        const lj: any = await lr.json()
-        if (lj.error) continue
-        for (const m of lj.data || []) {
-          const sc = (m.shortcode || "") as string
-          const perm = (m.permalink || "") as string
-          if (sc === code || perm.includes(code)) {
-            foundId = m.id
-            foundPermalink = perm
-            break
+    // 1) Tenta resolver via oEmbed (funciona para collab onde a imobiliária é colaboradora, não autora)
+    try {
+      const oUrl = `${BASE}/instagram_oembed?url=${encodeURIComponent(url)}&access_token=${token}`
+      const or = await fetch(oUrl)
+      const oj: any = await or.json()
+      if (!oj.error && oj.media_id) {
+        foundId = String(oj.media_id)
+        foundPermalink = url
+      }
+    } catch {}
+    // 2) Fallback: busca media por shortcode/permalink em cada IG user
+    if (!foundId) {
+      for (const ig of igUsers) {
+        try {
+          const listUrl = `${BASE}/${ig.id}/media?fields=id,shortcode,permalink,media_type,thumbnail_url,caption&limit=100&access_token=${token}`
+          const lr = await fetch(listUrl)
+          const lj: any = await lr.json()
+          if (lj.error) continue
+          for (const m of lj.data || []) {
+            const sc = (m.shortcode || "") as string
+            const perm = (m.permalink || "") as string
+            if (sc === code || perm.includes(code)) {
+              foundId = m.id
+              foundPermalink = perm
+              break
+            }
           }
-        }
-        if (foundId) break
-        // paginação simples (primeira página já cobre collabs recentes)
-      } catch {}
+          if (foundId) break
+        } catch {}
+      }
     }
 
     if (!foundId) {
-      resultados.push({ url, code, elegivel: null, motivo: "media não encontrada nos IGs vinculados (pode ser do corretor, não da imobiliária, ou limite de 100 recentes)", igUsers: igUsers.map((u) => u.username || u.id) })
+      resultados.push({ url, code, elegivel: null, motivo: "media não encontrada (oEmbed falhou e não está nos 100 recentes da imobiliária) - pode ser necessário usar IG do corretor como Business", igUsers: igUsers.map((u) => u.username || u.id) })
       continue
     }
 
