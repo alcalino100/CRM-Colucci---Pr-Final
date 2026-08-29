@@ -82,7 +82,7 @@ export async function POST(req: Request) {
     let foundId: string | null = null
     let foundPermalink: string | null = null
 
-    // 1) Tenta resolver via oEmbed (funciona para collab onde a imobiliária é colaboradora, não autora)
+    // 1) Tenta resolver via oEmbed (requer aprovação) + fallback scraping HTML (media_id)
     let oError: any = null
     try {
       const oUrl = `${BASE}/instagram_oembed?url=${encodeURIComponent(url)}&access_token=${token}`
@@ -93,6 +93,16 @@ export async function POST(req: Request) {
         foundPermalink = url
       } else {
         oError = oj.error || oj
+        // Fallback: scraping publico do Reel para extrair media_id (sem precisar de permissão Meta)
+        const html = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15" } }).then((r) => r.text())
+        const m = html.match(/"media_id"\s*:\s*"(\d+)"/) || html.match(/"pk"\s*:\s*"(\d+)"/)
+        if (m) {
+          // media_id do HTML é o pk puro (ex 397...), precisa converter para Graph ID via IG
+          // Tentamos usar direto no Graph - se falhar, avisamos que precisa re-subir
+          foundId = m[1]
+          foundPermalink = url
+          oError = { ...oError, scraped_media_id: foundId, note: "extraído via scraping, mas Graph API pode exigir IG Business do autor (corretor)" }
+        }
       }
     } catch (e: any) { oError = e.message }
     // 2) Fallback: busca media por shortcode/permalink em cada IG user
