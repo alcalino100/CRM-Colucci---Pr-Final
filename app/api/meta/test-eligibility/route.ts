@@ -83,6 +83,7 @@ export async function POST(req: Request) {
     let foundPermalink: string | null = null
 
     // 1) Tenta resolver via oEmbed (funciona para collab onde a imobiliária é colaboradora, não autora)
+    let oError: any = null
     try {
       const oUrl = `${BASE}/instagram_oembed?url=${encodeURIComponent(url)}&access_token=${token}`
       const or = await fetch(oUrl)
@@ -90,8 +91,10 @@ export async function POST(req: Request) {
       if (!oj.error && oj.media_id) {
         foundId = String(oj.media_id)
         foundPermalink = url
+      } else {
+        oError = oj.error || oj
       }
-    } catch {}
+    } catch (e: any) { oError = e.message }
     // 2) Fallback: busca media por shortcode/permalink em cada IG user
     if (!foundId) {
       for (const ig of igUsers) {
@@ -115,7 +118,7 @@ export async function POST(req: Request) {
     }
 
     if (!foundId) {
-      resultados.push({ url, code, elegivel: null, motivo: "media não encontrada (oEmbed falhou e não está nos 100 recentes da imobiliária) - pode ser necessário usar IG do corretor como Business", igUsers: igUsers.map((u) => u.username || u.id) })
+      resultados.push({ url, code, elegivel: null, motivo: "media não encontrada (oEmbed falhou e não está nos 100 recentes da imobiliária) - pode ser necessário usar IG do corretor como Business", oEmbedError: oError, igUsers: igUsers.map((u) => u.username || u.id) })
       continue
     }
 
