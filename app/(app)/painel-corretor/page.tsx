@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { Plus } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel, podeVendas } from "@/lib/roles"
@@ -60,7 +60,9 @@ export default function PainelCorretorPage() {
           ))}
         </div>
       ) : (
-        <KanbanBoard leads={myLeads} showCorretor={isGestor} currentCorretorId={user.id} isGestor={isGestor} />
+        <Suspense fallback={<div className="h-[60vh] rounded-xl border border-dashed border-border bg-card/40" />}>
+          <KanbanBoard leads={myLeads} showCorretor={isGestor} currentCorretorId={user.id} isGestor={isGestor} />
+        </Suspense>
       )}
 
       <Dialog open={novo} onClose={() => setNovo(false)} title="Novo Lead">

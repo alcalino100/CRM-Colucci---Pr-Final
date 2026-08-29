@@ -80,6 +80,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const [gestorQuery, setGestorQuery] = useState("")
+
+  // Mantém link do Kanban/Dashboard com filtros salvos do gestor — contínuo para Voltar/Avançar e sidebar
+  useEffect(() => {
+    if (!user || !isGestorNivel(user.role) || typeof window === "undefined") { setGestorQuery(""); return }
+    const read = () => {
+      try {
+        const s = window.localStorage.getItem(`crm-filtros:${user.id}`)
+        setGestorQuery(s ? `?${s}` : "")
+      } catch { setGestorQuery("") }
+    }
+    read()
+    const onStorage = (e: StorageEvent | Event) => read()
+    window.addEventListener("storage", onStorage)
+    window.addEventListener("crm-filtros-change", onStorage as EventListener)
+    // re-ler ao mudar de rota (sidebar, back/forward)
+    return () => {
+      window.removeEventListener("storage", onStorage)
+      window.removeEventListener("crm-filtros-change", onStorage as EventListener)
+    }
+  }, [user, pathname])
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login")
@@ -119,8 +140,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       const active = item.href === "/admin" || item.href === "/auditoria" || item.href === "/locacao" || item.href === "/automacoes"
         ? pathname === item.href
         : pathname === item.href || pathname.startsWith(item.href + "/")
+      const href = (item.href === "/painel-corretor" || item.href === "/dashboard-gestao") && gestorQuery && !item.href.includes("?")
+        ? `${item.href}${gestorQuery}` : item.href
       return (
-        <Link key={item.href} href={item.href}
+        <Link key={item.href} href={href}
           className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
             active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-white")}>
           <item.icon className="size-4.5" />

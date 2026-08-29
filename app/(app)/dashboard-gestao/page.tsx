@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import { Users, CalendarCheck, TrendingUp, CircleDollarSign, Target } from "lucide-react"
 import { useLeads } from "@/lib/leads-store"
@@ -457,7 +457,9 @@ export default function DashboardGestaoPage() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg font-semibold">Kanban Geral</h2>
         </div>
-        <KanbanBoard leads={leads} showCorretor currentCorretorId={corretores[0]?.id ?? ""} isGestor heightClass="h-[520px]" />
+        <Suspense fallback={<div className="h-[520px] rounded-xl border border-dashed border-border bg-card/40" />}>
+          <KanbanBoard leads={leads} showCorretor currentCorretorId={corretores[0]?.id ?? ""} isGestor heightClass="h-[520px]" />
+        </Suspense>
       </div>
 
       {/* Propostas */}

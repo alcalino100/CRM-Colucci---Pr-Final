@@ -2,8 +2,10 @@
 
 import { useState, use } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import useSWR from "swr"
 import { ArrowLeft, Clock, MessageSquarePlus, Phone, Mail, Home, ShieldCheck, Megaphone, Zap } from "lucide-react"
+import { queryFiltros } from "@/lib/leads-filtros"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
@@ -17,7 +19,19 @@ import type { AuditTipo } from "@/lib/mock-data"
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const searchParams = useSearchParams()
   const { user } = useAuth()
+  const voltarHref = (() => {
+    const q = queryFiltros(searchParams)
+    if (q) return `/painel-corretor${q}`
+    if (typeof window !== "undefined" && user && isGestorNivel(user.role)) {
+      try {
+        const saved = window.localStorage.getItem(`crm-filtros:${user.id}`)
+        if (saved) return `/painel-corretor?${saved}`
+      } catch {}
+    }
+    return "/painel-corretor"
+  })()
   const { getLead, addInteraction, qualityNotes, audit, addQualityNote } = useLeads()
   const toast = useToast()
   const [nota, setNota] = useState("")
@@ -31,7 +45,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <p className="text-muted-foreground">Lead não encontrado.</p>
-        <Link href="/painel-corretor"><Button variant="outline"><ArrowLeft className="size-4" /> Voltar</Button></Link>
+        <Link href={voltarHref}><Button variant="outline"><ArrowLeft className="size-4" /> Voltar</Button></Link>
       </div>
     )
   }
@@ -92,7 +106,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <Link href="/painel-corretor" className="rounded-md p-2 text-muted-foreground hover:bg-muted" aria-label="Voltar"><ArrowLeft className="size-5" /></Link>
+        <Link href={voltarHref} className="rounded-md p-2 text-muted-foreground hover:bg-muted" aria-label="Voltar"><ArrowLeft className="size-5" /></Link>
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-display text-2xl font-bold">

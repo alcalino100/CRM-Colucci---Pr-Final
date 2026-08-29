@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Search, SearchX, X } from "lucide-react"
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
 import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, normalizePhone, refsTexto } from "@/lib/labels"
 import { ORIGENS, type Lead, type LeadStatus, type Origem, type Temperatura } from "@/lib/mock-data"
+import { lerFiltros, ORIGEM_SLUG, queryFiltros, STATUS_SLUG } from "@/lib/leads-filtros"
 import { cn } from "@/lib/utils"
 
 const TIPO_IMOVEL_VENDIDO = [
@@ -43,6 +44,9 @@ export function KanbanBoard({
   const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, assumirLead, visits, corretores, userName } = useLeads()
   const { user } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const filtros = lerFiltros(searchParams)
   const toast = useToast()
   const celebrate = useSaleCelebration()
   const [visitLead, setVisitLead] = useState<Lead | null>(null)
@@ -58,14 +62,40 @@ export function KanbanBoard({
   const [delDetalhe, setDelDetalhe] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [tempFilter, setTempFilter] = useState<Temperatura | "todas">("todas")
-  const [origemFilter, setOrigemFilter] = useState<Origem | "todas">("todas")
-  const [statusFilter, setStatusFilter] = useState<LeadStatus | "todos">("todos")
-  const [corretorFilter, setCorretorFilter] = useState<string>("todos")
   const [query, setQuery] = useState("")
   const [showArchived, setShowArchived] = useState(false)
 
   const usuarioNome = user ? userName(user.id) : "Sistema"
   const canManage = (lead: Lead) => isGestor || lead.corretorId === currentCorretorId
+
+  // Persistência individual apenas para gestores: restaura ao voltar sem query; gravação é feita em updateFiltros/limparFiltros
+  useEffect(() => {
+    if (!isGestor || !user?.id) return
+    if (typeof window === "undefined") return
+    if (searchParams.toString()) return
+    try {
+      const saved = window.localStorage.getItem(`crm-filtros:${user.id}`)
+      if (saved) router.replace(`${pathname}?${saved}`, { scroll: false })
+    } catch {}
+  }, [searchParams, pathname, isGestor, user?.id, router])
+
+  function updateFiltros(patch: Record<string, string | null | undefined>) {
+    const qs = new URLSearchParams(searchParams.toString())
+    for (const [k, v] of Object.entries(patch)) {
+      if (v == null || v === "") qs.delete(k)
+      else qs.set(k, v)
+    }
+    const s = qs.toString()
+    if (isGestor && user?.id && typeof window !== "undefined") {
+      try {
+        if (s) window.localStorage.setItem(`crm-filtros:${user.id}`, s)
+        else window.localStorage.removeItem(`crm-filtros:${user.id}`)
+        window.dispatchEvent(new Event("crm-filtros-change"))
+      } catch {}
+    }
+    router.push(s ? `${pathname}?${s}` : pathname, { scroll: false })
+  }
+
   function handleEditSubmit(v: LeadFormValues) {
     if (!editLead) return
     if (v.status === "fechado" && editLead.status !== "fechado") {
@@ -414,21 +444,35 @@ export function KanbanBoard({
       (l.observacoes ?? "").toLowerCase().includes(q)
     )
   }
+  const dentroPeriodo = (l: Lead) => {
+    if (!filtros.dataInicio && !filtros.dataFim) return true
+    const d = l.atualizadoEm?.slice(0, 10) ?? l.criadoEm?.slice(0, 10) ?? ""
+    if (!d) return false
+    if (filtros.dataInicio && d < filtros.dataInicio) return false
+    if (filtros.dataFim && d > filtros.dataFim) return false
+    return true
+  }
   const filtered = leads.filter(
     (l) =>
       (showArchived || !l.arquivadoEm) &&
       (tempFilter === "todas" || l.temperatura === tempFilter) &&
-      (origemFilter === "todas" || l.origem === origemFilter) &&
-      (statusFilter === "todos" || l.status === statusFilter) &&
-      (corretorFilter === "todos" || l.corretorId === corretorFilter) &&
+      (filtros.origem === "todas" || l.origem === filtros.origem) &&
+      (filtros.status === "todos" || l.status === filtros.status) &&
+      (filtros.corretor === "todos" || l.corretorId === filtros.corretor) &&
+      dentroPeriodo(l) &&
       matchesQuery(l),
   )
   const byStatus = (s: LeadStatus) => filtered.filter((l) => l.status === s)
-  const temFiltros = tempFilter !== "todas" || origemFilter !== "todas" || statusFilter !== "todos" || corretorFilter !== "todos" || !!q
+  const temFiltros = tempFilter !== "todas" || filtros.origem !== "todas" || filtros.status !== "todos" || filtros.corretor !== "todos" || !!filtros.dataInicio || !!filtros.dataFim || !!q
   const noResults = temFiltros && filtered.length === 0
 
   const limparFiltros = () => {
-    setQuery(""); setTempFilter("todas"); setOrigemFilter("todas"); setStatusFilter("todos"); setCorretorFilter("todos")
+    setQuery("")
+    setTempFilter("todas")
+    if (isGestor && user?.id && typeof window !== "undefined") {
+      try { window.localStorage.removeItem(`crm-filtros:${user.id}`) } catch {}
+    }
+    updateFiltros({ corretor: null, origem: null, status: null, data_inicio: null, data_fim: null })
   }
 
   const chip = (active: boolean, color?: string) =>
@@ -479,20 +523,22 @@ export function KanbanBoard({
             </button>
           ))}
           <span className="ml-2 h-5 w-px bg-border" aria-hidden />
-          <Select value={origemFilter} onChange={(e) => setOrigemFilter(e.target.value as Origem | "todas")} aria-label="Filtrar por origem" className="w-36 text-xs">
+          <Select value={filtros.origem} onChange={(e) => { const v = e.target.value as Origem | "todas"; updateFiltros({ origem: v === "todas" ? null : ORIGEM_SLUG[v] }) }} aria-label="Filtrar por origem" className="w-36 text-xs">
             <option value="todas">Origem: todas</option>
             {ORIGENS.map((o) => <option key={o} value={o}>{o}</option>)}
           </Select>
-          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "todos")} aria-label="Filtrar por status" className="w-44 text-xs">
+          <Select value={filtros.status} onChange={(e) => { const v = e.target.value as LeadStatus | "todos"; updateFiltros({ status: v === "todos" ? null : STATUS_SLUG[v] }) }} aria-label="Filtrar por status" className="w-44 text-xs">
             <option value="todos">Status: todos</option>
             {LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </Select>
           {isGestor && (
-            <Select value={corretorFilter} onChange={(e) => setCorretorFilter(e.target.value)} aria-label="Filtrar por corretor" className="w-40 text-xs">
+            <Select value={filtros.corretor} onChange={(e) => updateFiltros({ corretor: e.target.value === "todos" ? null : e.target.value })} aria-label="Filtrar por corretor" className="w-40 text-xs">
               <option value="todos">Corretor: todos</option>
               {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </Select>
           )}
+          <Input type="date" value={filtros.dataInicio} onChange={(e) => updateFiltros({ data_inicio: e.target.value || null })} aria-label="Filtrar por data inicial" className="h-9 w-auto text-xs" />
+          <Input type="date" value={filtros.dataFim} onChange={(e) => updateFiltros({ data_fim: e.target.value || null })} aria-label="Filtrar por data final" className="h-9 w-auto text-xs" />
           {temFiltros && (
             <button type="button" onClick={limparFiltros} className="rounded-full border border-dashed border-border px-3 py-1 text-xs font-medium text-primary transition hover:border-primary/40 hover:bg-primary/5">
               Limpar filtros
@@ -508,6 +554,33 @@ export function KanbanBoard({
           </button>
         </div>
       </div>
+      {(() => {
+        const badges: { label: string; limpar: () => void }[] = []
+        if (filtros.corretor !== "todos") {
+          const n = corretores.find((c) => c.id === filtros.corretor)?.nome ?? filtros.corretor
+          badges.push({ label: `Corretor: ${n}`, limpar: () => updateFiltros({ corretor: null }) })
+        }
+        if (filtros.origem !== "todas") badges.push({ label: `Origem: ${filtros.origem}`, limpar: () => updateFiltros({ origem: null }) })
+        if (filtros.status !== "todos") badges.push({ label: `Status: ${STATUS_LABEL[filtros.status]}`, limpar: () => updateFiltros({ status: null }) })
+        if (filtros.dataInicio || filtros.dataFim) {
+          const fmt = (d: string) => (d ? d.split("-").reverse().join("/") : "—")
+          badges.push({ label: `Período: ${fmt(filtros.dataInicio)} → ${fmt(filtros.dataFim)}`, limpar: () => updateFiltros({ data_inicio: null, data_fim: null }) })
+        }
+        if (!badges.length) return null
+        return (
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Filtros ativos:</span>
+            {badges.map((b, i) => (
+              <span key={i} className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/5 py-0.5 pl-2.5 pr-1 text-xs font-medium">
+                {b.label}
+                <button type="button" onClick={b.limpar} aria-label={`Remover filtro ${b.label}`} className="flex size-5 items-center justify-center rounded-full text-muted-foreground transition hover:bg-primary/10 hover:text-foreground">
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )
+      })()}
       {noResults ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/60 py-16 text-center">
           <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -557,7 +630,7 @@ export function KanbanBoard({
                                 canManage={canManage(lead)}
                                 podeExcluir={isGestor}
                                 isGestor={isGestor}
-                                onOpen={(item) => router.push(`/painel-corretor/${item.id}`)}
+                                onOpen={(item) => router.push(`/painel-corretor/${item.id}${queryFiltros(searchParams)}`)}
                                 onEdit={(item) => setEditLead(item)}
                                 onDelete={(item) => setDelLead(item)}
                                 onAssumir={(item) => setAssumirDialog(item)}
