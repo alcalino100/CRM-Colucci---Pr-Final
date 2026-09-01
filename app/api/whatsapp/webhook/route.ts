@@ -15,7 +15,7 @@ const ok = () => NextResponse.json({ received: true })
 // e esposa/parentes de corretores — Ketrine e Fran). Configurável via WHATSAPP_BLOCKED_NUMBERS.
 // Comparação só por dígitos.
 const BLOCKED_NUMBERS = new Set(
-  (process.env.WHATSAPP_BLOCKED_NUMBERS || "5518991976332,5518996647087,5518997472139,5518997857464")
+  (process.env.WHATSAPP_BLOCKED_NUMBERS || "5518991976332,5518996647087,5518997472139,5518997857464,5518996912659")
     .split(",")
     .map((s) => s.trim().replace(/\D/g, ""))
     .filter(Boolean)
