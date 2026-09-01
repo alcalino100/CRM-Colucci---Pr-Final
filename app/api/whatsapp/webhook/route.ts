@@ -3,6 +3,7 @@ import { normalizePhone } from "@/lib/labels"
 import { baixarEArmazenarMidia, detectarMidia, mapConnectionState, notifyDisconnection, onlyDigits, wsupabase, type MidiaDetectada } from "@/lib/whatsapp/server"
 import { registrarRespostaDeLead, registrarStatusEntrega } from "@/lib/automation-services"
 import { enviarLeadCapi } from "@/lib/meta/capi"
+import { TELEFONES_BLOQUEADOS, isTelefoneBloqueado as isBlockedCentral } from "@/lib/telefones-bloqueados"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -11,16 +12,16 @@ export const maxDuration = 30
 // Sempre responde 200 para não interromper o fluxo da Evolution
 const ok = () => NextResponse.json({ received: true })
 
-// Números internos que NUNCA podem virar lead (ex.: setor de vendas da empresa, WhatsApp do gestor
-// e esposa/parentes de corretores — Ketrine e Fran). Configurável via WHATSAPP_BLOCKED_NUMBERS.
-// Comparação só por dígitos.
-const BLOCKED_NUMBERS = new Set(
-  (process.env.WHATSAPP_BLOCKED_NUMBERS || "5518991976332,5518996647087,5518997472139,5518997857464,5518996912659")
+// Números internos que NUNCA podem virar lead — lista centralizada em lib/telefones-bloqueados.ts
+// Mantém compatibilidade com WHATSAPP_BLOCKED_NUMBERS via env (merge)
+const ENV_BLOCKED = new Set(
+  (process.env.WHATSAPP_BLOCKED_NUMBERS || "")
     .split(",")
     .map((s) => s.trim().replace(/\D/g, ""))
     .filter(Boolean)
 )
-const isBlocked = (telefone: string) => BLOCKED_NUMBERS.has(telefone)
+const BLOCKED_NUMBERS = new Set<string>([...TELEFONES_BLOQUEADOS, ...ENV_BLOCKED])
+const isBlocked = (telefone: string) => BLOCKED_NUMBERS.has(telefone.replace(/\D/g, "")) || isBlockedCentral(telefone)
 
 // Nomes internos que NUNCA podem virar lead (ex.: esposa/parentes de corretores).
 // Configurável via WHATSAPP_BLOCKED_NAMES (separado por vírgula). Comparação normalizada

@@ -25,8 +25,7 @@ import { isCorretorDe, isGestorNivel, isMaster, modulosRole } from "./roles"
 import { supabase } from "./supabase/client"
 import { useAuth } from "./auth-context"
 import { normalizePhone, normalizeStatus } from "./labels"
-
-const TELEFONES_BLOQUEADOS = new Set(["5518996912659", "5518991976332", "5518996647087", "5518997472139", "5518997857464"])
+import { isTelefoneBloqueado } from "./telefones-bloqueados"
 
 interface NotifyOpts {
   tipo?: string
@@ -433,7 +432,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     error && (error.code === "23505" || /telefone_normalizado/i.test(error.message ?? ""))
 
   const addLead: Store["addLead"] = async (l) => {
-    if (TELEFONES_BLOQUEADOS.has(normalizePhone(l.telefone))) {
+    if (isTelefoneBloqueado(l.telefone)) {
       return { ok: false, error: "Telefone interno da empresa não pode ser cadastrado como lead." }
     }
     const autor = user?.nome ?? "Sistema"
