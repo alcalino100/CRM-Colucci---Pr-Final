@@ -39,7 +39,8 @@ function isGestorVendasRole(role: string){
 const PATRICIA_ID = "6c2875b4-0d11-4370-b9fd-3c13b5257bd4"
 const PATRICIA_INSTANCE = "patricia-6c2875b4"
 
-function mapStatus(s: string): "aguardando_resposta" | "respondido" | "em_follow_up" {
+function mapStatus(s: string): "aguardando_resposta" | "respondido" | "em_follow_up" | "escalated" {
+  if(s==="escalated" || s==="escalado") return "escalated" as any
   if(s==="em_followup" || s==="em_follow_up") return "em_follow_up"
   if(s==="novo" || s==="em_atendimento" || s==="aguardando") return "aguardando_resposta"
   return "respondido"

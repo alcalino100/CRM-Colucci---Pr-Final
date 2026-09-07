@@ -117,6 +117,9 @@ export function ConversaView(){
         </div>
       </div>
 
+      {(conv as any).status==="escalated" && (
+        <div className="border-b border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">🚨 Escalado para humano — IA pausada. Assuma a conversa.</div>
+      )}
       {conv.followUpAtivo && (
         <div id={`banner-${conv.id}`} className="border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 transition-colors">
           🤖 Follow-up automático ativo — próxima tentativa em {proximaEm(conv.proximaTentativaISO)} · {conv.tentativasRestantes} tentativas restantes
