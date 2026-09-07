@@ -6,7 +6,8 @@ import { WidgetPanel } from "./WidgetPanel"
 import { useInboxStore } from "@/lib/inbox-store"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
-import type { InboxConversation, InboxMessage } from "@/lib/inbox-mock"
+import { isTelefoneBloqueado } from "@/lib/telefones-bloqueados"
+import type { InboxConversation } from "@/lib/inbox-mock"
 
 const PATRICIA_ID = "6c2875b4-0d11-4370-b9fd-3c13b5257bd4"
 const PATRICIA_INSTANCE = "patricia-6c2875b4"
@@ -20,53 +21,72 @@ function mapStatus(s: string): "aguardando_resposta" | "respondido" | "em_follow
 export function InboxClient(){
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
+  const [filtroTrafego, setFiltroTrafego] = useState(true)
   const selectedId = useInboxStore(s=>s.selectedId)
   const setSelected = useInboxStore(s=>s.setSelected)
   const setConversas = useInboxStore(s=>s.setConversas)
-  const setMensagens = useInboxStore(s=>s.setMensagens)
   const setModoReal = useInboxStore(s=>s.setModoReal)
   const isPatricia = user?.id === PATRICIA_ID
 
   useEffect(()=>{ const t=setTimeout(()=>setLoading(false),800); return()=>clearTimeout(t)},[])
 
-  // Fase 2: dados reais só para Patricia, só origem Tráfego Pago, só instancia dela
+  // Fase 2: fonte primária = conversas WhatsApp da Patricia, enriquece com leads, filtro Tráfego Pago como toggle
   useEffect(()=>{
     if(!isPatricia || !user) return
     let cancelled=false
     async function loadReal(){
       try{
-        // Leads só Tráfego Pago da Patricia (tag)
-        const { data: leads, error } = await supabase.from("leads").select("id,nome,telefone,email,origem,status,corretor_id,atualizado_em").eq("origem","Tráfego Pago").eq("corretor_id", PATRICIA_ID).limit(100)
-        if(error || !leads) return
+        const r = await fetch(`/api/whatsapp/chat/conversas?instanceName=${PATRICIA_INSTANCE}`)
+        const j = await r.json()
+        const raw: any[] = j.conversas || []
         if(cancelled) return
-        // Monta conversas a partir dos leads filtrados
-        const conversas: InboxConversation[] = leads.map(l=>({
-          id: `real-${l.id}`,
-          leadId: l.id,
-          leadName: l.nome || "Sem nome",
+        // Filtra bloqueados (internos)
+        let filtradas = raw.filter((c:any)=> !isTelefoneBloqueado(c.telefone || ""))
+        // Enriquece com leads para saber origem
+        const leadIds = filtradas.filter(c=>c.leadId).map(c=>c.leadId)
+        let leadsMap = new Map<string, any>()
+        if(leadIds.length>0){
+          const { data: leads } = await supabase.from("leads").select("id,origem,status").in("id", leadIds)
+          for(const l of leads||[]) leadsMap.set(l.id, l)
+        }
+        if(filtroTrafego){
+          filtradas = filtradas.filter(c=>{
+            if(!c.leadId) return false
+            const l = leadsMap.get(c.leadId)
+            return l?.origem === "Tráfego Pago"
+          })
+        }
+        const conversas: InboxConversation[] = filtradas.map((c:any)=>({
+          id: `real-${c.leadId || c.telefone}`,
+          leadId: c.leadId || "",
+          leadName: c.nome || c.nomeContato || c.telefone || "Sem nome",
           responsavel: "Patricia",
-          telefone: l.telefone || "",
-          email: (l as any).email || "",
-          status: mapStatus((l as any).status || "novo"),
-          followUpAtivo: (l as any).status === "em_followup",
-          tentativasRestantes: (l as any).status === "em_followup" ? 2 : undefined,
-          proximaTentativaISO: (l as any).status === "em_followup" ? new Date(Date.now()+2*3600_000).toISOString() : undefined,
-          ultimaMensagem: `Lead ${l.origem} · ${l.status}`,
-          timestamp: (l as any).atualizado_em || new Date().toISOString(),
-          unread: (l as any).status === "novo" ? 1 : 0,
+          telefone: c.telefone || "",
+          email: "",
+          status: c.leadId && leadsMap.get(c.leadId) ? mapStatus(leadsMap.get(c.leadId).status) : (c.status ? mapStatus(c.status) : "aguardando_resposta"),
+          followUpAtivo: c.leadId ? leadsMap.get(c.leadId)?.status === "em_followup" : false,
+          tentativasRestantes: c.leadId && leadsMap.get(c.leadId)?.status === "em_followup" ? 2 : undefined,
+          proximaTentativaISO: c.leadId && leadsMap.get(c.leadId)?.status === "em_followup" ? new Date(Date.now()+2*3600_000).toISOString() : undefined,
+          ultimaMensagem: c.ultima || "",
+          timestamp: c.ultimaEm || new Date().toISOString(),
+          unread: c.leadId && leadsMap.get(c.leadId)?.status === "novo" ? 1 : 0,
           origem: "WhatsApp" as const,
         }))
-        if(conversas.length>0){
-          setConversas(conversas)
-          setModoReal(true)
-          // Pré-carrega mensagens da primeira conversa para teste
-          // Mensagens reais serão carregadas sob demanda no ConversaView via leadId
+        if(!cancelled){
+          if(conversas.length>0){
+            setConversas(conversas)
+            setModoReal(true)
+          } else {
+            // sem conversas com filtro, mantém mock vazio mas indica modo real
+            setConversas([])
+            setModoReal(true)
+          }
         }
       }catch{}
     }
     loadReal()
     return()=>{cancelled=true}
-  }, [isPatricia, user, setConversas, setModoReal, setMensagens])
+  }, [isPatricia, user, filtroTrafego, setConversas, setModoReal])
   if(loading){
     return (
       <div className="flex flex-col gap-4 lg:h-[calc(100vh-11rem)] lg:flex-row">
@@ -77,6 +97,16 @@ export function InboxClient(){
     )
   }
   return (
+    <div className="flex flex-col gap-3">
+      {isPatricia && (
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={filtroTrafego} onChange={e=>setFiltroTrafego(e.target.checked)} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
+            <span className="font-medium text-slate-700 dark:text-slate-300">Somente Tráfego Pago (tag)</span>
+          </label>
+          <span className="text-slate-500">{filtroTrafego ? "filtrando base para IA" : "mostrando toda a base da Patrícia"}</span>
+        </div>
+      )}
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-11rem)] lg:flex-row">
       {/* Desktop: 3 colunas | Mobile: drawer Inbox quando conversa aberta */}
       <div className={`${selectedId ? "hidden md:flex" : "flex"} w-full md:w-[280px] shrink-0`}>
@@ -93,6 +123,7 @@ export function InboxClient(){
       {selectedId && (
         <button onClick={()=>setSelected(null)} className="fixed bottom-4 left-4 z-20 rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-lg md:hidden">← Voltar ao Inbox</button>
       )}
+    </div>
     </div>
   )
 }
