@@ -2,6 +2,8 @@
 import { create } from "zustand"
 import { mockConversas, mockMensagens, type InboxConversation, type InboxMessage } from "./inbox-mock"
 
+export type OrdenacaoInbox = "recente" | "antigo" | "status" | "origem" | "corretor" | "prioridade_ia"
+
 type InboxState = {
   conversas: InboxConversation[]
   mensagens: Record<string, InboxMessage[]>
@@ -9,6 +11,10 @@ type InboxState = {
   filtro: string
   modoReal: boolean
   instanciaSelecionada: string
+  ordenacao: OrdenacaoInbox
+  filtroOrigem: string
+  filtroStatus: string
+  filtroCorretor: string
   // actions
   setSelected: (id: string | null) => void
   setFiltro: (v: string) => void
@@ -16,6 +22,10 @@ type InboxState = {
   setMensagens: (m: Record<string, InboxMessage[]>) => void
   setModoReal: (v: boolean) => void
   setInstancia: (v: string) => void
+  setOrdenacao: (v: OrdenacaoInbox) => void
+  setFiltroOrigem: (v: string) => void
+  setFiltroStatus: (v: string) => void
+  setFiltroCorretor: (v: string) => void
   enviarMensagem: (conversationId: string, content: string) => void
   assumirConversa: (id: string) => void
   cancelarFollowUp: (id: string) => void
@@ -30,6 +40,10 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   filtro: "",
   modoReal: false,
   instanciaSelecionada: "patricia-6c2875b4",
+  ordenacao: "prioridade_ia" as OrdenacaoInbox,
+  filtroOrigem: "todas",
+  filtroStatus: "todos",
+  filtroCorretor: "todos",
   setSelected: (id) => set({ selectedId: id }),
   setFiltro: (v) => set({ filtro: v }),
   setConversas: (c) => set({ conversas: c }),
@@ -39,6 +53,10 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     if(typeof window!=="undefined") try{ localStorage.setItem("inbox-instancia", v) }catch{}
     set({ instanciaSelecionada: v })
   },
+  setOrdenacao: (v) => set({ ordenacao: v }),
+  setFiltroOrigem: (v) => set({ filtroOrigem: v }),
+  setFiltroStatus: (v) => set({ filtroStatus: v }),
+  setFiltroCorretor: (v) => set({ filtroCorretor: v }),
   enviarMensagem: (conversationId, content) =>
     set((s) => {
       const nova: InboxMessage = {

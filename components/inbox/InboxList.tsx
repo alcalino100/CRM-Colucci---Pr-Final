@@ -29,9 +29,34 @@ const badgeLabel: Record<string,string> = {
 }
 
 export function InboxList() {
-  const { conversas, selectedId, filtro, setSelected, setFiltro } = useInboxStore()
-  const filtradas = conversas.filter(c => !filtro || c.leadName.toLowerCase().includes(filtro.toLowerCase()))
+  const { conversas, selectedId, filtro, ordenacao, filtroOrigem, filtroStatus, filtroCorretor, setSelected, setFiltro, setOrdenacao, setFiltroOrigem, setFiltroStatus, setFiltroCorretor } = useInboxStore()
+  const origensUnicas = Array.from(new Set(conversas.map(c=>c.origem))).filter(Boolean)
+  const corretoresUnicos = Array.from(new Set(conversas.map(c=>c.responsavel))).filter(Boolean)
   const naoRespondidas = conversas.filter(c=> c.status==="aguardando_resposta").length
+
+  let filtradas = conversas.filter(c => {
+    if(filtro && !c.leadName.toLowerCase().includes(filtro.toLowerCase()) && !c.telefone.includes(filtro)) return false
+    if(filtroOrigem!=="todas" && c.origem!==filtroOrigem) return false
+    if(filtroStatus!=="todos" && c.status!==filtroStatus) return false
+    if(filtroCorretor!=="todos" && c.responsavel!==filtroCorretor) return false
+    return true
+  })
+  // ordenação
+  const statusPeso: Record<string,number> = { aguardando_resposta:0, em_follow_up:1, respondido:2 }
+  filtradas = [...filtradas].sort((a,b)=>{
+    if(ordenacao==="recente") return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    if(ordenacao==="antigo") return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    if(ordenacao==="status") return (statusPeso[a.status]??9) - (statusPeso[b.status]??9)
+    if(ordenacao==="origem") return a.origem.localeCompare(b.origem)
+    if(ordenacao==="corretor") return a.responsavel.localeCompare(b.responsavel)
+    if(ordenacao==="prioridade_ia"){
+      const pa = (statusPeso[a.status]??9)*100000 + (a.unread? -10000:0) + (a.followUpAtivo? -5000:0)
+      const pb = (statusPeso[b.status]??9)*100000 + (b.unread? -10000:0) + (b.followUpAtivo? -5000:0)
+      if(pa!==pb) return pa - pb
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    }
+    return 0
+  })
   const parentRef = useRef<HTMLDivElement>(null)
   const shouldVirtualize = filtradas.length > 50
   const virtualizer = useVirtualizer({
@@ -50,8 +75,33 @@ export function InboxList() {
         </div>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
-          <input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar por nome..." aria-label="Buscar conversas" className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" />
+          <input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar por nome ou telefone..." aria-label="Buscar conversas" className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" />
         </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <select value={ordenacao} onChange={e=>setOrdenacao(e.target.value as any)} aria-label="Ordenar" className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <option value="prioridade_ia">Prioridade IA</option>
+            <option value="recente">Mais recente</option>
+            <option value="antigo">Mais antigo</option>
+            <option value="status">Por status (funil)</option>
+            <option value="origem">Por origem</option>
+            <option value="corretor">Por corretor</option>
+          </select>
+          <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)} aria-label="Filtrar status" className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <option value="todos">Status: todos</option>
+            <option value="aguardando_resposta">Aguardando</option>
+            <option value="em_follow_up">Follow-up</option>
+            <option value="respondido">Respondido</option>
+          </select>
+          <select value={filtroOrigem} onChange={e=>setFiltroOrigem(e.target.value)} aria-label="Filtrar origem" className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <option value="todas">Origem: todas</option>
+            {origensUnicas.map(o=> <option key={o} value={o}>{o}</option>)}
+          </select>
+          <select value={filtroCorretor} onChange={e=>setFiltroCorretor(e.target.value)} aria-label="Filtrar corretor" className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <option value="todos">Corretor: todos</option>
+            {corretoresUnicos.map(c=> <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">{filtradas.length} de {conversas.length} conversas {ordenacao==="prioridade_ia" && "· IA prioriza aguardando → follow-up → recente"}</p>
       </div>
       <div ref={parentRef} className="flex-1 overflow-y-auto">
         {filtradas.length===0 ? (
