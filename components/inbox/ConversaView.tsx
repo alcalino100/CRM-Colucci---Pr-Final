@@ -35,8 +35,8 @@ export function ConversaView(){
 
   if(!conv){
     return (
-      <div role="main" className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/50 p-10 text-center">
-        <p className="text-sm text-slate-400">Selecione uma conversa para começar</p>
+      <div role="main" className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-10 text-center dark:border-slate-700 dark:bg-slate-900/50">
+        <p className="text-sm text-slate-600 dark:text-slate-400">Selecione uma conversa para começar</p>
       </div>
     )
   }
@@ -52,12 +52,12 @@ export function ConversaView(){
   }
 
   return (
-    <motion.div key={conv.id} initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.2}} role="main" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+    <motion.div key={conv.id} initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.2}} role="main" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       {/* Header breadcrumb + ações */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-3 dark:border-slate-800">
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-slate-100">{conv.leadName} <span className="font-normal text-slate-400">· {conv.status.replace("_"," ")}</span></p>
-          <p className="text-xs text-slate-400">{conv.telefone} · {conv.origem}</p>
+          <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>{conv.leadName} <span className="font-normal text-slate-500 dark:text-slate-400">· {conv.status.replace("_"," ")}</span></p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{conv.telefone} · {conv.origem}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={()=>assumirConversa(conv.id)} className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-cyan-400">Assumir Conversa</button>
@@ -78,7 +78,7 @@ export function ConversaView(){
       )}
 
       {/* Timeline */}
-      <div ref={threadRef} className="flex-1 space-y-3 overflow-y-auto bg-slate-950 p-4">
+      <div ref={threadRef} className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950">
         {thread.length===0 ? (
           <p className="py-10 text-center text-sm text-slate-500">Histórico vazio — primeira mensagem?</p>
         ) : (
@@ -104,8 +104,8 @@ export function ConversaView(){
       </div>
 
       {/* Caixa de resposta — altura fixa em mobile */}
-      <div className="flex items-end gap-2 border-t border-slate-800 p-3">
-        <textarea value={texto} onChange={e=>setTexto(e.target.value)} placeholder="Sua resposta..." rows={2} className="h-12 max-h-24 min-h-[44px] flex-1 resize-none rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 md:h-auto" />
+      <div className="flex items-end gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
+        <textarea value={texto} onChange={e=>setTexto(e.target.value)} placeholder="Sua resposta..." rows={2} className="h-12 max-h-24 min-h-[44px] flex-1 resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 md:h-auto" />
         <div className="flex gap-2">
           <button onClick={()=>setTexto("")} className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700">Cancelar</button>
           <button onClick={handleEnviar} disabled={!texto.trim()} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-400 disabled:opacity-50">Enviar</button>

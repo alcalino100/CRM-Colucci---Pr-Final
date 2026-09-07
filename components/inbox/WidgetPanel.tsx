@@ -7,21 +7,21 @@ export function WidgetPanel(){
   const toast = useToast()
   const conv = conversas.find(c=>c.id===selectedId) || null
   if(!conv){
-    return <div className="hidden w-[240px] shrink-0 flex-col gap-3 lg:flex"><div className="rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-400">Selecione um lead</div></div>
+    return <div className="hidden w-[240px] shrink-0 flex-col gap-3 lg:flex"><div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Selecione um lead</div></div>
   }
   const proxima = conv.proximaTentativaISO ? new Date(conv.proximaTentativaISO).toLocaleTimeString("pt-BR", {hour:"2-digit", minute:"2-digit"}) : "-"
   return (
     <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[240px]">
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-        <h3 className="mb-2 font-display text-sm font-bold text-slate-100">Lead Details</h3>
-        <p className="text-sm font-medium text-slate-100">{conv.leadName}</p>
-        <p className="text-xs text-slate-400">{conv.telefone}</p>
-        <p className="text-xs text-slate-400">{conv.email}</p>
-        <p className="mt-2 text-xs text-slate-400">Responsável: <span className="text-slate-200">{conv.responsavel}</span></p>
-        <p className="text-xs text-slate-400">Origem: <span className="text-slate-200">{conv.origem}</span></p>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Lead Details</h3>
+        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{conv.leadName}</p>
+        <p className="text-xs text-slate-600 dark:text-slate-400">{conv.telefone}</p>
+        <p className="text-xs text-slate-600 dark:text-slate-400">{conv.email}</p>
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Responsável: <span className="text-slate-700 dark:text-slate-200">{conv.responsavel}</span></p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Origem: <span className="text-slate-700 dark:text-slate-200">{conv.origem}</span></p>
       </div>
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-        <h3 className="mb-2 font-display text-sm font-bold text-slate-100">Follow-up Status</h3>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Follow-up Status</h3>
         {conv.followUpAtivo ? (
           <>
             <p className="text-xs text-amber-300">🤖 IA respondendo</p>
@@ -30,8 +30,8 @@ export function WidgetPanel(){
           </>
         ) : <p className="text-xs text-slate-400">Sem follow-up ativo</p>}
       </div>
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-        <h3 className="mb-2 font-display text-sm font-bold text-slate-100">Ações Rápidas</h3>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Ações Rápidas</h3>
         <div className="flex flex-col gap-2">
           <button onClick={()=>{
             if(conv.followUpAtivo){ cancelarFollowUp(conv.id); toast("Follow-up cancelado")}
