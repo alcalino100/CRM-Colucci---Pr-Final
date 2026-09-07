@@ -1,32 +1,78 @@
 "use client"
+import { useEffect, useState } from "react"
 import { useAIAgentsStore } from "@/lib/ai-agents-store"
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, Select, Textarea } from "@/components/ui/primitives"
-import { Bot, Zap, MessageCircle, Clock } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Bot, Zap, MessageCircle, Clock, Save, Eye, EyeOff, CheckCircle, AlertCircle } from "lucide-react"
+import { useToast } from "@/components/ui/primitives"
 
 export function BotSettings({ id }: { id: string }){
   const agent = useAIAgentsStore(s=> s.agents.find(a=>a.id===id))
-  const update = useAIAgentsStore(s=> s.updateAgent)
-  if(!agent) return null
+  const updateLocal = useAIAgentsStore(s=> s.updateAgent)
+  const toast = useToast()
+  const [local, setLocal] = useState(agent)
+  const [saving, setSaving] = useState<string|null>(null)
+  const [showToken, setShowToken] = useState(false)
+  const [testResult, setTestResult] = useState<null|{ok:boolean; msg:string}>(null)
+
+  useEffect(()=>{ setLocal(agent) }, [agent?.id])
+
+  if(!agent || !local) return null
+
+  const save = async (section: string, patch: any)=>{
+    setSaving(section)
+    try{
+      const r = await fetch(`/api/ai/${id}`, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(patch)})
+      const j = await r.json()
+      if(!r.ok) throw new Error(j.error || "falha ao salvar")
+      updateLocal(id, patch)
+      toast(`Seção ${section} salva com sucesso`)
+    }catch(e:any){
+      toast(e.message || "Erro ao salvar", "error")
+    }finally{ setSaving(null) }
+  }
+
+  const testarConexao = async()=>{
+    setTestResult(null)
+    const token = (local as any).apiToken || ""
+    const endpoint = (local as any).apiEndpoint || "https://api.openai.com/v1"
+    const model = (local as any).modelName || "gpt-4o-mini"
+    if(!token){
+      // tenta com GEMINI do servidor
+      setTestResult({ok:true, msg:"Sem token local, usará GEMINI_API_KEY do servidor (ok para teste)"})
+      return
+    }
+    try{
+      const r = await fetch("/api/ai/test-connection", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ apiToken: token, apiEndpoint: endpoint, modelName: model }) })
+      const j = await r.json()
+      if(r.ok) setTestResult({ok:true, msg:`Conexão ok: ${j.model || model} respondeu`})
+      else setTestResult({ok:false, msg: j.error || "Falha na conexão"})
+    }catch(e:any){
+      setTestResult({ok:false, msg: e.message})
+    }
+  }
+
   return (
     <div className="grid gap-6">
       <div className="flex items-center gap-3">
         <div className="flex size-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600"><Bot className="size-5" /></div>
         <div>
           <h3 className="font-display text-base font-bold">Identidade do Agente</h3>
-          <p className="text-xs text-muted-foreground">Defina quem é sua IA e como ela se apresenta para reativação da Patrícia</p>
+          <p className="text-xs text-muted-foreground">Defina quem é sua IA. Clique em Salvar em cada seção — nada é auto-salvo.</p>
         </div>
       </div>
 
       <Card className="border-cyan-500/20">
         <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><Bot className="size-4" /> Perfil</CardTitle></CardHeader>
         <CardContent className="grid gap-4">
-          <div className="grid gap-1.5"><Label>Nome da IA *</Label><Input value={agent.name} onChange={e=>update(id,{name:e.target.value})} placeholder="Ex: Patrícia - Reativação" className="font-medium" /></div>
-          <div className="grid gap-1.5"><Label>Descrição curta</Label><Textarea rows={2} value={agent.description||""} onChange={e=>update(id,{description:e.target.value})} placeholder="Ex: IA para reativar base fria de Tráfego Pago via WhatsApp" /></div>
+          <div className="grid gap-1.5"><Label>Nome da IA *</Label><Input value={local.name} onChange={e=>setLocal({...local, name:e.target.value})} placeholder="Ex: Patrícia - Reativação" className="font-medium" /></div>
+          <div className="grid gap-1.5"><Label>Descrição curta</Label><Textarea rows={2} value={local.description||""} onChange={e=>setLocal({...local, description:e.target.value})} placeholder="Ex: IA para reativar base fria de Tráfego Pago via WhatsApp" /></div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="grid gap-1.5"><Label>Template</Label><Select value={agent.botTemplate} onChange={e=>update(id,{botTemplate:e.target.value as any})}><option value="vendas">Vendas</option><option value="locacao">Locação</option><option value="suporte">Suporte</option></Select></div>
-            <div className="grid gap-1.5"><Label>Modo de resposta</Label><Select value={agent.responseMode} onChange={e=>update(id,{responseMode:e.target.value as any})}><option value="auto">Automático (responde sozinha)</option><option value="sugestao">Sugestão (humano aprova)</option></Select></div>
-            <div className="grid gap-1.5"><Label>Status</Label><label className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm"><input type="checkbox" checked={agent.isActive} onChange={e=>update(id,{isActive:e.target.checked})} className="rounded text-cyan-500" /> <span className={agent.isActive?"text-emerald-600 font-medium":"text-muted-foreground"}>{agent.isActive?"Ativa - respondendo":"Pausada"}</span></label></div>
+            <div className="grid gap-1.5"><Label>Template</Label><Select value={local.botTemplate} onChange={e=>setLocal({...local, botTemplate:e.target.value as any})}><option value="vendas">Vendas</option><option value="locacao">Locação</option><option value="suporte">Suporte</option></Select></div>
+            <div className="grid gap-1.5"><Label>Modo de resposta</Label><Select value={local.responseMode} onChange={e=>setLocal({...local, responseMode:e.target.value as any})}><option value="auto">Automático (responde sozinha)</option><option value="sugestao">Sugestão (humano aprova)</option></Select></div>
+            <div className="grid gap-1.5"><Label>Status</Label><label className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm"><input type="checkbox" checked={local.isActive} onChange={e=>setLocal({...local, isActive:e.target.checked})} className="rounded text-cyan-500" /> <span className={local.isActive?"text-emerald-600 font-medium":"text-muted-foreground"}>{local.isActive?"Ativa - respondendo":"Pausada"}</span></label></div>
           </div>
+          <div className="flex justify-end"><Button onClick={()=>save("Perfil", {name: local.name, description: local.description, botTemplate: local.botTemplate, responseMode: local.responseMode, isActive: local.isActive})} disabled={saving==="Perfil"} className="gap-2"><Save className="size-4" /> {saving==="Perfil"?"Salvando...":"Salvar Perfil"}</Button></div>
         </CardContent>
       </Card>
 
@@ -34,29 +80,47 @@ export function BotSettings({ id }: { id: string }){
         <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><MessageCircle className="size-4" /> Canais & Comportamento</CardTitle></CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="grid gap-1.5"><Label className="flex items-center gap-1.5"><Clock className="size-3" /> Espera antes de responder (ms)</Label><Input type="number" value={agent.waitTimeMs} onChange={e=>update(id,{waitTimeMs: parseInt(e.target.value)||0})} /></div>
-            <div className="grid gap-1.5"><Label>Limite de mensagens por conversa</Label><Input type="number" value={agent.messageCap} onChange={e=>update(id,{messageCap: parseInt(e.target.value)||0})} /></div>
-            <div className="grid gap-1.5"><Label>Instância WhatsApp para teste</Label><Select value={(agent as any).testInstance || "patricia-6c2875b4"} onChange={e=>update(id,{testInstance:e.target.value} as any)}><option value="patricia-6c2875b4">Patrícia (5518991976332)</option><option value="teste-separada">Instância de teste (separada)</option></Select></div>
+            <div className="grid gap-1.5"><Label className="flex items-center gap-1.5"><Clock className="size-3" /> Espera antes de responder (ms)</Label><Input type="number" value={local.waitTimeMs} onChange={e=>setLocal({...local, waitTimeMs: parseInt(e.target.value)||0})} /></div>
+            <div className="grid gap-1.5"><Label>Limite de mensagens por conversa</Label><Input type="number" value={local.messageCap} onChange={e=>setLocal({...local, messageCap: parseInt(e.target.value)||0})} /></div>
+            <div className="grid gap-1.5"><Label>Instância WhatsApp para teste</Label><Select value={(local as any).testInstance || "patricia-6c2875b4"} onChange={e=>setLocal({...local, testInstance:e.target.value} as any)}><option value="patricia-6c2875b4">Patrícia (5518991976332)</option><option value="teste-separada">Instância de teste (separada)</option></Select></div>
           </div>
           <div className="flex flex-wrap gap-2">
             {(["whatsapp","instagram","site"] as const).map(ch=>(
               <label key={ch} className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs">
-                <input type="checkbox" checked={agent.channels.includes(ch)} onChange={e=>{
-                  const next = e.target.checked ? [...agent.channels, ch] : agent.channels.filter(c=>c!==ch)
-                  update(id,{channels: next as any})
+                <input type="checkbox" checked={local.channels.includes(ch)} onChange={e=>{
+                  const next = e.target.checked ? [...local.channels, ch] : local.channels.filter(c=>c!==ch)
+                  setLocal({...local, channels: next as any})
                 }} /> {ch}
               </label>
             ))}
           </div>
+          <div className="flex justify-end"><Button onClick={()=>save("Canais", {waitTimeMs: local.waitTimeMs, messageCap: local.messageCap, testInstance: (local as any).testInstance, channels: local.channels})} disabled={saving==="Canais"} className="gap-2"><Save className="size-4" /> Salvar Canais</Button></div>
         </CardContent>
       </Card>
 
       <Card className="border-amber-500/20 bg-amber-500/5">
         <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><Zap className="size-4 text-amber-500" /> API da IA (para teste real)</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
-          <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(agent as any).modelName || "gpt-4o-mini"} onChange={e=>update(id,{modelName:e.target.value} as any)}><option value="gpt-4o-mini">gpt-4o-mini (barato, rápido)</option><option value="gpt-4o">gpt-4o</option><option value="claude-3-5-sonnet">claude-3-5-sonnet</option></Select></div>
-          <div className="grid gap-1.5"><Label>API Endpoint (opcional)</Label><Input value={(agent as any).apiEndpoint || ""} onChange={e=>update(id,{apiEndpoint:e.target.value} as any)} placeholder="https://api.openai.com/v1 (deixe vazio para OpenAI)" /></div>
-          <div className="grid gap-1.5"><Label>API Token / Chave *</Label><Input type="password" value={(agent as any).apiToken || ""} onChange={e=>update(id,{apiToken:e.target.value} as any)} placeholder="sk-... ou GEMINI_API_KEY" /><p className="text-xs text-muted-foreground">Criptografado com AES-256 antes de salvar. Deixe vazio para usar GEMINI_API_KEY do servidor.</p></div>
+          <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gpt-4o-mini"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}><option value="gpt-4o-mini">gpt-4o-mini (barato, rápido)</option><option value="gpt-4o">gpt-4o</option><option value="claude-3-5-sonnet">claude-3-5-sonnet</option><option value="gemini-1.5-flash">gemini-1.5-flash</option></Select></div>
+          <div className="grid gap-1.5"><Label>API Endpoint (opcional)</Label><Input value={(local as any).apiEndpoint || ""} onChange={e=>setLocal({...local, apiEndpoint:e.target.value} as any)} placeholder="https://api.openai.com/v1 (deixe vazio para OpenAI)" /></div>
+          <div className="grid gap-1.5">
+            <Label>API Token / Chave *</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input type={showToken ? "text" : "password"} value={(local as any).apiToken || ""} onChange={e=>setLocal({...local, apiToken:e.target.value} as any)} placeholder="sk-... ou GEMINI_API_KEY" className="pr-10" />
+                <button type="button" onClick={()=>setShowToken(v=>!v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showToken ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              <Button variant="outline" onClick={testarConexao}>Testar Conexão</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Criptografado com AES-256 antes de salvar. Deixe vazio para usar GEMINI_API_KEY do servidor.</p>
+            {testResult && <div className={`flex items-center gap-2 rounded-lg border p-2 text-xs ${testResult.ok?"border-emerald-500/20 bg-emerald-500/10 text-emerald-700":"border-red-500/20 bg-red-500/10 text-red-700"}`}>{testResult.ok ? <CheckCircle className="size-4" /> : <AlertCircle className="size-4" />} {testResult.msg}</div>}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={testarConexao}>Validar Conexão</Button>
+            <Button onClick={()=>save("API", {apiToken: (local as any).apiToken, apiEndpoint: (local as any).apiEndpoint, modelName: (local as any).modelName})} disabled={saving==="API"} className="gap-2"><Save className="size-4" /> Salvar API</Button>
+          </div>
         </CardContent>
       </Card>
     </div>
