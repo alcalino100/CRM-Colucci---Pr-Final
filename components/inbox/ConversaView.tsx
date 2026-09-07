@@ -8,6 +8,15 @@ import { useToast } from "@/components/ui/primitives"
 function fmtHora(iso: string){
   return new Date(iso).toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
 }
+function timeAgoShort(iso: string){
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff/60000)
+  if(m<1) return "agora"
+  if(m<60) return `há ${m}min`
+  const h=Math.floor(m/60)
+  if(h<24) return `há ${h}h`
+  return `há ${Math.floor(h/24)}d`
+}
 function proximaEm(iso?: string){
   if(!iso) return ""
   const d = new Date(iso)
@@ -83,7 +92,10 @@ export function ConversaView(){
                 )}>
                   {m.sender==="ia" && <span className="mr-1">🤖</span>}
                   <span className="whitespace-pre-wrap break-words">{m.content}</span>
-                  <p className={cn("mt-1 text-right font-mono text-[10px]", m.sender==="você" ? "text-white/70" : "text-slate-400")}>{fmtHora(m.timestamp)} · {m.sender}</p>
+                  <p className={cn("mt-1 text-right font-mono text-[10px]", m.sender==="você" ? "text-white/70" : "text-slate-400")}>
+                    <span className="md:hidden">{timeAgoShort(m.timestamp)} · {m.sender}</span>
+                    <span className="hidden md:inline">{fmtHora(m.timestamp)} · {m.sender}</span>
+                  </p>
                 </div>
               </motion.div>
             ))}
@@ -91,9 +103,9 @@ export function ConversaView(){
         )}
       </div>
 
-      {/* Caixa de resposta */}
+      {/* Caixa de resposta — altura fixa em mobile */}
       <div className="flex items-end gap-2 border-t border-slate-800 p-3">
-        <textarea value={texto} onChange={e=>setTexto(e.target.value)} placeholder="Sua resposta..." rows={2} className="max-h-24 min-h-[44px] flex-1 resize-none rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20" />
+        <textarea value={texto} onChange={e=>setTexto(e.target.value)} placeholder="Sua resposta..." rows={2} className="h-12 max-h-24 min-h-[44px] flex-1 resize-none rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 md:h-auto" />
         <div className="flex gap-2">
           <button onClick={()=>setTexto("")} className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700">Cancelar</button>
           <button onClick={handleEnviar} disabled={!texto.trim()} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-400 disabled:opacity-50">Enviar</button>

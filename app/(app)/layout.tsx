@@ -32,6 +32,8 @@ function TopbarAvatar({ userId, initials }: { userId: string; initials: string }
 
 const NAV: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/inbox", label: "Inbox", icon: Inbox, roles: ["corretor", "gestor"] },
+  { href: "/contacts", label: "Contacts", icon: UsersRound, roles: ["corretor", "gestor"] },
+  { href: "/follow-ups", label: "Follow-ups", icon: Zap, roles: ["corretor", "gestor"] },
   { href: "/painel-corretor", label: "Kanban", icon: KanbanSquare, roles: ["corretor", "gestor"] },
   { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["corretor", "gestor"] },
   { href: "/dashboard-gestao", label: "Dashboard", icon: LayoutDashboard, roles: ["gestor"] },
