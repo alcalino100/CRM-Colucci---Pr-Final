@@ -23,7 +23,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{id:st
     if(body.handoffRules!==undefined) patch.handoff_rules = body.handoffRules
     if(body.isActive!==undefined) patch.is_active = body.isActive
     patch.updated_at = new Date().toISOString()
-    const { data, error } = await db().from("ai_agents").update(patch).eq("id", id).select("*").single()
+    // tenta update, se não existir faz upsert (mock ainda não está no banco)
+    const { data: existing } = await db().from("ai_agents").select("id").eq("id", id).maybeSingle()
+    let data, error
+    if(existing){
+      const r = await db().from("ai_agents").update(patch).eq("id", id).select("*").single()
+      data = r.data; error = r.error
+    } else {
+      const row = { id, name: body.name || "Novo Agente", bot_template: "vendas", channels: ["whatsapp"], response_mode: "auto", wait_time_ms: 2000, message_cap: 10, is_active: false, ...patch }
+      const r = await db().from("ai_agents").insert(row).select("*").single()
+      data = r.data; error = r.error
+    }
     if(error) throw error
     return NextResponse.json(data)
   }catch(e:any){
