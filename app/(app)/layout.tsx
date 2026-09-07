@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox } from "lucide-react"
+import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox, ChevronDown } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
@@ -84,6 +84,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [gestorQuery, setGestorQuery] = useState("")
+  const [secVendas, setSecVendas] = useState(true)
+  const [secLocacao, setSecLocacao] = useState(false)
+  const [secAutomacoes, setSecAutomacoes] = useState(false)
+  const [secAdmin, setSecAdmin] = useState(false)
 
   // Mantém link do Kanban/Dashboard com filtros salvos do gestor — contínuo para Voltar/Avançar e sidebar
   useEffect(() => {
@@ -110,6 +114,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [loading, user, router])
 
   useEffect(() => setOpen(false), [pathname])
+  useEffect(() => {
+    if (pathname.startsWith("/locacao")) setSecLocacao(true)
+    if (pathname.startsWith("/automacoes")) setSecAutomacoes(true)
+    if (pathname.startsWith("/admin")) setSecAdmin(true)
+    if (pathname.startsWith("/inbox") || pathname.startsWith("/painel-corretor") || pathname.startsWith("/contacts") || pathname.startsWith("/follow-ups")) setSecVendas(true)
+  }, [pathname])
 
   if (loading || !user) {
     return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>
@@ -163,28 +173,36 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3">
         {items.length > 0 && (
-          <>
-            <span className="px-3 pt-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">Vendas</span>
-            {renderItems(items)}
-          </>
+          <div>
+            <button onClick={()=>setSecVendas(v=>!v)} className="flex w-full items-center justify-between px-3 pt-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60 hover:text-sidebar-foreground">
+              <span>Vendas</span><ChevronDown className={`size-3.5 transition ${secVendas ? "rotate-0" : "-rotate-90"}`} />
+            </button>
+            {secVendas && <div className="mt-1 flex flex-col gap-1">{renderItems(items)}</div>}
+          </div>
         )}
         {itemsLocacao.length > 0 && (
-          <>
-            <span className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">Locação</span>
-            {renderItems(itemsLocacao)}
-          </>
+          <div>
+            <button onClick={()=>setSecLocacao(v=>!v)} className="flex w-full items-center justify-between px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60 hover:text-sidebar-foreground">
+              <span>Locação</span><ChevronDown className={`size-3.5 transition ${secLocacao ? "rotate-0" : "-rotate-90"}`} />
+            </button>
+            {secLocacao && <div className="mt-1 flex flex-col gap-1">{renderItems(itemsLocacao)}</div>}
+          </div>
         )}
         {itemsAutomacoes.length > 0 && (
-          <>
-            <span className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">Automações</span>
-            {renderItems(itemsAutomacoes)}
-          </>
+          <div>
+            <button onClick={()=>setSecAutomacoes(v=>!v)} className="flex w-full items-center justify-between px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60 hover:text-sidebar-foreground">
+              <span>Automações</span><ChevronDown className={`size-3.5 transition ${secAutomacoes ? "rotate-0" : "-rotate-90"}`} />
+            </button>
+            {secAutomacoes && <div className="mt-1 flex flex-col gap-1">{renderItems(itemsAutomacoes)}</div>}
+          </div>
         )}
         {items2.length > 0 && (
-          <>
-            <span className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">Administração</span>
-            {renderItems(items2)}
-          </>
+          <div>
+            <button onClick={()=>setSecAdmin(v=>!v)} className="flex w-full items-center justify-between px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60 hover:text-sidebar-foreground">
+              <span>Administração</span><ChevronDown className={`size-3.5 transition ${secAdmin ? "rotate-0" : "-rotate-90"}`} />
+            </button>
+            {secAdmin && <div className="mt-1 flex flex-col gap-1">{renderItems(items2)}</div>}
+          </div>
         )}
       </nav>
       <div className="border-t border-sidebar-border px-3 py-4">

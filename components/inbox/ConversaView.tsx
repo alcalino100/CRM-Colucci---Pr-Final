@@ -24,14 +24,45 @@ function proximaEm(iso?: string){
 }
 
 export function ConversaView(){
-  const { conversas, mensagens, selectedId, enviarMensagem, assumirConversa, cancelarFollowUp, marcarRespondido } = useInboxStore()
+  const { conversas, mensagens, selectedId, enviarMensagem, assumirConversa, cancelarFollowUp, marcarRespondido, modoReal } = useInboxStore() as any
   const toast = useToast()
   const [texto, setTexto] = useState("")
+  const [carregandoReal, setCarregandoReal] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
   const conv = conversas.find(c=>c.id===selectedId) || null
   const thread = selectedId ? (mensagens[selectedId] || []) : []
 
   useEffect(()=>{ if(threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight }, [thread])
+
+  // Carrega mensagens reais só para Patricia (modoReal) sob demanda
+  useEffect(()=>{
+    if(!modoReal || !selectedId || !conv) return
+    if(thread.length>0) return // já carregado
+    const leadId = (conv as any).leadId
+    const telefone = (conv as any).telefone
+    if(!leadId && !telefone) return
+    setCarregandoReal(true)
+    const params = leadId ? `leadId=${encodeURIComponent(leadId)}` : `telefone=${encodeURIComponent(telefone)}`
+    fetch(`/api/whatsapp/chat/mensagens?instanceName=patricia-6c2875b4&${params}`)
+      .then(r=>r.json())
+      .then(j=>{
+        const msgs = (j.mensagens || []) as any[]
+        // mapeia para InboxMessage
+        const mapped = msgs.map((m:any)=>({
+          id: m.id,
+          conversationId: selectedId!,
+          timestamp: m.criado_em,
+          sender: m.de_mim ? "você" as const : "lead" as const,
+          origem: m.de_mim ? "outbound" as const : "inbound" as const,
+          content: m.corpo || (m.tipo_midia ? `[${m.tipo_midia}]` : ""),
+        }))
+        if(mapped.length>0){
+          const store = useInboxStore.getState() as any
+          store.setMensagens({ ...store.mensagens, [selectedId!]: mapped })
+        }
+      }).catch(()=>{})
+      .finally(()=>setCarregandoReal(false))
+  }, [selectedId, modoReal, conv])
 
   if(!conv){
     return (
@@ -41,10 +72,23 @@ export function ConversaView(){
     )
   }
 
-  const handleEnviar = () => {
-    if(!texto.trim() || !selectedId) return
+  const handleEnviar = async () => {
+    if(!texto.trim() || !selectedId || !conv) return
+    const content = texto.trim()
+    if(modoReal){
+      try{
+        const r = await fetch("/api/whatsapp/send", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ instanceName:"patricia-6c2875b4", telefone: (conv as any).telefone, texto: content }) })
+        const j = await r.json()
+        if(!j.ok) throw new Error(j.erro || "falha")
+        enviarMensagem(selectedId, content)
+        setTexto("")
+      }catch(e:any){
+        toast(e.message || "Erro ao enviar via WhatsApp","error")
+      }
+      return
+    }
     try{
-      enviarMensagem(selectedId, texto.trim())
+      enviarMensagem(selectedId, content)
       setTexto("")
     }catch{
       toast("Erro ao enviar resposta","error")

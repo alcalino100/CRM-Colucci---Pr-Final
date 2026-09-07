@@ -7,9 +7,13 @@ type InboxState = {
   mensagens: Record<string, InboxMessage[]>
   selectedId: string | null
   filtro: string
+  modoReal: boolean
   // actions
   setSelected: (id: string | null) => void
   setFiltro: (v: string) => void
+  setConversas: (c: InboxConversation[]) => void
+  setMensagens: (m: Record<string, InboxMessage[]>) => void
+  setModoReal: (v: boolean) => void
   enviarMensagem: (conversationId: string, content: string) => void
   assumirConversa: (id: string) => void
   cancelarFollowUp: (id: string) => void
@@ -22,8 +26,12 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   mensagens: mockMensagens,
   selectedId: null,
   filtro: "",
+  modoReal: false,
   setSelected: (id) => set({ selectedId: id }),
   setFiltro: (v) => set({ filtro: v }),
+  setConversas: (c) => set({ conversas: c }),
+  setMensagens: (m) => set({ mensagens: m }),
+  setModoReal: (v) => set({ modoReal: v }),
   enviarMensagem: (conversationId, content) =>
     set((s) => {
       const nova: InboxMessage = {
