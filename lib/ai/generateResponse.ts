@@ -50,17 +50,26 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
   const model = (ai as any).model_name || (provider==="gemini" ? "gemini-1.5-flash" : provider==="claude" ? "claude-3-5-sonnet" : "gpt-4o-mini")
   const endpoint = (ai as any).api_endpoint || ""
 
-  // Gemini
+  // Gemini - com fallback para modelo estável se o solicitado foi descontinuado
   if(provider==="gemini"){
-    const url = endpoint.includes("generativelanguage.googleapis.com") ? `${endpoint.replace(/\/$/,"")}/v1beta/models/${model}:generateContent?key=${apiKey}` : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-    const contents = [
-      { role:"user", parts:[{ text: systemPrompt + "\n\nHistórico:\n" + conversationHistory.map(m=> `${m.role}: ${m.content}`).join("\n") + `\n\nUsuário: ${userMessage}` }] }
-    ]
-    const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ contents }) })
-    const j = await r.json()
-    if(!r.ok) throw new Error(j.error?.message || "Gemini falhou")
-    const text = j.candidates?.[0]?.content?.parts?.[0]?.text || ""
-    return { message: text, tokensUsed: j.usageMetadata?.totalTokenCount || 0, model }
+    const tryModels = [model, "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro"]
+    let lastErr:any = null
+    for(const m of Array.from(new Set(tryModels))){
+      const url = endpoint.includes("generativelanguage.googleapis.com") ? `${endpoint.replace(/\/$/,"")}/v1beta/models/${m}:generateContent?key=${apiKey}` : `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`
+      const contents = [
+        { role:"user", parts:[{ text: systemPrompt + "\n\nHistórico:\n" + conversationHistory.map(mm=> `${mm.role}: ${mm.content}`).join("\n") + `\n\nUsuário: ${userMessage}` }] }
+      ]
+      const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ contents }) })
+      const j = await r.json()
+      if(r.ok){
+        const text = j.candidates?.[0]?.content?.parts?.[0]?.text || ""
+        return { message: text, tokensUsed: j.usageMetadata?.totalTokenCount || 0, model: m }
+      }
+      lastErr = j.error?.message || "Gemini falhou"
+      // se erro for de modelo não encontrado, tenta próximo da lista
+      if(!String(lastErr).toLowerCase().includes("not found") && !String(lastErr).toLowerCase().includes("no longer available")) break
+    }
+    throw new Error(lastErr || "Gemini falhou")
   }
 
   // Claude

@@ -110,9 +110,11 @@ export function BotSettings({ id }: { id: string }){
             else setLocal({...local, modelName:"gpt-4o-mini", apiEndpoint:"https://api.openai.com/v1"} as any)
           }}><option value="openai">OpenAI</option><option value="gemini">Gemini (sua atual)</option><option value="claude">Claude (Anthropic)</option></Select></div>
           <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gemini-1.5-flash"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}>
-            {((local as any).modelName||"").includes("gemini") || (local as any).modelName==="gemini-1.5-flash" || (local as any).modelName==="gemini-1.5-pro" ? <>
-              <option value="gemini-1.5-flash">gemini-1.5-flash (recomendado)</option>
+            {((local as any).modelName||"").includes("gemini") ? <>
+              <option value="gemini-1.5-flash">gemini-1.5-flash (estável)</option>
+              <option value="gemini-1.5-flash-8b">gemini-1.5-flash-8b (rápido)</option>
               <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+              <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
               <option value="gemini-2.0-flash">gemini-2.0-flash</option>
             </> : (local as any).modelName?.includes("claude") ? <>
               <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
@@ -122,7 +124,9 @@ export function BotSettings({ id }: { id: string }){
               <option value="gpt-4o">gpt-4o</option>
               <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
             </>}
-          </Select></div>
+          </Select>
+            <p className="text-xs text-muted-foreground">Se der erro de modelo descontinuado, teste `gemini-1.5-flash` que é o mais estável.</p>
+          </div>
           <div className="grid gap-1.5"><Label>API Endpoint (auto)</Label><Input value={(local as any).apiEndpoint || ""} onChange={e=>setLocal({...local, apiEndpoint:e.target.value} as any)} placeholder="auto preenchido ao trocar provedor" /></div>
           <div className="grid gap-1.5">
             <Label>API Token / Chave *</Label>

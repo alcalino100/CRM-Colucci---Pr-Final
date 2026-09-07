@@ -21,11 +21,17 @@ export async function POST(req: NextRequest){
   if(!token) return NextResponse.json({ error:`Nenhum token para ${provider}. Preencha no Bot Settings ou configure ${provider==="gemini"?"GEMINI_API_KEY":provider==="claude"?"CLAUDE_API_KEY":"OPENAI_API_KEY"} no servidor` }, {status:400})
   try{
     if(provider==="gemini"){
-      const url = `${endpoint.replace(/\/$/,"")}/v1beta/models/${model}:generateContent?key=${token}`
-      const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ contents:[{ parts:[{ text:"Diga 'ok' se você está funcionando." }]}] }) })
-      const j = await r.json()
-      if(!r.ok) throw new Error(j.error?.message || "Gemini falhou")
-      return NextResponse.json({ ok:true, provider, model, response: j.candidates?.[0]?.content?.parts?.[0]?.text, tokens: j.usageMetadata?.totalTokenCount })
+      const tryModels = [model, "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+      let lastErr=""
+      for(const m of Array.from(new Set(tryModels))){
+        const url = `${endpoint.replace(/\/$/,"")}/v1beta/models/${m}:generateContent?key=${token}`
+        const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ contents:[{ parts:[{ text:"Diga 'ok' se você está funcionando." }]}] }) })
+        const j = await r.json()
+        if(r.ok) return NextResponse.json({ ok:true, provider, model:m, response: j.candidates?.[0]?.content?.parts?.[0]?.text, tokens: j.usageMetadata?.totalTokenCount, note: m!==model ? `Modelo ${model} indisponível, usado ${m} como fallback` : undefined })
+        lastErr = j.error?.message || "Gemini falhou"
+        if(!String(lastErr).toLowerCase().includes("not found") && !String(lastErr).toLowerCase().includes("no longer available")) break
+      }
+      throw new Error(lastErr)
     }
     if(provider==="claude"){
       const url = endpoint.includes("anthropic.com") ? `${endpoint.replace(/\/$/,"")}/v1/messages` : "https://api.anthropic.com/v1/messages"
