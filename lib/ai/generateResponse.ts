@@ -50,12 +50,24 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
   const model = (ai as any).model_name || (provider==="gemini" ? "gemini-1.5-flash" : provider==="claude" ? "claude-3-5-sonnet" : "gpt-4o-mini")
   const endpoint = (ai as any).api_endpoint || ""
 
-  // Gemini - com fallback para modelo estável se o solicitado foi descontinuado
+  // Gemini - auditoria: lista modelos disponíveis para a key e tenta em ordem
   if(provider==="gemini"){
-    const tryModels = [model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
+    // Descobre modelos permitidos para esta key (free tier pode ter 1.5 com limite 0)
+    let available: string[] = []
+    try{
+      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+      const lr = await fetch(listUrl)
+      const lj:any = await lr.json()
+      if(lr.ok && Array.isArray(lj.models)){
+        available = lj.models.filter((m:any)=> (m.supportedGenerationMethods||[]).includes("generateContent")).map((m:any)=> m.name.replace("models/",""))
+      }
+    }catch{}
+    const preferred = [model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro", "gemini-flash-latest", "gemini-pro-latest"]
+    // prioriza os que estão na lista retornada pela API
+    const tryModels = Array.from(new Set([...preferred.filter(m=> available.length===0 || available.includes(m)), ...available])).slice(0,6)
     let lastErr:any = null
-    for(const m of Array.from(new Set(tryModels))){
-      const url = endpoint.includes("generativelanguage.googleapis.com") ? `${endpoint.replace(/\/$/,"")}/v1beta/models/${m}:generateContent?key=${apiKey}` : `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`
+    for(const m of tryModels){
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`
       const contents = [
         { role:"user", parts:[{ text: systemPrompt + "\n\nHistórico:\n" + conversationHistory.map(mm=> `${mm.role}: ${mm.content}`).join("\n") + `\n\nUsuário: ${userMessage}` }] }
       ]
@@ -66,10 +78,10 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
         return { message: text, tokensUsed: j.usageMetadata?.totalTokenCount || 0, model: m }
       }
       lastErr = j.error?.message || "Gemini falhou"
-      const isModelErr = String(lastErr).toLowerCase().includes("not found") || String(lastErr).toLowerCase().includes("no longer available") || String(lastErr).toLowerCase().includes("not supported")
+      const isModelErr = String(lastErr).toLowerCase().includes("not found") || String(lastErr).toLowerCase().includes("no longer available") || String(lastErr).toLowerCase().includes("not supported") || String(lastErr).toLowerCase().includes("not found for api version")
       if(!isModelErr) break
     }
-    throw new Error(lastErr || "Gemini falhou")
+    throw new Error(lastErr || "Gemini falhou - nenhum modelo disponível para esta key. Verifique em https://aistudio.google.com/app/apikey e billing.")
   }
 
   // Claude
