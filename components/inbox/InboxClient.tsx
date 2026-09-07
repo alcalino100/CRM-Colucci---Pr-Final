@@ -7,7 +7,27 @@ import { useInboxStore } from "@/lib/inbox-store"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
 import { isTelefoneBloqueado } from "@/lib/telefones-bloqueados"
+import { Select } from "@/components/ui/primitives"
 import type { InboxConversation } from "@/lib/inbox-mock"
+
+function InstanceSelector(){
+  const instancia = useInboxStore(s=>s.instanciaSelecionada)
+  const setInstancia = useInboxStore(s=>s.setInstancia)
+  const [lista, setLista] = useState<{instance_name:string; corretorNome:string; status:string}[]>([])
+  useEffect(()=>{
+    try{ const saved = localStorage.getItem("inbox-instancia"); if(saved && saved!==instancia) setInstancia(saved)}catch{}
+    fetch("/api/whatsapp/instancias").then(r=>r.json()).then(j=>{
+      const data = (j.data || []).filter((x:any)=> x.status==="conectado")
+      setLista(data)
+    }).catch(()=>{})
+  },[])
+  if(lista.length===0) return <span className="text-slate-500">{instancia}</span>
+  return (
+    <Select value={instancia} onChange={e=>setInstancia(e.target.value)} className="h-8 w-auto min-w-[180px] text-xs">
+      {lista.map(i=> <option key={i.instance_name} value={i.instance_name}>{i.corretorNome} — {i.instance_name}</option>)}
+    </Select>
+  )
+}
 
 function isGestorVendasRole(role: string){
   const r = role as any
