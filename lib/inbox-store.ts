@@ -8,12 +8,14 @@ type InboxState = {
   selectedId: string | null
   filtro: string
   modoReal: boolean
+  instanciaSelecionada: string
   // actions
   setSelected: (id: string | null) => void
   setFiltro: (v: string) => void
   setConversas: (c: InboxConversation[]) => void
   setMensagens: (m: Record<string, InboxMessage[]>) => void
   setModoReal: (v: boolean) => void
+  setInstancia: (v: string) => void
   enviarMensagem: (conversationId: string, content: string) => void
   assumirConversa: (id: string) => void
   cancelarFollowUp: (id: string) => void
@@ -27,11 +29,16 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   selectedId: null,
   filtro: "",
   modoReal: false,
+  instanciaSelecionada: "patricia-6c2875b4",
   setSelected: (id) => set({ selectedId: id }),
   setFiltro: (v) => set({ filtro: v }),
   setConversas: (c) => set({ conversas: c }),
   setMensagens: (m) => set({ mensagens: m }),
   setModoReal: (v) => set({ modoReal: v }),
+  setInstancia: (v) => {
+    if(typeof window!=="undefined") try{ localStorage.setItem("inbox-instancia", v) }catch{}
+    set({ instanciaSelecionada: v })
+  },
   enviarMensagem: (conversationId, content) =>
     set((s) => {
       const nova: InboxMessage = {

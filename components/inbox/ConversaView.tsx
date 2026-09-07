@@ -24,7 +24,7 @@ function proximaEm(iso?: string){
 }
 
 export function ConversaView(){
-  const { conversas, mensagens, selectedId, enviarMensagem, assumirConversa, cancelarFollowUp, marcarRespondido, modoReal } = useInboxStore() as any
+  const { conversas, mensagens, selectedId, enviarMensagem, assumirConversa, cancelarFollowUp, marcarRespondido, modoReal, instanciaSelecionada } = useInboxStore() as any
   const toast = useToast()
   const [texto, setTexto] = useState("")
   const [carregandoReal, setCarregandoReal] = useState(false)
@@ -34,7 +34,7 @@ export function ConversaView(){
 
   useEffect(()=>{ if(threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight }, [thread])
 
-  // Carrega mensagens reais só para Patricia (modoReal) sob demanda
+  // Carrega mensagens reais da instância selecionada sob demanda
   useEffect(()=>{
     if(!modoReal || !selectedId || !conv) return
     if(thread.length>0) return // já carregado
@@ -42,8 +42,9 @@ export function ConversaView(){
     const telefone = (conv as any).telefone
     if(!leadId && !telefone) return
     setCarregandoReal(true)
+    const inst = instanciaSelecionada || "patricia-6c2875b4"
     const params = leadId ? `leadId=${encodeURIComponent(leadId)}` : `telefone=${encodeURIComponent(telefone)}`
-    fetch(`/api/whatsapp/chat/mensagens?instanceName=patricia-6c2875b4&${params}`)
+    fetch(`/api/whatsapp/chat/mensagens?instanceName=${inst}&${params}`)
       .then(r=>r.json())
       .then(j=>{
         const msgs = (j.mensagens || []) as any[]
@@ -77,7 +78,8 @@ export function ConversaView(){
     const content = texto.trim()
     if(modoReal){
       try{
-        const r = await fetch("/api/whatsapp/send", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ instanceName:"patricia-6c2875b4", telefone: (conv as any).telefone, texto: content }) })
+        const inst = instanciaSelecionada || "patricia-6c2875b4"
+        const r = await fetch("/api/whatsapp/send", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ instanceName: inst, telefone: (conv as any).telefone, texto: content }) })
         const j = await r.json()
         if(!j.ok) throw new Error(j.erro || "falha")
         enviarMensagem(selectedId, content)

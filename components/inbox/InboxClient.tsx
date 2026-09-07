@@ -7,7 +7,7 @@ import { useInboxStore } from "@/lib/inbox-store"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
 import { isTelefoneBloqueado } from "@/lib/telefones-bloqueados"
-import { isGestorNivel, podeVendas } from "@/lib/roles"
+import { InstanceSelector } from "./InstanceSelector"
 import type { InboxConversation } from "@/lib/inbox-mock"
 
 const PATRICIA_ID = "6c2875b4-0d11-4370-b9fd-3c13b5257bd4"
@@ -27,7 +27,8 @@ export function InboxClient(){
   const setSelected = useInboxStore(s=>s.setSelected)
   const setConversas = useInboxStore(s=>s.setConversas)
   const setModoReal = useInboxStore(s=>s.setModoReal)
-  // Gestores de Vendas (Patricia, Guilherme, Kleber) veem a base da Patricia para IA; locação (Ricardo) não
+  const instanciaSelecionada = useInboxStore(s=>s.instanciaSelecionada)
+  // Gestores de Vendas (Patricia, Guilherme, Kleber) veem a base da instância selecionada; locação (Ricardo) não
   const isGestorVendas = !!user && isGestorNivel(user.role) && podeVendas(user.role)
 
   useEffect(()=>{ const t=setTimeout(()=>setLoading(false),800); return()=>clearTimeout(t)},[])
@@ -36,20 +37,18 @@ export function InboxClient(){
     return <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">Acesso restrito a gestores de Vendas (Patrícia, Guilherme, Kleber). Ricardo e equipe de Locação não têm acesso a esta base.</div>
   }
 
-  // Fase 2: fonte primária = conversas WhatsApp da Patricia, enriquece com leads, filtro Tráfego Pago como toggle
-  // Vale para gestores de Vendas (Patricia, Guilherme, Kleber), não para locação (Ricardo)
+  // Fase 2: fonte primária = conversas WhatsApp da instância selecionada, enriquece com leads, filtro Tráfego Pago como toggle
   useEffect(()=>{
     if(!isGestorVendas || !user) return
     let cancelled=false
     async function loadReal(){
       try{
-        const r = await fetch(`/api/whatsapp/chat/conversas?instanceName=${PATRICIA_INSTANCE}`)
+        const inst = instanciaSelecionada || PATRICIA_INSTANCE
+        const r = await fetch(`/api/whatsapp/chat/conversas?instanceName=${inst}`)
         const j = await r.json()
         const raw: any[] = j.conversas || []
         if(cancelled) return
-        // Filtra bloqueados (internos)
         let filtradas = raw.filter((c:any)=> !isTelefoneBloqueado(c.telefone || ""))
-        // Enriquece com leads para saber origem
         const leadIds = filtradas.filter(c=>c.leadId).map(c=>c.leadId)
         let leadsMap = new Map<string, any>()
         if(leadIds.length>0){
@@ -63,11 +62,13 @@ export function InboxClient(){
             return l?.origem === "Tráfego Pago"
           })
         }
+        // Nome do responsável vem da instância selecionada
+        const respNome = inst.split("-")[0] || "Patricia"
         const conversas: InboxConversation[] = filtradas.map((c:any)=>({
           id: `real-${c.leadId || c.telefone}`,
           leadId: c.leadId || "",
           leadName: c.nome || c.nomeContato || c.telefone || "Sem nome",
-          responsavel: "Patricia",
+          responsavel: respNome,
           telefone: c.telefone || "",
           email: "",
           status: c.leadId && leadsMap.get(c.leadId) ? mapStatus(leadsMap.get(c.leadId).status) : (c.status ? mapStatus(c.status) : "aguardando_resposta"),
@@ -84,7 +85,6 @@ export function InboxClient(){
             setConversas(conversas)
             setModoReal(true)
           } else {
-            // sem conversas com filtro, mantém mock vazio mas indica modo real
             setConversas([])
             setModoReal(true)
           }
@@ -93,7 +93,7 @@ export function InboxClient(){
     }
     loadReal()
     return()=>{cancelled=true}
-  }, [isGestorVendas, user, filtroTrafego, setConversas, setModoReal])
+  }, [isGestorVendas, user, filtroTrafego, instanciaSelecionada, setConversas, setModoReal])
   if(loading){
     return (
       <div className="flex flex-col gap-4 lg:h-[calc(100vh-11rem)] lg:flex-row">
@@ -106,12 +106,13 @@ export function InboxClient(){
   return (
     <div className="flex flex-col gap-3">
       {isGestorVendas && (
-        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={filtroTrafego} onChange={e=>setFiltroTrafego(e.target.checked)} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
-            <span className="font-medium text-slate-700 dark:text-slate-300">Somente Tráfego Pago (tag)</span>
+            <span className="font-medium text-slate-700 dark:text-slate-300">Somente Tráfego Pago</span>
           </label>
-          <span className="text-slate-500">{filtroTrafego ? "filtrando base para IA" : "mostrando toda a base da Patrícia"}</span>
+          <span className="hidden sm:inline text-slate-500">{filtroTrafego ? "filtrando base para IA" : "toda a base"}</span>
+          <span className="ml-auto flex items-center gap-2">Instância: <InstanceSelector /></span>
         </div>
       )}
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-11rem)] lg:flex-row">
