@@ -11,11 +11,17 @@ type Input = {
   conversationHistory: { role:string; content:string }[]
 }
 
+function providerFromModel(model?: string){
+  const m = (model||"").toLowerCase()
+  if(m.includes("gemini")) return "gemini"
+  if(m.includes("claude")) return "claude"
+  return "openai"
+}
+
 export async function generateAIResponse({ aiId, userMessage, conversationHistory }: Input){
   const { data: ai } = await db().from("ai_agents").select("*").eq("id", aiId).single()
   if(!ai) throw new Error("AI not found")
 
-  // Busca KB (documents + faqs) para RAG simples
   let context = ""
   const { data: kb } = await db().from("knowledge_bases").select("id").eq("ai_id", aiId).maybeSingle()
   if(kb?.id){
@@ -29,16 +35,56 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
   }
 
   let systemPrompt = (ai.system_prompt || "") + context + "\n\n" + (ai.additional_instructions || "")
+  const brand = (ai as any).brand_voice || ""
+  if(brand) systemPrompt += `\n\nTom de voz: ${brand}`
 
-  // Usa token descriptografado se existir, senão env
   let apiKey: string | undefined
-  try{ apiKey = ai.api_token ? decryptToken(ai.api_token) : undefined }catch{}
-  apiKey = apiKey || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY
-  if(!apiKey) throw new Error("API key não configurada")
+  try{ apiKey = (ai as any).api_token ? decryptToken((ai as any).api_token) : undefined }catch{}
+  const provider = providerFromModel((ai as any).model_name)
+  if(provider==="gemini") apiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+  else if(provider==="claude") apiKey = apiKey || process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY
+  else apiKey = apiKey || process.env.OPENAI_API_KEY
 
-  const openai = new OpenAI({ apiKey })
-  const model = ai.model_name || "gpt-4o-mini"
+  if(!apiKey) throw new Error(`API key não configurada para ${provider}`)
 
+  const model = (ai as any).model_name || (provider==="gemini" ? "gemini-1.5-flash" : provider==="claude" ? "claude-3-5-sonnet" : "gpt-4o-mini")
+  const endpoint = (ai as any).api_endpoint || ""
+
+  // Gemini
+  if(provider==="gemini"){
+    const url = endpoint.includes("generativelanguage.googleapis.com") ? `${endpoint.replace(/\/$/,"")}/v1beta/models/${model}:generateContent?key=${apiKey}` : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+    const contents = [
+      { role:"user", parts:[{ text: systemPrompt + "\n\nHistórico:\n" + conversationHistory.map(m=> `${m.role}: ${m.content}`).join("\n") + `\n\nUsuário: ${userMessage}` }] }
+    ]
+    const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ contents }) })
+    const j = await r.json()
+    if(!r.ok) throw new Error(j.error?.message || "Gemini falhou")
+    const text = j.candidates?.[0]?.content?.parts?.[0]?.text || ""
+    return { message: text, tokensUsed: j.usageMetadata?.totalTokenCount || 0, model }
+  }
+
+  // Claude
+  if(provider==="claude"){
+    const url = endpoint.includes("anthropic.com") ? `${endpoint.replace(/\/$/,"")}/v1/messages` : "https://api.anthropic.com/v1/messages"
+    const r = await fetch(url, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "x-api-key": apiKey, "anthropic-version":"2023-06-01" },
+      body: JSON.stringify({
+        model,
+        max_tokens: 500,
+        system: systemPrompt,
+        messages: [...conversationHistory.map(m=> ({ role: m.role as "user"|"assistant", content: m.content })), { role:"user", content: userMessage }]
+      })
+    })
+    const j = await r.json()
+    if(!r.ok) throw new Error(j.error?.message || "Claude falhou")
+    const text = j.content?.[0]?.text || ""
+    return { message: text, tokensUsed: j.usage?.input_tokens + j.usage?.output_tokens || 0, model }
+  }
+
+  // OpenAI (default)
+  const baseURL = endpoint && endpoint.includes("openai.com") ? endpoint : undefined
+  const openai = new OpenAI({ apiKey, baseURL })
   const resp = await openai.chat.completions.create({
     model,
     messages: [

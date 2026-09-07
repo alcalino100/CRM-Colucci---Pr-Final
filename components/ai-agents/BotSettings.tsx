@@ -101,8 +101,29 @@ export function BotSettings({ id }: { id: string }){
       <Card className="border-amber-500/20 bg-amber-500/5">
         <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><Zap className="size-4 text-amber-500" /> API da IA (para teste real)</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
-          <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gpt-4o-mini"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}><option value="gpt-4o-mini">gpt-4o-mini (barato, rápido)</option><option value="gpt-4o">gpt-4o</option><option value="claude-3-5-sonnet">claude-3-5-sonnet</option><option value="gemini-1.5-flash">gemini-1.5-flash</option></Select></div>
-          <div className="grid gap-1.5"><Label>API Endpoint (opcional)</Label><Input value={(local as any).apiEndpoint || ""} onChange={e=>setLocal({...local, apiEndpoint:e.target.value} as any)} placeholder="https://api.openai.com/v1 (deixe vazio para OpenAI)" /></div>
+          <div className="grid gap-1.5"><Label>Provedor</Label><Select value={
+            (local as any).modelName?.includes("gemini") ? "gemini" : (local as any).modelName?.includes("claude") ? "claude" : "openai"
+          } onChange={e=>{
+            const prov = e.target.value
+            if(prov==="gemini") setLocal({...local, modelName:"gemini-1.5-flash", apiEndpoint:"https://generativelanguage.googleapis.com"} as any)
+            else if(prov==="claude") setLocal({...local, modelName:"claude-3-5-sonnet", apiEndpoint:"https://api.anthropic.com"} as any)
+            else setLocal({...local, modelName:"gpt-4o-mini", apiEndpoint:"https://api.openai.com/v1"} as any)
+          }}><option value="openai">OpenAI</option><option value="gemini">Gemini (sua atual)</option><option value="claude">Claude (Anthropic)</option></Select></div>
+          <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gemini-1.5-flash"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}>
+            {((local as any).modelName||"").includes("gemini") || (local as any).modelName==="gemini-1.5-flash" || (local as any).modelName==="gemini-1.5-pro" ? <>
+              <option value="gemini-1.5-flash">gemini-1.5-flash (recomendado)</option>
+              <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            </> : (local as any).modelName?.includes("claude") ? <>
+              <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
+              <option value="claude-3-haiku">claude-3-haiku</option>
+            </> : <>
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="gpt-4o">gpt-4o</option>
+              <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+            </>}
+          </Select></div>
+          <div className="grid gap-1.5"><Label>API Endpoint (auto)</Label><Input value={(local as any).apiEndpoint || ""} onChange={e=>setLocal({...local, apiEndpoint:e.target.value} as any)} placeholder="auto preenchido ao trocar provedor" /></div>
           <div className="grid gap-1.5">
             <Label>API Token / Chave *</Label>
             <div className="flex gap-2">
