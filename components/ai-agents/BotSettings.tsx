@@ -111,11 +111,9 @@ export function BotSettings({ id }: { id: string }){
           }}><option value="openai">OpenAI</option><option value="gemini">Gemini (sua atual)</option><option value="claude">Claude (Anthropic)</option></Select></div>
           <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gemini-1.5-flash"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}>
             {((local as any).modelName||"").includes("gemini") ? <>
-              <option value="gemini-1.5-flash">gemini-1.5-flash (estável)</option>
-              <option value="gemini-1.5-flash-8b">gemini-1.5-flash-8b (rápido)</option>
+              <option value="gemini-1.5-flash">gemini-1.5-flash (estável - use este)</option>
               <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-              <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
-              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash (exp)</option>
             </> : (local as any).modelName?.includes("claude") ? <>
               <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
               <option value="claude-3-haiku">claude-3-haiku</option>
@@ -125,7 +123,7 @@ export function BotSettings({ id }: { id: string }){
               <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
             </>}
           </Select>
-            <p className="text-xs text-muted-foreground">Se der erro de modelo descontinuado, teste `gemini-1.5-flash` que é o mais estável.</p>
+            <p className="text-xs text-muted-foreground">Use `gemini-1.5-flash` para Gemini. O `8b` foi removido pois não existe no v1beta.</p>
           </div>
           <div className="grid gap-1.5"><Label>API Endpoint (auto)</Label><Input value={(local as any).apiEndpoint || ""} onChange={e=>setLocal({...local, apiEndpoint:e.target.value} as any)} placeholder="auto preenchido ao trocar provedor" /></div>
           <div className="grid gap-1.5">

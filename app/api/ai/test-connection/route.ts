@@ -21,7 +21,7 @@ export async function POST(req: NextRequest){
   if(!token) return NextResponse.json({ error:`Nenhum token para ${provider}. Preencha no Bot Settings ou configure ${provider==="gemini"?"GEMINI_API_KEY":provider==="claude"?"CLAUDE_API_KEY":"OPENAI_API_KEY"} no servidor` }, {status:400})
   try{
     if(provider==="gemini"){
-      const tryModels = [model, "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+      const tryModels = [model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
       let lastErr=""
       for(const m of Array.from(new Set(tryModels))){
         const url = `${endpoint.replace(/\/$/,"")}/v1beta/models/${m}:generateContent?key=${token}`
@@ -29,7 +29,8 @@ export async function POST(req: NextRequest){
         const j = await r.json()
         if(r.ok) return NextResponse.json({ ok:true, provider, model:m, response: j.candidates?.[0]?.content?.parts?.[0]?.text, tokens: j.usageMetadata?.totalTokenCount, note: m!==model ? `Modelo ${model} indisponível, usado ${m} como fallback` : undefined })
         lastErr = j.error?.message || "Gemini falhou"
-        if(!String(lastErr).toLowerCase().includes("not found") && !String(lastErr).toLowerCase().includes("no longer available")) break
+        const isModelErr = String(lastErr).toLowerCase().includes("not found") || String(lastErr).toLowerCase().includes("no longer available") || String(lastErr).toLowerCase().includes("not supported")
+        if(!isModelErr) break
       }
       throw new Error(lastErr)
     }

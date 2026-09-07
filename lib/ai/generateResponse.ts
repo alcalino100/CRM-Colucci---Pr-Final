@@ -52,7 +52,7 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
 
   // Gemini - com fallback para modelo estável se o solicitado foi descontinuado
   if(provider==="gemini"){
-    const tryModels = [model, "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro"]
+    const tryModels = [model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
     let lastErr:any = null
     for(const m of Array.from(new Set(tryModels))){
       const url = endpoint.includes("generativelanguage.googleapis.com") ? `${endpoint.replace(/\/$/,"")}/v1beta/models/${m}:generateContent?key=${apiKey}` : `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`
@@ -66,8 +66,8 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
         return { message: text, tokensUsed: j.usageMetadata?.totalTokenCount || 0, model: m }
       }
       lastErr = j.error?.message || "Gemini falhou"
-      // se erro for de modelo não encontrado, tenta próximo da lista
-      if(!String(lastErr).toLowerCase().includes("not found") && !String(lastErr).toLowerCase().includes("no longer available")) break
+      const isModelErr = String(lastErr).toLowerCase().includes("not found") || String(lastErr).toLowerCase().includes("no longer available") || String(lastErr).toLowerCase().includes("not supported")
+      if(!isModelErr) break
     }
     throw new Error(lastErr || "Gemini falhou")
   }
