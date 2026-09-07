@@ -4,6 +4,7 @@ import { baixarEArmazenarMidia, detectarMidia, mapConnectionState, notifyDisconn
 import { registrarRespostaDeLead, registrarStatusEntrega } from "@/lib/automation-services"
 import { enviarLeadCapi } from "@/lib/meta/capi"
 import { TELEFONES_BLOQUEADOS, isTelefoneBloqueado as isBlockedCentral } from "@/lib/telefones-bloqueados"
+import { handlePatriciaInbound } from "@/lib/ai/inboxHandler"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -252,6 +253,9 @@ async function handleMessageUpsert(payload: any) {
       ...camposMidia(midia),
     })
     await preencherMidiaUrl(instanceName, mensagemId, midia)
+    if (instanceName === "patricia-6c2875b4" && !msg?.key?.fromMe) {
+      void handlePatriciaInbound({ telefone, texto: corpo, leadId: leadIdExistente || undefined }).catch(()=>{})
+    }
     return
   }
 
@@ -458,6 +462,11 @@ async function handleMessageUpsert(payload: any) {
     ...camposMidia(midia),
   })
   await preencherMidiaUrl(instanceName, mensagemId, midia)
+
+  // IA Patrícia: dispara resposta automática para Tráfego Pago (best-effort)
+  if (instanceName === "patricia-6c2875b4" && !msg?.key?.fromMe) {
+    void handlePatriciaInbound({ telefone, texto: corpo, leadId: leadId || leadIdExistente || undefined }).catch(()=>{})
+  }
 }
 
 // Recibo de entrega/leitura (evento messages.update da Evolution). A Evolution reporta o
