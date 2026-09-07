@@ -7,6 +7,7 @@ import { useInboxStore } from "@/lib/inbox-store"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
 import { isTelefoneBloqueado } from "@/lib/telefones-bloqueados"
+import { isGestorNivel, podeVendas } from "@/lib/roles"
 import type { InboxConversation } from "@/lib/inbox-mock"
 
 const PATRICIA_ID = "6c2875b4-0d11-4370-b9fd-3c13b5257bd4"
@@ -26,13 +27,19 @@ export function InboxClient(){
   const setSelected = useInboxStore(s=>s.setSelected)
   const setConversas = useInboxStore(s=>s.setConversas)
   const setModoReal = useInboxStore(s=>s.setModoReal)
-  const isPatricia = user?.id === PATRICIA_ID
+  // Gestores de Vendas (Patricia, Guilherme, Kleber) veem a base da Patricia para IA; locação (Ricardo) não
+  const isGestorVendas = !!user && isGestorNivel(user.role) && podeVendas(user.role)
 
   useEffect(()=>{ const t=setTimeout(()=>setLoading(false),800); return()=>clearTimeout(t)},[])
 
+  if(user && !isGestorVendas){
+    return <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">Acesso restrito a gestores de Vendas (Patrícia, Guilherme, Kleber). Ricardo e equipe de Locação não têm acesso a esta base.</div>
+  }
+
   // Fase 2: fonte primária = conversas WhatsApp da Patricia, enriquece com leads, filtro Tráfego Pago como toggle
+  // Vale para gestores de Vendas (Patricia, Guilherme, Kleber), não para locação (Ricardo)
   useEffect(()=>{
-    if(!isPatricia || !user) return
+    if(!isGestorVendas || !user) return
     let cancelled=false
     async function loadReal(){
       try{
@@ -86,7 +93,7 @@ export function InboxClient(){
     }
     loadReal()
     return()=>{cancelled=true}
-  }, [isPatricia, user, filtroTrafego, setConversas, setModoReal])
+  }, [isGestorVendas, user, filtroTrafego, setConversas, setModoReal])
   if(loading){
     return (
       <div className="flex flex-col gap-4 lg:h-[calc(100vh-11rem)] lg:flex-row">
@@ -98,7 +105,7 @@ export function InboxClient(){
   }
   return (
     <div className="flex flex-col gap-3">
-      {isPatricia && (
+      {isGestorVendas && (
         <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={filtroTrafego} onChange={e=>setFiltroTrafego(e.target.checked)} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
