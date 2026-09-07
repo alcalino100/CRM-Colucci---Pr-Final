@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow } from "lucide-react"
+import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
@@ -31,6 +31,7 @@ function TopbarAvatar({ userId, initials }: { userId: string; initials: string }
 }
 
 const NAV: { href: string; label: string; icon: any; roles: Role[] }[] = [
+  { href: "/inbox", label: "Inbox", icon: Inbox, roles: ["corretor", "gestor"] },
   { href: "/painel-corretor", label: "Kanban", icon: KanbanSquare, roles: ["corretor", "gestor"] },
   { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["corretor", "gestor"] },
   { href: "/dashboard-gestao", label: "Dashboard", icon: LayoutDashboard, roles: ["gestor"] },
