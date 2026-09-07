@@ -7,8 +7,14 @@ import { useInboxStore } from "@/lib/inbox-store"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
 import { isTelefoneBloqueado } from "@/lib/telefones-bloqueados"
-import { InstanceSelector } from "./InstanceSelector"
 import type { InboxConversation } from "@/lib/inbox-mock"
+
+function isGestorVendasRole(role: string){
+  const r = role as any
+  const isGestor = r !== "corretor" && r !== "corretor_vendas" && r !== "corretor_locacao"
+  const podeVendas = r === "corretor" || r === "gestor" || r === "gestor_master" || r === "corretor_vendas" || r === "gestor_vendas"
+  return isGestor && podeVendas
+}
 
 const PATRICIA_ID = "6c2875b4-0d11-4370-b9fd-3c13b5257bd4"
 const PATRICIA_INSTANCE = "patricia-6c2875b4"
@@ -28,8 +34,7 @@ export function InboxClient(){
   const setConversas = useInboxStore(s=>s.setConversas)
   const setModoReal = useInboxStore(s=>s.setModoReal)
   const instanciaSelecionada = useInboxStore(s=>s.instanciaSelecionada)
-  // Gestores de Vendas (Patricia, Guilherme, Kleber) veem a base da instância selecionada; locação (Ricardo) não
-  const isGestorVendas = !!user && isGestorNivel(user.role) && podeVendas(user.role)
+  const isGestorVendas = !!user && isGestorVendasRole(user.role)
 
   useEffect(()=>{ const t=setTimeout(()=>setLoading(false),800); return()=>clearTimeout(t)},[])
 
