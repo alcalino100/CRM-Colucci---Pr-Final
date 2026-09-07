@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox, ChevronDown } from "lucide-react"
+import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox, ChevronDown, Bot } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
@@ -64,6 +64,10 @@ const NAV_AUTOMACOES: { href: string; label: string; icon: any; roles: Role[] }[
   { href: "/automacoes/logs", label: "Logs de Automação", icon: ScrollText, roles: ["gestor"] },
 ]
 
+const NAV_IA: { href: string; label: string; icon: any; roles: Role[] }[] = [
+  { href: "/ai-agents", label: "IA Conversacional", icon: Bot, roles: ["gestor"] },
+]
+
 const NAV2: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/admin", label: "Administração", icon: Shield, roles: ["gestor"] },
   { href: "/admin/notificacoes", label: "Disparador de Notificações", icon: BellRing, roles: ["gestor"] },
@@ -87,6 +91,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [secVendas, setSecVendas] = useState(true)
   const [secLocacao, setSecLocacao] = useState(false)
   const [secAutomacoes, setSecAutomacoes] = useState(false)
+  const [secIA, setSecIA] = useState(true)
   const [secAdmin, setSecAdmin] = useState(false)
 
   // Mantém link do Kanban/Dashboard com filtros salvos do gestor — contínuo para Voltar/Avançar e sidebar
@@ -117,6 +122,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (pathname.startsWith("/locacao")) setSecLocacao(true)
     if (pathname.startsWith("/automacoes")) setSecAutomacoes(true)
+    if (pathname.startsWith("/ai-agents")) setSecIA(true)
     if (pathname.startsWith("/admin")) setSecAdmin(true)
     if (pathname.startsWith("/inbox") || pathname.startsWith("/painel-corretor") || pathname.startsWith("/contacts") || pathname.startsWith("/follow-ups")) setSecVendas(true)
   }, [pathname])
@@ -131,6 +137,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const items = NAV.filter((n) => podeVendas(user.role) && canNivel(n.roles))
   const itemsLocacao = NAV_LOCACAO.filter((n) => podeLocacao(user.role) && canNivel(n.roles))
   const itemsAutomacoes = NAV_AUTOMACOES.filter((n) => isAdminRole(user.role))
+  const itemsIA = NAV_IA.filter((n) => isGestorNivel(user.role))
   const items2 = NAV2.filter((n) => isAdminRole(user.role))
   // Gestor de módulo (ex.: gestor_locacao) vê Gestão de Acessos na seção do seu módulo
   const isModuleGestor = isGestorNivel(user.role) && !isAdminRole(user.role)
@@ -194,6 +201,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <span>Automações</span><ChevronDown className={`size-3.5 transition ${secAutomacoes ? "rotate-0" : "-rotate-90"}`} />
             </button>
             {secAutomacoes && <div className="mt-1 flex flex-col gap-1">{renderItems(itemsAutomacoes)}</div>}
+          </div>
+        )}
+        {itemsIA.length > 0 && (
+          <div>
+            <button onClick={()=>setSecIA(v=>!v)} className="flex w-full items-center justify-between px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60 hover:text-sidebar-foreground">
+              <span>IA Conversacional</span><ChevronDown className={`size-3.5 transition ${secIA ? "rotate-0" : "-rotate-90"}`} />
+            </button>
+            {secIA && <div className="mt-1 flex flex-col gap-1">{renderItems(itemsIA)}</div>}
           </div>
         )}
         {items2.length > 0 && (

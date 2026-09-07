@@ -1,51 +1,149 @@
 "use client"
 import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, Badge } from "@/components/ui/primitives"
+import { Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, Badge, Select } from "@/components/ui/primitives"
 import { Button } from "@/components/ui/button"
-import { FlaskConical, Send } from "lucide-react"
+import { FlaskConical, Send, RotateCcw, CheckCircle, XCircle, Smile, Trash2, Plus } from "lucide-react"
+import { useAIAgentsStore } from "@/lib/ai-agents-store"
+
+type Turn = { role:"lead"|"ia"; content:string; meta?:any }
 
 export function Testing({ id }: { id: string }){
-  const [msg, setMsg] = useState("Olá, qual o valor do imóvel?")
-  const [resp, setResp] = useState<string | null>(null)
-  const [meta, setMeta] = useState<any>(null)
+  const agent = useAIAgentsStore(s=> s.agents.find(a=>a.id===id))
+  const update = useAIAgentsStore(s=> s.updateAgent)
+  const [convId, setConvId] = useState<string|null>(null)
+  const [historico, setHistorico] = useState<Turn[]>([])
+  const [msg, setMsg] = useState("Olá, ainda tem aquele apê de 2 quartos?")
   const [loading, setLoading] = useState(false)
-  const testar = async()=>{
-    setLoading(true); setResp(null); setMeta(null)
+  const [validado, setValidado] = useState<null|"aprovado"|"reprovado">(null)
+  const [diversao, setDiversao] = useState(30) // 0 sério, 100 divertido
+  const [infoExtra, setInfoExtra] = useState("")
+
+  if(!agent) return null
+
+  const enviar = async()=>{
+    if(!msg.trim()) return
+    const novoLead: Turn = { role:"lead", content: msg }
+    setHistorico(h=> [...h, novoLead])
+    setLoading(true)
+    setValidado(null)
     try{
-      const convRes = await fetch("/api/conversations", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ aiId: id, contactId: "test_contact", channel:"web"}) })
-      if(convRes.ok){
-        const conv = await convRes.json()
-        const r = await fetch(`/api/conversations/${conv.id}/messages`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message: msg, aiId: id }) })
-        const j = await r.json()
-        if(r.ok){ setResp(j.aiMessage?.content); setMeta({tokens:j.aiMessage?.metadata?.tokensUsed, escalated:j.escalated}); setLoading(false); return }
-        throw new Error(j.error)
+      let cId = convId
+      if(!cId){
+        const r = await fetch("/api/conversations", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ aiId: id, contactId: "test_"+Date.now(), channel:"web"}) })
+        if(r.ok){ const j=await r.json(); cId=j.id; setConvId(cId) }
       }
-    }catch(e:any){ setResp(`Erro: ${e.message} — usando mock`)}
-    await new Promise(r=>setTimeout(r,600))
-    setResp(`[Mock IA ${id}] Olá! O imóvel está por R$ 480.000, 2 quartos, 68m². Quer agendar visita? (em resposta a: "${msg}")`)
+      if(cId){
+        // injeta ajustes temporários via body (diversão e info extra)
+        const r = await fetch(`/api/conversations/${cId}/messages`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message: msg, aiId: id, diversao, infoExtra }) })
+        const j = await r.json()
+        if(r.ok){
+          setHistorico(h=> [...h, { role:"ia", content: j.aiMessage?.content || j.aiMessage?.content, meta:{tokens:j.aiMessage?.metadata?.tokensUsed, escalated:j.escalated}}])
+          setMsg("")
+          setLoading(false)
+          return
+        }
+      }
+    }catch(e){}
+    // fallback mock com diversão
+    await new Promise(r=>setTimeout(r,500))
+    const tom = diversao>60 ? "😄 super descontraída e divertida" : diversao>30 ? "acolhedora e leve" : "profissional e objetiva"
+    const extra = infoExtra ? `\n[Info extra considerada: ${infoExtra}]` : ""
+    setHistorico(h=> [...h, { role:"ia", content:`[Mock IA ${agent.name} - ${tom}] Olá! Entendi: "${msg}". Posso te ajudar com visita?${extra}`, meta:{tokens:42}}])
+    setMsg("")
     setLoading(false)
   }
+
+  const reset = ()=>{ setHistorico([]); setConvId(null); setValidado(null) }
+
   return (
     <div className="grid gap-6">
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600"><FlaskConical className="size-5" /></div>
-        <div><h3 className="font-display text-base font-bold">Teste Rápido</h3><p className="text-xs text-muted-foreground">Simule uma mensagem do lead e veja a resposta com RAG</p></div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600"><FlaskConical className="size-5" /></div>
+          <div><h3 className="font-display text-base font-bold">Teste de Fluxo Completo</h3><p className="text-xs text-muted-foreground">Simule toda a conversa, ajuste e valide antes de ir para WhatsApp</p></div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={reset}><RotateCcw className="size-3" /> Resetar</Button>
+          {historico.length>0 && (
+            <>
+              <Button variant="outline" size="sm" onClick={()=>setValidado("aprovado")} className="border-emerald-500/20 text-emerald-600"><CheckCircle className="size-3" /> Validar ✓</Button>
+              <Button variant="outline" size="sm" onClick={()=>setValidado("reprovado")} className="border-red-500/20 text-red-600"><XCircle className="size-3" /> Reprovar</Button>
+            </>
+          )}
+        </div>
       </div>
-      <Card>
-        <CardHeader><CardTitle className="text-sm">Entrada</CardTitle></CardHeader>
-        <CardContent className="grid gap-3">
-          <div className="grid gap-1.5"><Label>Mensagem do lead</Label><Textarea rows={2} value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Ex: Olá, ainda tem aquele apê?" /></div>
-          <Button onClick={testar} disabled={loading} className="gap-2"><Send className="size-4" /> {loading?"Gerando com IA...":"Testar Resposta"}</Button>
-        </CardContent>
-      </Card>
-      {resp && (
-        <Card className="border-cyan-500/20 bg-cyan-500/5">
-          <CardContent className="pt-4">
-            <p className="text-sm whitespace-pre-wrap">{resp}</p>
-            {meta && <div className="mt-2 flex gap-2"><Badge variant="outline">tokens: {meta.tokens??0}</Badge>{meta.escalated && <Badge className="bg-red-500 text-white">escalado</Badge>}</div>}
+
+      {validado && <div className={`rounded-lg border p-3 text-sm ${validado==="aprovado"?"border-emerald-500/20 bg-emerald-500/10 text-emerald-700":"border-red-500/20 bg-red-500/10 text-red-700"}`}>{validado==="aprovado"?"✅ Fluxo validado! Pode promover para instância de teste.":"❌ Fluxo reprovado. Ajuste prompts/voz/base e teste novamente."}</div>}
+
+      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+        <div className="grid gap-4">
+          <Card><CardHeader><CardTitle className="flex items-center gap-2 text-sm"><Smile className="size-4" /> Tom & Diversão</CardTitle></CardHeader>
+            <CardContent className="grid gap-3">
+              <Label>Nível divertido: {diversao}%</Label><input type="range" min={0} max={100} value={diversao} onChange={e=>setDiversao(parseInt(e.target.value))} className="w-full" />
+              <div className="flex justify-between text-xs text-muted-foreground"><span>Sério/profissional</span><span>Divertido</span></div>
+              <div className="rounded-lg bg-muted p-2 text-xs">Atual: {diversao>60?"Muito divertida, com emojis": diversao>30?"Equilibrada":"Séria e objetiva"} — reflete em `brandVoice` e `temperature`</div>
+              <Button variant="outline" size="sm" onClick={()=> update(id,{brandVoice: diversao>60 ? "Divertida, leve, com emojis" : diversao>30 ? "Acolhedora, leve" : "Profissional, objetiva" } as any)}>Aplicar ao Brand Voice</Button>
+            </CardContent>
+          </Card>
+
+          <Card><CardHeader><CardTitle className="text-sm">Ajuste Rápido</CardTitle></CardHeader>
+            <CardContent className="grid gap-2">
+              <Label>Adicionar info temporária (para teste)</Label><Input value={infoExtra} onChange={e=>setInfoExtra(e.target.value)} placeholder="Ex: Falar que condomínio é R$ 350" />
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={()=>{
+                  if(!infoExtra) return
+                  const cur = agent.additionalInstructions || ""
+                  update(id, { additionalInstructions: cur + "\n" + infoExtra })
+                  setInfoExtra("")
+                }}><Plus className="size-3" /> Injetar no agente</Button>
+                <Button variant="outline" size="sm" onClick={()=>{ update(id,{additionalInstructions:""}); setInfoExtra("")}}><Trash2 className="size-3" /> Limpar</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Use para testar variações sem salvar definitivo. Depois aplique no `Prompts & Voz`.</p>
+            </CardContent>
+          </Card>
+
+          <Card><CardHeader><CardTitle className="text-sm">Contextos de Teste</CardTitle></CardHeader>
+            <CardContent className="grid gap-1.5">
+              {[
+                "Olá, qual o valor?",
+                "Ainda tem o apê da Vila Mariana?",
+                "Quero falar com humano",
+                "Não tenho interesse",
+                "Me manda mais fotos",
+                "Qual o valor do condomínio?"
+              ].map(ex=>(
+                <button key={ex} onClick={()=>setMsg(ex)} className="rounded-lg border border-border bg-card px-2 py-1.5 text-left text-xs hover:bg-muted">{ex}</button>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="flex flex-col">
+          <CardHeader><CardTitle className="text-sm">Conversa Simulada — Fluxo Completo</CardTitle><p className="text-xs text-muted-foreground">Envie como lead, veja a IA responder, valide o fluxo inteiro antes do WhatsApp</p></CardHeader>
+          <CardContent className="flex flex-1 flex-col gap-3">
+            <div className="flex max-h-[420px] flex-1 flex-col gap-2 overflow-y-auto rounded-lg border border-border bg-muted/20 p-3">
+              {historico.length===0 ? <p className="py-10 text-center text-sm text-muted-foreground">Nenhuma mensagem ainda. Envie a primeira como lead.</p> :
+                historico.map((t,i)=>(
+                  <div key={i} className={`flex ${t.role==="lead"?"justify-start":"justify-end"}`}>
+                    <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${t.role==="lead"?"bg-slate-800 text-white rounded-bl-sm":"bg-cyan-500 text-slate-950 rounded-br-sm"}`}>
+                      <p className="whitespace-pre-wrap">{t.content}</p>
+                      {t.meta && <p className="mt-1 text-[10px] opacity-70">tokens: {t.meta.tokens ?? 0} {t.meta.escalated && "· escalado"}</p>}
+                    </div>
+                  </div>
+                ))}
+              {loading && <p className="text-center text-xs text-muted-foreground">IA digitando...</p>}
+            </div>
+            <div className="flex gap-2">
+              <Input value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Escreva como lead..." onKeyDown={e=> e.key==="Enter" && enviar()} />
+              <Button onClick={enviar} disabled={loading || !msg.trim()} className="gap-2"><Send className="size-4" /> Enviar</Button>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={reset}>Limpar conversa</Button>
+              <span className="ml-auto text-xs text-muted-foreground">{historico.length} turnos · {historico.filter(h=>h.role==="ia").length} respostas IA</span>
+            </div>
           </CardContent>
         </Card>
-      )}
+      </div>
     </div>
   )
 }
