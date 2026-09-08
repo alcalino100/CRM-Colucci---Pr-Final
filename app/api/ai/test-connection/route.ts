@@ -21,14 +21,13 @@ export async function POST(req: NextRequest){
   if(!token) return NextResponse.json({ error:`Nenhum token para ${provider}. Preencha no Bot Settings ou configure ${provider==="gemini"?"GEMINI_API_KEY":provider==="claude"?"CLAUDE_API_KEY":"OPENAI_API_KEY"} no servidor` }, {status:400})
   try{
     if(provider==="gemini"){
-      // Auditoria: lista modelos permitidos para esta key
       let available: string[] = []
       try{
         const lr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${token}`)
         const lj:any = await lr.json()
         if(lr.ok && Array.isArray(lj.models)) available = lj.models.filter((m:any)=> (m.supportedGenerationMethods||[]).includes("generateContent")).map((m:any)=> m.name.replace("models/",""))
       }catch{}
-      const preferred = [model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro", "gemini-flash-latest"]
+      const preferred = [model, "gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro"]
       const tryModels = Array.from(new Set([...preferred.filter(m=> available.length===0 || available.includes(m)), ...available])).slice(0,6)
       let lastErr=""
       for(const m of tryModels){

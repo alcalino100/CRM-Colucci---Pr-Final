@@ -14,6 +14,7 @@ export function BotSettings({ id }: { id: string }){
   const [saving, setSaving] = useState<string|null>(null)
   const [showToken, setShowToken] = useState(false)
   const [testResult, setTestResult] = useState<null|{ok:boolean; msg:string}>(null)
+  const hasUnsavedToken = (local as any)?.apiToken !== (agent as any)?.apiToken
 
   useEffect(()=>{ setLocal(agent) }, [agent?.id])
 
@@ -105,15 +106,16 @@ export function BotSettings({ id }: { id: string }){
             (local as any).modelName?.includes("gemini") ? "gemini" : (local as any).modelName?.includes("claude") ? "claude" : "openai"
           } onChange={e=>{
             const prov = e.target.value
-            if(prov==="gemini") setLocal({...local, modelName:"gemini-1.5-flash", apiEndpoint:"https://generativelanguage.googleapis.com"} as any)
+            if(prov==="gemini") setLocal({...local, modelName:"gemini-2.5-flash", apiEndpoint:"https://generativelanguage.googleapis.com"} as any)
             else if(prov==="claude") setLocal({...local, modelName:"claude-3-5-sonnet", apiEndpoint:"https://api.anthropic.com"} as any)
             else setLocal({...local, modelName:"gpt-4o-mini", apiEndpoint:"https://api.openai.com/v1"} as any)
           }}><option value="openai">OpenAI</option><option value="gemini">Gemini (sua atual)</option><option value="claude">Claude (Anthropic)</option></Select></div>
-          <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gemini-1.5-flash"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}>
+          <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gemini-2.5-flash"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}>
             {((local as any).modelName||"").includes("gemini") ? <>
-              <option value="gemini-1.5-flash">gemini-1.5-flash (estável - use este)</option>
+              <option value="gemini-2.5-flash">gemini-2.5-flash (recomendado - sua key)</option>
+              <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+              <option value="gemini-1.5-flash">gemini-1.5-flash (fallback)</option>
               <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-              <option value="gemini-2.0-flash">gemini-2.0-flash (exp)</option>
             </> : (local as any).modelName?.includes("claude") ? <>
               <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
               <option value="claude-3-haiku">claude-3-haiku</option>
@@ -123,11 +125,11 @@ export function BotSettings({ id }: { id: string }){
               <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
             </>}
           </Select>
-            <p className="text-xs text-muted-foreground">Use `gemini-1.5-flash` para Gemini. O `8b` foi removido pois não existe no v1beta.</p>
+            <p className="text-xs text-muted-foreground">Sua key tem alta demanda em 1.5 - use `2.5-flash` que está disponível.</p>
           </div>
           <div className="grid gap-1.5"><Label>API Endpoint (auto)</Label><Input value={(local as any).apiEndpoint || ""} onChange={e=>setLocal({...local, apiEndpoint:e.target.value} as any)} placeholder="auto preenchido ao trocar provedor" /></div>
           <div className="grid gap-1.5">
-            <Label>API Token / Chave *</Label>
+            <Label className="flex items-center gap-2">API Token / Chave * { (agent as any)?.apiToken ? <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700">● Salvo</span> : <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700">○ Não salvo</span>} {hasUnsavedToken && <span className="text-xs text-amber-600">· alterações não salvas</span>}</Label>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Input type={showToken ? "text" : "password"} value={(local as any).apiToken || ""} onChange={e=>setLocal({...local, apiToken:e.target.value} as any)} placeholder="sk-... ou GEMINI_API_KEY" className="pr-10" />
@@ -137,7 +139,7 @@ export function BotSettings({ id }: { id: string }){
               </div>
               <Button variant="outline" onClick={testarConexao}>Testar Conexão</Button>
             </div>
-            <p className="text-xs text-muted-foreground">Criptografado com AES-256 antes de salvar. Deixe vazio para usar GEMINI_API_KEY do servidor.</p>
+            <p className="text-xs text-muted-foreground">Criptografado com AES-256 antes de salvar. Deixe vazio para usar GEMINI_API_KEY do servidor. { (agent as any)?.apiToken ? `Salvo como: ${(agent as any).apiToken.slice(0,8)}...${(agent as any).apiToken.slice(-4)}` : "Nenhum token salvo ainda."}</p>
             {testResult && <div className={`flex items-center gap-2 rounded-lg border p-2 text-xs ${testResult.ok?"border-emerald-500/20 bg-emerald-500/10 text-emerald-700":"border-red-500/20 bg-red-500/10 text-red-700"}`}>{testResult.ok ? <CheckCircle className="size-4" /> : <AlertCircle className="size-4" />} {testResult.msg}</div>}
           </div>
           <div className="flex justify-end gap-2">

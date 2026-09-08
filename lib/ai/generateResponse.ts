@@ -50,9 +50,8 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
   const model = (ai as any).model_name || (provider==="gemini" ? "gemini-1.5-flash" : provider==="claude" ? "claude-3-5-sonnet" : "gpt-4o-mini")
   const endpoint = (ai as any).api_endpoint || ""
 
-  // Gemini - auditoria: lista modelos disponíveis para a key e tenta em ordem
+  // Gemini - auditoria: lista modelos disponíveis para a key e tenta em ordem (com fallback para alta demanda)
   if(provider==="gemini"){
-    // Descobre modelos permitidos para esta key (free tier pode ter 1.5 com limite 0)
     let available: string[] = []
     try{
       const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
@@ -62,8 +61,7 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
         available = lj.models.filter((m:any)=> (m.supportedGenerationMethods||[]).includes("generateContent")).map((m:any)=> m.name.replace("models/",""))
       }
     }catch{}
-    const preferred = [model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro", "gemini-flash-latest", "gemini-pro-latest"]
-    // prioriza os que estão na lista retornada pela API
+    const preferred = [model, "gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro"]
     const tryModels = Array.from(new Set([...preferred.filter(m=> available.length===0 || available.includes(m)), ...available])).slice(0,6)
     let lastErr:any = null
     for(const m of tryModels){
