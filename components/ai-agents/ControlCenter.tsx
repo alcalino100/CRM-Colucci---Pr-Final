@@ -22,6 +22,7 @@ type Dash = {
   conversas: Conversa[]
 }
 type Instancia = { instance_name: string; corretorNome: string; status: string }
+type Contexto = { origens: string[]; statuses: string[]; tags: string[] }
 
 const DEFAULTS: AgentRules = {
   enable: true,
@@ -41,12 +42,21 @@ export function ControlCenter({ id }: { id: string }) {
   const [dash, setDash] = useState<Dash | null>(null)
   const [loading, setLoading] = useState(true)
   const [instancias, setInstancias] = useState<Instancia[]>([])
+  const [contexto, setContexto] = useState<Contexto | null>(null)
   const [rules, setRules] = useState<AgentRules>(DEFAULTS)
   const [saving, setSaving] = useState(false)
   const [dias, setDias] = useState(7)
 
   useEffect(() => { carregar(dias) }, [id])
-  useEffect(() => { carregarInstancias() }, [])
+  useEffect(() => { carregarInstancias(); carregarContexto() }, [])
+
+  async function carregarContexto() {
+    try {
+      const r = await fetch("/api/ai/contexto")
+      const j = await r.json()
+      if (j.ok && j.contexto) setContexto(j.contexto)
+    } catch {}
+  }
 
   async function carregar(days: number) {
     setLoading(true)
@@ -227,6 +237,9 @@ export function ControlCenter({ id }: { id: string }) {
               <div className="grid gap-1.5">
                 <Label>Origens permitidas (deixe vazio = todas)</Label>
                 <Input value={rules.target.origensPermitidas.join(", ")} placeholder="Tráfego Pago, Orgânico…" onChange={e=>setRules({...rules, target:{...rules.target, origensPermitidas: e.target.value.split(",").map(s=>s.trim()).filter(Boolean)}})} />
+                {contexto && contexto.origens.length>0 && <div className="flex flex-wrap gap-1 pt-1">{contexto.origens.map(o=>(
+                  <button key={o} onClick={()=>setRules({...rules, target:{...rules.target, origensPermitidas: toggleVal(rules.target.origensPermitidas, o)}})} title="Origem real do CRM" className={cn("rounded-full border px-2 py-0.5 text-[11px]", rules.target.origensPermitidas.some(x=>x.toLowerCase()===o.toLowerCase()) ? "border-cyan-500 bg-cyan-500/10 text-cyan-700" : "border-border text-muted-foreground")}>{o}</button>
+                ))}</div>}
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="grid gap-1.5">
@@ -252,6 +265,10 @@ export function ControlCenter({ id }: { id: string }) {
               <div className="grid gap-1.5">
                 <Label>Status de lead que a IA NUNCA responde</Label>
                 <Input value={rules.target.statusBloqueados.join(", ")} placeholder="perdido, escalated" onChange={e=>setRules({...rules, target:{...rules.target, statusBloqueados: e.target.value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean)}})} />
+                {contexto && contexto.statuses.length>0 && <div className="flex flex-wrap gap-1 pt-1">{contexto.statuses.map(s=>{
+                  const ativo = rules.target.statusBloqueados.includes(s.toLowerCase())
+                  return <button key={s} onClick={()=>setRules({...rules, target:{...rules.target, statusBloqueados: toggleVal(rules.target.statusBloqueados, s.toLowerCase())}})} title="Status real do CRM" className={cn("rounded-full border px-2 py-0.5 text-[11px]", ativo ? "border-red-400 bg-red-50 text-red-600" : "border-border text-muted-foreground")}>{s}{ativo ? " (bloqueado)" : ""}</button>
+                })}</div>}
               </div>
             </CardContent>
           </Card>

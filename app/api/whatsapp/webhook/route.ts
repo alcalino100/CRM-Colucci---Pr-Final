@@ -4,7 +4,7 @@ import { baixarEArmazenarMidia, detectarMidia, mapConnectionState, notifyDisconn
 import { registrarRespostaDeLead, registrarStatusEntrega } from "@/lib/automation-services"
 import { enviarLeadCapi } from "@/lib/meta/capi"
 import { TELEFONES_BLOQUEADOS, isTelefoneBloqueado as isBlockedCentral } from "@/lib/telefones-bloqueados"
-import { handlePatriciaInbound } from "@/lib/ai/inboxHandler"
+import { handlePatriciaInbound, pausarIaMensagemManual } from "@/lib/ai/inboxHandler"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -203,6 +203,9 @@ async function handleMessageUpsert(payload: any) {
       ...camposMidia(midia),
     })
     await preencherMidiaUrl(instanceName, mensagemId, midia)
+    // Atendimento manual: pausa a conversa IA deste contato (ai_responding=false) e
+    // move o lead para em_atendimento — o corretor assumiu o papo.
+    void pausarIaMensagemManual({ telefone, instanceName }).catch(() => {})
     return
   }
 
