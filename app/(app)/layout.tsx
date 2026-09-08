@@ -13,6 +13,7 @@ import { LeadsProvider, useLeads } from "@/lib/leads-store"
 import { LocacaoProvider } from "@/lib/locacao-store"
 import { AutomationProvider } from "@/lib/automation-store"
 import { PresenceProvider } from "@/lib/presence"
+import { EmergencyPauseButton } from "@/components/automation/EmergencyPauseButton"
 import { ColucciLogo } from "@/components/colucci-logo"
 import { NotificationBell } from "@/components/notification-bell"
 import { DailySummary } from "@/components/daily-summary"
@@ -221,6 +222,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         )}
       </nav>
       <div className="border-t border-sidebar-border px-3 py-4">
+        {isAdminRole(user.role) && (
+          <div className="mb-3">
+            <EmergencyPauseButton compact />
+          </div>
+        )}
         <span className="px-3 text-xs uppercase tracking-wide text-sidebar-foreground/70">
           {nivel === "master" ? "Gestor Master" : nivel === "gestor" ? "Gestor" : "Corretor"}
         </span>

@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth-context"
 import { AUTOMATION_STATUS_LABEL, AUTOMATION_STATUS_VARIANT, AUTOMATION_JOB_STATUS_LABEL, AUTOMATION_JOB_STATUS_VARIANT, type AutomationJob } from "@/lib/automation-types"
 import { fmtDateTime } from "@/lib/labels"
 import { cn } from "@/lib/utils"
+import { EmergencyPauseButton } from "@/components/automation/EmergencyPauseButton"
 
 export default function AutomacoesPage() {
   const { user } = useAuth()
@@ -134,6 +135,7 @@ export default function AutomacoesPage() {
           <p className="text-sm text-muted-foreground">Dashboard de automações e métricas de envio</p>
         </div>
         <div className="flex gap-2">
+          <EmergencyPauseButton />
           <button onClick={runWorker} disabled={workerRunning}
             className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50">
             <Play className="size-4" /> {workerRunning ? "Executando..." : "Executar Worker"}
