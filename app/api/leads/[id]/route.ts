@@ -22,7 +22,13 @@ export async function PATCH(
 
   const patch: Record<string, unknown> = {}
   if (body.status !== undefined) patch.status = body.status
-  if (body.tags !== undefined) patch.referencias = body.tags
+  if (body.tags !== undefined) {
+    const arr = Array.isArray(body.tags) ? body.tags.filter(Boolean) : []
+    patch.referencias = arr.map((t: any, i: number) => {
+      if (typeof t === "object" && t !== null && typeof t.ref === "string") return t
+      return { ref: String(t), principal: i === 0 }
+    })
+  }
   if (body.observacoes !== undefined) patch.observacoes = body.observacoes
 
   const { error } = await wsupabase.from("leads").update(patch).eq("id", id)

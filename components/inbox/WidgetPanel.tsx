@@ -1,7 +1,8 @@
 "use client"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useInboxStore } from "@/lib/inbox-store"
 import { useToast } from "@/components/ui/primitives"
+import { normalizePhone } from "@/lib/labels"
 
 const TAG_SUGERIDAS = ["teste-ia", "novo lead", "em atendimento", "follow-up"]
 
@@ -9,9 +10,21 @@ export function WidgetPanel(){
   const { conversas, selectedId, criarFollowUp, cancelarFollowUp } = useInboxStore()
   const toast = useToast()
   const [salvandoTags, setSalvandoTags] = useState(false)
+  const [tagInput, setTagInput] = useState("")
+  const [tagsExistentes, setTagsExistentes] = useState<string[]>(TAG_SUGERIDAS)
+  const [modalVincular, setModalVincular] = useState(false)
+  const [buscando, setBuscando] = useState(false)
+  const [acaoIniciando, setAcaoIniciando] = useState<string | null>(null)
   const conv = conversas.find(c=>c.id===selectedId) || null
+
+  useEffect(() => {
+    fetch("/api/ai/contexto")
+      .then(r => r.json())
+      .then(j => { if (j.ok) setTagsExistentes((prev) => Array.from(new Set([...TAG_SUGERIDAS, ...(j.contexto?.tags ?? [])])).sort()) })
+      .catch(() => {})
+  }, [])
+
   if(!conv){
-    // IA: mostra próximos da reativação quando nada selecionado
     const statusPeso: Record<string,number> = { aguardando_resposta:0, em_follow_up:1, respondido:2 }
     const prioritarios = [...conversas].sort((a,b)=>{
       const pa=(statusPeso[a.status]??9)*100000 + (a.unread? -10000:0)
@@ -21,7 +34,7 @@ export function WidgetPanel(){
     }).slice(0,3)
     return (
       <div className="hidden w-[240px] shrink-0 flex-col gap-3 lg:flex">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Selecione um lead</div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Selecione uma conversa</div>
         {prioritarios.length>0 && (
           <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
             <h4 className="mb-2 text-xs font-bold text-cyan-700 dark:text-cyan-300">🤖 IA — atender primeiro</h4>
@@ -41,6 +54,8 @@ export function WidgetPanel(){
   }
   const iaLigada = conv.iaRespondendo !== undefined ? conv.iaRespondendo : conv.followUpAtivo
   const tags = conv.tags || []
+  const leadId = (conv as any).leadId
+  const temLead = !!leadId
   const proxima = conv.proximaTentativaISO ? new Date(conv.proximaTentativaISO).toLocaleTimeString("pt-BR", {hour:"2-digit", minute:"2-digit"}) : "-"
 
   async function toggleIA(){
@@ -56,8 +71,7 @@ export function WidgetPanel(){
   }
 
   async function salvarTags(t: string[]){
-    const leadId = (conv as any).leadId
-    if(!leadId) { toast("Sem lead vinculado — tags salvas localmente","error"); return }
+    if(!leadId) { toast("Sem lead vinculado — associe a um lead para salvar tags","error"); return }
     setSalvandoTags(true)
     try{
       const r = await fetch(`/api/leads/${encodeURIComponent(leadId)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ tags: t })})
@@ -74,8 +88,52 @@ export function WidgetPanel(){
     salvarTags(next)
   }
 
+  async function addCustomTag(){
+    const t = tagInput.trim().toLowerCase()
+    if(!t || tags.includes(t)) { setTagInput(""); return }
+    salvarTags([...tags, t])
+    setTagsExistentes((prev) => Array.from(new Set([...prev, t])).sort())
+    setTagInput("")
+  }
+
+  async function vincularLead(criarNovo: boolean){
+    setBuscando(true)
+    try{
+      const phone = normalizePhone(conv.telefone).replace(/\D/g,"")
+      let lid = leadId
+      if(!lid){
+        // busca lead existente por telefone
+        const busca = await fetch(`/api/leads?search=${encodeURIComponent(phone)}`).then(r=>r.json())
+        const existente = busca?.leads?.find((l:any)=>String(l.telefone||"").replace(/\D/g,"")===phone)
+        if(existente){ lid = existente.id }
+        else if(criarNovo){
+          const criado = await fetch("/api/leads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ nome: conv.leadName, telefone: phone, origem: conv.origem === "Instagram" ? "Instagram" : conv.origem === "Site" ? "Site" : "WhatsApp", status:"novo", referencias: tags, observacoes: "Criado pelo inbox WhatsApp" })}).then(r=>r.json())
+          if(criado?.lead?.id) lid = criado.lead.id
+        }
+      }
+      if(!lid) throw new Error("Não foi possível encontrar/criar um lead")
+      toast("Conversa vinculada ao lead")
+      setModalVincular(false)
+    }catch(e:any){
+      toast(e.message || "Erro ao vincular lead","error")
+    }finally{ setBuscando(false) }
+  }
+
+  async function iniciarAcao(acao: "ia" | "automacao"){
+    setAcaoIniciando(acao)
+    try{
+      const r = await fetch(`/api/whatsapp/chat/ia-pause`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ telefone: conv.telefone, pausado: acao === "automacao" })})
+      const j = await r.json()
+      if(!j.ok) throw new Error(j.erro || "falha")
+      if(acao === "ia"){ criarFollowUp(conv.id); toast("Atendimento IA iniciado nesta conversa") }
+      else { cancelarFollowUp(conv.id); toast("Automação de follow-up iniciada (IA pausada)") }
+    }catch(e:any){
+      toast(e.message || "Erro ao iniciar","error")
+    }finally{ setAcaoIniciando(null) }
+  }
+
   return (
-    <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[240px]">
+    <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[260px]">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Lead Details</h3>
         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{conv.leadName}</p>
@@ -83,6 +141,9 @@ export function WidgetPanel(){
         <p className="text-xs text-slate-600 dark:text-slate-400">{conv.email}</p>
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Responsável: <span className="text-slate-700 dark:text-slate-200">{conv.responsavel}</span></p>
         <p className="text-xs text-slate-500 dark:text-slate-400">Origem: <span className="text-slate-700 dark:text-slate-200">{conv.origem}</span></p>
+        <button onClick={()=>setModalVincular(true)} className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+          {temLead ? "Vincular a outro lead" : "Vincular a lead / criar lead"}
+        </button>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-2 flex items-center gap-1.5 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>🤖 Atendimento IA</h3>
@@ -94,12 +155,20 @@ export function WidgetPanel(){
             {iaLigada ? "Pausar IA" : "Retomar IA"}
           </button>
         </div>
-        <p className="mt-1 text-[11px] text-slate-500">Com a IA ligada, o bot responde sozinho a esta conversa. Pausar não apaga histórico ({tags.includes("teste-ia") ? "teste ativo" : "Lead normal"}).</p>
+        <div className="mt-2 flex flex-col gap-1.5">
+          <button disabled={acaoIniciando!==null} onClick={()=>iniciarAcao("ia")} className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 disabled:opacity-50">
+            {acaoIniciando==="ia" ? "Iniciando…" : "▶ Iniciar IA aqui"}
+          </button>
+          <button disabled={acaoIniciando!==null} onClick={()=>iniciarAcao("automacao")} className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 disabled:opacity-50">
+            {acaoIniciando==="automacao" ? "Iniciando…" : "⟳ Iniciar automação"}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">Com IA ligada o bot responde sozinho. Automação mantém a IA pausada e roda follow-ups programados.</p>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Etiquetas / Tags</h3>
         <div className="flex flex-wrap gap-1.5">
-          {TAG_SUGERIDAS.map(t=>{
+          {tagsExistentes.map(t=>{
             const ativa = tags.includes(t)
             return (
               <button key={t} disabled={salvandoTags} onClick={()=>toggleTag(t)} className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-50 ${ativa ? "border-violet-500/40 bg-violet-500/15 text-violet-300" : "border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>
@@ -108,7 +177,11 @@ export function WidgetPanel(){
             )
           })}
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">{salvandoTags ? "salvando…" : "tags salvas no lead — aparecem no card do Inbox"}</p>
+        <div className="mt-2 flex gap-1.5">
+          <input value={tagInput} onChange={(e)=>setTagInput(e.target.value)} onKeyDown={(e)=>{ if(e.key==="Enter") addCustomTag() }} placeholder="nova tag…" className="h-7 flex-1 rounded border border-slate-700 bg-slate-800 px-2 text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500" disabled={salvandoTags} />
+          <button onClick={addCustomTag} disabled={salvandoTags || !tagInput.trim()} className="h-7 rounded bg-violet-600 px-2 text-[11px] font-semibold text-white disabled:opacity-50">+</button>
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">{salvandoTags ? "salvando…" : (temLead ? "tags salvas no lead" : "vincule um lead p/ salvar tags")}</p>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Follow-up Status</h3>
@@ -120,12 +193,24 @@ export function WidgetPanel(){
           </>
         ) : <p className="text-xs text-slate-400">Sem follow-up ativo</p>}
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Ações Rápidas</h3>
-        <div className="flex flex-col gap-2">
-          <button onClick={()=> toast("Transferência simulada", "error")} className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-400 hover:bg-cyan-500/20">Transferir para vendedora</button>
+
+      {modalVincular && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={()=>setModalVincular(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={(e)=>e.stopPropagation()}>
+            <h3 className="mb-1 font-display text-base font-bold text-slate-900 dark:text-slate-100">Vincular conversa a um lead</h3>
+            <p className="mb-4 text-xs text-slate-500">Conversa: {conv.leadName} · {conv.telefone}. O sistema busca automaticamente um lead pelo telefone; se não houver, você cria um novo.</p>
+            <div className="flex flex-col gap-2">
+              <button disabled={buscando} onClick={()=>vincularLead(false)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 disabled:opacity-50">
+                {buscando ? "Buscando…" : "Vincular a lead existente"}
+              </button>
+              <button disabled={buscando} onClick={()=>vincularLead(true)} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+                {buscando ? "Criando…" : "Criar novo lead"}
+              </button>
+              <button onClick={()=>setModalVincular(false)} className="rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">Cancelar</button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

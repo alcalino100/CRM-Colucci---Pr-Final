@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, Camera, Users, Megaphone, Store, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send, Archive, ArchiveRestore } from "lucide-react"
+import { AlertTriangle, Camera, Users, Megaphone, Store, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send, Archive, ArchiveRestore, Plus } from "lucide-react"
 import { Badge } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
 import { usePresenca } from "@/lib/presence"
@@ -54,8 +54,39 @@ export function LeadCard({
   const corretor = users.find((u) => u.id === lead.corretorId)
   const initials = userName(lead.corretorId).split(" ").map((n) => n[0]).slice(0, 2).join("")
   const [menu, setMenu] = useState(false)
+  const [showTagEditor, setShowTagEditor] = useState(false)
+  const [newTag, setNewTag] = useState("")
+  const [savingTag, setSavingTag] = useState(false)
   const stop = (e: React.SyntheticEvent) => e.stopPropagation()
   const gestorNome = lead.gestorResponsavel ? userName(lead.gestorResponsavel) : null
+
+  const currentTags = (lead.referencias?.length ? lead.referencias.map((r) => r.ref) : lead.imovelRef ? [lead.imovelRef] : [])
+
+  async function addTag() {
+    const tag = newTag.trim()
+    if (!tag || currentTags.includes(tag)) return
+    setSavingTag(true)
+    try {
+      const next = [...currentTags, tag]
+      const r = await fetch(`/api/leads/${encodeURIComponent(lead.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tags: next }) })
+      const j = await r.json()
+      if (!j.ok) throw new Error(j.erro || "falha")
+      // update local lead via store
+      const { updateLead } = useLeads.getState()
+      updateLead(lead.id, { referencias: next.map((t, i) => ({ ref: t, principal: i === 0 && !lead.referencias?.some(r => r.principal) })) })
+      setNewTag("")
+      setShowTagEditor(false)
+    } catch { /* silent */ } finally { setSavingTag(false) }
+  }
+
+  async function removeTag(tag: string) {
+    const next = currentTags.filter((t) => t !== tag)
+    try {
+      await fetch(`/api/leads/${encodeURIComponent(lead.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tags: next }) })
+      const { updateLead } = useLeads.getState()
+      updateLead(lead.id, { referencias: next.map((t, i) => ({ ref: t, principal: i === 0 && !lead.referencias?.some(r => r.principal) })) })
+    } catch { /* silent */ }
+  }
   return (
     <div className={cn(
       "group relative rounded-xl border bg-card p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
@@ -173,9 +204,33 @@ export function LeadCard({
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <Badge variant={TEMP_VARIANT[lead.temperatura]}>{TEMP_LABEL[lead.temperatura]}</Badge>
-        {(lead.referencias?.length ? lead.referencias.map((r) => r.ref) : lead.imovelRef ? [lead.imovelRef] : []).map((r) => (
-          <Badge key={r} variant="gray">{r}</Badge>
+        {currentTags.map((r) => (
+          <span key={r} className="group/tag inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            {r}
+            <button type="button" onClick={(e) => { stop(e); removeTag(r) }} className="hidden rounded-full p-0.5 text-destructive hover:bg-destructive/10 group-hover/tag:inline-flex">
+              <span className="sr-only">Remover</span>×
+            </button>
+          </span>
         ))}
+        {canManage && (
+          <button type="button" onClick={(e) => { stop(e); setShowTagEditor((s) => !s) }} className="inline-flex items-center justify-center rounded-full border border-dashed border-border p-0.5 text-muted-foreground hover:border-primary/50 hover:text-primary">
+            <Plus className="size-3" />
+          </button>
+        )}
+        {showTagEditor && (
+          <div className="flex w-full gap-1" onClick={stop}>
+            <input
+              autoFocus
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addTag(); if (e.key === "Escape") setShowTagEditor(false) }}
+              placeholder="Nova tag..."
+              className="h-6 flex-1 rounded border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+              disabled={savingTag}
+            />
+            <button type="button" onClick={addTag} disabled={savingTag || !newTag.trim()} className="h-6 rounded bg-primary px-2 text-[10px] font-medium text-primary-foreground disabled:opacity-50">OK</button>
+          </div>
+        )}
         <Badge variant={ORIGEM_VARIANT[lead.origem]} className="gap-1">
           <OrigemIcon className="size-3" />
           {lead.origem}

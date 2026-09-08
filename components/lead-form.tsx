@@ -33,7 +33,7 @@ const schema = z.object({
   email: z.string().email("E-mail inválido.").or(z.literal("")),
 })
 
-const REF_RE = /^[A-Za-z0-9-]{2,}$/
+const REF_RE = /^.{2,}$/
 
 export function LeadForm({
   initial,
