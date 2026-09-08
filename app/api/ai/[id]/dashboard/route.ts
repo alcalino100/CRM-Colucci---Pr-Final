@@ -73,7 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{id:st
         telefone,
         instancia: instEnv?.instance_name ?? null,
         lead: lead ? { id: lead.id, nome: lead.nome, status: lead.status, origem: lead.origem } : null,
-        tags: (lead as any)?.referencias ?? [],
+        tags: ((lead as any)?.referencias ?? []).map((r: any) => (typeof r === "string" ? r : r?.ref ?? String(r))).filter(Boolean),
         nome: lead?.nome || (c.channel === "web" ? "Visitante do site" : telefone),
         primeiraResposta: primeira ? `${primeira.diaSemana} ${primeira.hora}` : null,
         ultimaMensagem: ultima ? `${ultima.diaISO} ${ultima.hora}` : null,
@@ -106,8 +106,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{id:st
 
     const totalMsgs = linhas.reduce((a: number, r: any) => a + r.totalMensagensIa, 0)
 
-    // única consulta de leads para tags sugeridas (todas em uso)
-    const todasTags = Array.from(new Set(leadsRows.flatMap((l: any) => l.referencias || []))).sort()
+    // única consulta de leads para tags sugeridas (todas em uso) — sempre como string
+    const todasTags = Array.from(new Set(leadsRows.flatMap((l: any) => (l.referencias || []).map((r: any) => (typeof r === "string" ? r : r?.ref ?? String(r))).filter(Boolean)))).sort()
 
     return NextResponse.json({
       ok: true,
