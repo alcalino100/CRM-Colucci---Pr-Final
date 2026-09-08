@@ -17,20 +17,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{id:st
     if(body.waitTimeMs!==undefined) patch.wait_time_ms = body.waitTimeMs
     if(body.messageCap!==undefined) patch.message_cap = body.messageCap
     if(body.apiToken!==undefined) patch.api_token = body.apiToken
+    if(body.apiEndpoint!==undefined) patch.api_endpoint = body.apiEndpoint
+    if(body.modelName!==undefined) patch.model_name = body.modelName
     if(body.systemPrompt!==undefined) patch.system_prompt = body.systemPrompt
     if(body.additionalInstructions!==undefined) patch.additional_instructions = body.additionalInstructions
     if(body.brandVoice!==undefined) patch.brand_voice = body.brandVoice
     if(body.handoffRules!==undefined) patch.handoff_rules = body.handoffRules
     if(body.isActive!==undefined) patch.is_active = body.isActive
     patch.updated_at = new Date().toISOString()
-    // tenta update, se não existir faz upsert (mock ainda não está no banco)
     const { data: existing } = await db().from("ai_agents").select("id").eq("id", id).maybeSingle()
     let data, error
     if(existing){
       const r = await db().from("ai_agents").update(patch).eq("id", id).select("*").single()
       data = r.data; error = r.error
     } else {
-      const row = { id, name: body.name || "Novo Agente", bot_template: "vendas", channels: ["whatsapp"], response_mode: "auto", wait_time_ms: 2000, message_cap: 10, is_active: false, ...patch }
+      // usa dados do mock como base se for um dos agentes conhecidos
+      const mockDefaults: any = id==="ai_patricia_01" ? { name:"Patrícia - Reativação", description:"IA para reativação de base da Patrícia (Tráfego Pago)", bot_template:"vendas", channels:["whatsapp"], response_mode:"auto", wait_time_ms:2000, message_cap:10, is_active:true, system_prompt:"Você é a assistente da Patrícia da Colucci Imóveis, especialista em reativação de leads frios...", additional_instructions:"Sempre ofereça visita, nunca prometa desconto sem autorização.", brand_voice:"Profissional, acolhedora, objetiva" } : { name: body.name || "Novo Agente", bot_template: "vendas", channels: ["whatsapp"], response_mode: "auto", wait_time_ms: 2000, message_cap: 10, is_active: false }
+      const row = { id, ...mockDefaults, ...patch }
       const r = await db().from("ai_agents").insert(row).select("*").single()
       data = r.data; error = r.error
     }
