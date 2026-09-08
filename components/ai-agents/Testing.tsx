@@ -22,35 +22,37 @@ export function Testing({ id }: { id: string }){
 
   const enviar = async()=>{
     if(!msg.trim()) return
-    const novoLead: Turn = { role:"lead", content: msg }
+    const textoEnviado = msg
+    const novoLead: Turn = { role:"lead", content: textoEnviado }
     setHistorico(h=> [...h, novoLead])
+    setMsg("")
     setLoading(true)
     setValidado(null)
     try{
       let cId = convId
       if(!cId){
         const r = await fetch("/api/conversations", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ aiId: id, contactId: "test_"+Date.now(), channel:"web"}) })
-        if(r.ok){ const j=await r.json(); cId=j.id; setConvId(cId) }
+        if(!r.ok) throw new Error("falha ao criar conversa")
+        const j=await r.json(); cId=j.id; setConvId(cId)
       }
-      if(cId){
-        // injeta ajustes temporários via body (diversão e info extra)
-        const r = await fetch(`/api/conversations/${cId}/messages`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message: msg, aiId: id, diversao, infoExtra }) })
-        const j = await r.json()
-        if(r.ok){
-          setHistorico(h=> [...h, { role:"ia", content: j.aiMessage?.content || j.aiMessage?.content, meta:{tokens:j.aiMessage?.metadata?.tokensUsed, escalated:j.escalated}}])
-          setMsg("")
-          setLoading(false)
-          return
-        }
+      const r = await fetch(`/api/conversations/${cId}/messages`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message: textoEnviado, aiId: id }) })
+      const j = await r.json()
+      if(!r.ok) throw new Error(j.error || "IA falhou")
+      // usa modelo real retornado para fixação
+      setHistorico(h=> [...h, { role:"ia", content: j.aiMessage?.content, meta:{tokens:j.aiMessage?.metadata?.tokensUsed, model:j.aiMessage?.metadata?.model, escalated:j.escalated}}])
+    }catch(e:any){
+      // não faz fallback silencioso para mock quando já houve resposta real antes — mostra erro real
+      const isFirstTurn = historico.length===1 // só lead + falha = primeiro turno
+      if(isFirstTurn){
+        const tom = diversao>60 ? "😄 super descontraída e divertida" : diversao>30 ? "acolhedora e leve" : "profissional e objetiva"
+        const extra = infoExtra ? `\n[Info extra considerada: ${infoExtra}]` : ""
+        setHistorico(h=> [...h, { role:"ia", content:`[Mock IA ${agent.name} - ${tom}] Olá! Entendi: "${textoEnviado}". Posso te ajudar com visita?${extra} (erro real: ${e.message})`, meta:{tokens:42, model:"mock"}}])
+      } else {
+        setHistorico(h=> [...h, { role:"ia", content:`[Erro IA] ${e.message} — tente novamente ou troque o modelo em Bot Settings.`, meta:{tokens:0, model:"erro"}}])
       }
-    }catch(e){}
-    // fallback mock com diversão
-    await new Promise(r=>setTimeout(r,500))
-    const tom = diversao>60 ? "😄 super descontraída e divertida" : diversao>30 ? "acolhedora e leve" : "profissional e objetiva"
-    const extra = infoExtra ? `\n[Info extra considerada: ${infoExtra}]` : ""
-    setHistorico(h=> [...h, { role:"ia", content:`[Mock IA ${agent.name} - ${tom}] Olá! Entendi: "${msg}". Posso te ajudar com visita?${extra}`, meta:{tokens:42}}])
-    setMsg("")
-    setLoading(false)
+    }finally{
+      setLoading(false)
+    }
   }
 
   const reset = ()=>{ setHistorico([]); setConvId(null); setValidado(null) }
