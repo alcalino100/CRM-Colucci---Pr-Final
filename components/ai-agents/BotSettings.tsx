@@ -83,7 +83,17 @@ export function BotSettings({ id }: { id: string }){
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="grid gap-1.5"><Label className="flex items-center gap-1.5"><Clock className="size-3" /> Espera antes de responder (ms)</Label><Input type="number" value={local.waitTimeMs} onChange={e=>setLocal({...local, waitTimeMs: parseInt(e.target.value)||0})} /></div>
             <div className="grid gap-1.5"><Label>Limite de mensagens por conversa</Label><Input type="number" value={local.messageCap} onChange={e=>setLocal({...local, messageCap: parseInt(e.target.value)||0})} /></div>
-            <div className="grid gap-1.5"><Label>Instância WhatsApp para teste</Label><Select value={(local as any).testInstance || "patricia-6c2875b4"} onChange={e=>setLocal({...local, testInstance:e.target.value} as any)}><option value="patricia-6c2875b4">Patrícia (5518991976332)</option><option value="teste-separada">Instância de teste (separada)</option></Select></div>
+            <div className="grid gap-1.5"><Label>Instância WhatsApp vinculada *</Label><Select value={(local as any).testInstance || "patricia-6c2875b4"} onChange={e=>setLocal({...local, testInstance:e.target.value, apiEndpoint: e.target.value} as any)}>
+                <option value="patricia-6c2875b4">Patrícia — patricia-6c2875b4 (5518991976332)</option>
+                <option value="guilherme-garcia-c044c57d">Guilherme — guilherme-garcia-c044c57d</option>
+                <option value="brayon-22b51e92">Brayon — brayon-22b51e92</option>
+                <option value="gabriel-a8b53f96">Gabriel — gabriel-a8b53f96</option>
+                <option value="joao-5e48be89">João — joao-5e48be89</option>
+                <option value="aline-2f15d86a">Aline — aline-2f15d86a</option>
+                <option value="daline-fba44ec9">Daline — daline-fba44ec9</option>
+                <option value="abraao-d2c80ddf">Abraão — abraao-d2c80ddf</option>
+                <option value="levi-284b8246">Levi — levi-284b8246</option>
+              </Select><p className="text-xs text-muted-foreground">IA só responde nesta instância. Para testar com sua namorada (+5518981729340) selecione `Guilherme` e salve.</p></div>
           </div>
           <div className="flex flex-wrap gap-2">
             {(["whatsapp","instagram","site"] as const).map(ch=>(
