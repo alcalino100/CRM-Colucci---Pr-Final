@@ -6,14 +6,21 @@ import { ShieldCheck, Coins, Clock } from "lucide-react"
 
 export function ApiAudit({ id }: { id: string }){
   const [logs, setLogs] = useState<any[]>([])
+  const [total, setTotal] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [modoTotal, setModoTotal] = useState(true)
 
   useEffect(()=>{
-    fetch(`/api/ai/${id}/audit`).then(r=>r.json()).then(j=>{
-      if(Array.isArray(j)) setLogs(j)
+    const url = modoTotal ? `/api/ai/${id}/audit?total=1` : `/api/ai/${id}/audit`
+    fetch(url).then(r=>r.json()).then(j=>{
+      if(modoTotal && j.conversations){
+        setTotal(j)
+        const all = [...(j.messages||[]), ...(j.whatsapp||[])].sort((a:any,b:any)=> new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        setLogs(all)
+      } else if(Array.isArray(j)) setLogs(j)
       else if(Array.isArray(j.logs)) setLogs(j.logs)
     }).catch(()=>{}).finally(()=>setLoading(false))
-  },[id])
+  },[id, modoTotal])
 
   // Fallback: busca conversas e mensagens para estimar tokens se audit não existir
   useEffect(()=>{
@@ -44,10 +51,20 @@ export function ApiAudit({ id }: { id: string }){
 
   return (
     <div className="grid gap-6">
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900"><ShieldCheck className="size-5" /></div>
-        <div><h3 className="font-display text-base font-bold">Auditoria da API</h3><p className="text-xs text-muted-foreground">Veja o que a IA está fazendo, tokens gastos e custo estimado</p></div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900"><ShieldCheck className="size-5" /></div>
+          <div><h3 className="font-display text-base font-bold">Auditoria da API</h3><p className="text-xs text-muted-foreground">Veja o que a IA está fazendo, tokens gastos e custo estimado</p></div>
+        </div>
+        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={modoTotal} onChange={e=>setModoTotal(e.target.checked)} /> Auditoria total (WA + IA)</label>
       </div>
+      {modoTotal && total && (
+        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="rounded-lg border border-border bg-card p-2"><p className="text-lg font-bold">{total.conversations?.length||0}</p><p className="text-muted-foreground">Conversas IA</p></div>
+          <div className="rounded-lg border border-border bg-card p-2"><p className="text-lg font-bold">{total.whatsapp?.length||0}</p><p className="text-muted-foreground">Msgs WhatsApp</p></div>
+          <div className="rounded-lg border border-border bg-card p-2"><p className="text-lg font-bold">{logs.length}</p><p className="text-muted-foreground">Total logs</p></div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent className="pt-4 text-center"><p className="flex items-center justify-center gap-1 text-2xl font-bold"><Coins className="size-5" /> {totalTokens}</p><p className="text-xs text-muted-foreground">Tokens totais</p></CardContent></Card>
