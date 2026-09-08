@@ -39,7 +39,10 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
   if(brand) systemPrompt += `\n\nTom de voz: ${brand}`
 
   let apiKey: string | undefined
-  try{ apiKey = (ai as any).api_token ? decryptToken((ai as any).api_token) : undefined }catch{}
+  const rawToken = (ai as any).api_token
+  if(rawToken){
+    try{ apiKey = decryptToken(rawToken) }catch{ apiKey = rawToken }
+  }
   const provider = providerFromModel((ai as any).model_name)
   if(provider==="gemini") apiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
   else if(provider==="claude") apiKey = apiKey || process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY
