@@ -9,6 +9,7 @@ import { Goals } from "@/components/ai-agents/Goals"
 import { Escalation } from "@/components/ai-agents/Escalation"
 import { Testing } from "@/components/ai-agents/Testing"
 import { Analytics } from "@/components/ai-agents/Analytics"
+import { ApiAudit } from "@/components/ai-agents/ApiAudit"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 
@@ -16,10 +17,11 @@ const TABS = [
   { id:"bot", label:"Bot Settings" },
   { id:"kb", label:"Knowledge Base" },
   { id:"prompts", label:"Prompts & Voz" },
-  { id:"goals", label:"Goals" },
+  { id:"goals", label:"Metas (prompt)" },
   { id:"escalation", label:"Escalation" },
   { id:"testing", label:"Testing" },
   { id:"analytics", label:"Analytics" },
+  { id:"audit", label:"Auditoria API" },
 ] as const
 
 export default function AIAgentEditor({ params }: { params: Promise<{id:string}> }){
@@ -49,6 +51,7 @@ export default function AIAgentEditor({ params }: { params: Promise<{id:string}>
         {tab==="escalation" && <Escalation id={id} />}
         {tab==="testing" && <Testing id={id} />}
         {tab==="analytics" && <Analytics id={id} />}
+        {tab==="audit" && <ApiAudit id={id} />}
       </div>
     </div>
   )

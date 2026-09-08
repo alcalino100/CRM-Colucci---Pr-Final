@@ -1,41 +1,59 @@
 "use client"
+import { useEffect, useState } from "react"
 import { useAIAgentsStore } from "@/lib/ai-agents-store"
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, Select, Badge } from "@/components/ui/primitives"
+import { Card, CardContent, CardHeader, CardTitle, Label, Textarea } from "@/components/ui/primitives"
 import { Button } from "@/components/ui/button"
-import { Target, Plus, Trash2 } from "lucide-react"
+import { Target, Save } from "lucide-react"
+import { useToast } from "@/components/ui/primitives"
 
 export function Goals({ id }: { id: string }){
   const agent = useAIAgentsStore(s=> s.agents.find(a=>a.id===id))
-  const update = useAIAgentsStore(s=> s.updateAgent)
+  const updateLocal = useAIAgentsStore(s=> s.updateAgent)
+  const toast = useToast()
+  const [texto, setTexto] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  useEffect(()=>{
+    if(!agent) return
+    // Unifica goals existentes em um único prompt (separados por linha)
+    const unico = agent.goals.map(g=> `- ${g.name}: ${g.prompt}`).join("\n") || agent.goals[0]?.prompt || ""
+    setTexto(unico)
+  }, [agent?.id])
+
   if(!agent) return null
+
+  const salvar = async()=>{
+    setSaving(true)
+    const goals = texto.split("\n").filter(Boolean).map((line,i)=> ({
+      id: agent.goals[i]?.id || `g_${Date.now()}_${i}`,
+      name: line.split(":")[0]?.replace("-","").trim() || `Meta ${i+1}`,
+      type: "goal",
+      prompt: line
+    }))
+    try{
+      await fetch(`/api/ai/${id}/goals`, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ goals })})
+      updateLocal(id, { goals } as any)
+      toast("Metas salvas com sucesso")
+    }catch(e:any){ toast(e.message, "error") }
+    setSaving(false)
+  }
+
   return (
     <div className="grid gap-6">
       <div className="flex items-center gap-3">
         <div className="flex size-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600"><Target className="size-5" /></div>
-        <div><h3 className="font-display text-base font-bold">Goals</h3><p className="text-xs text-muted-foreground">O que a IA deve conquistar em cada conversa (qualificação, agendamento...)</p></div>
+        <div><h3 className="font-display text-base font-bold">Metas da IA</h3><p className="text-xs text-muted-foreground">Descreva em um único prompt todas as metas que a IA deve perseguir (qualificação, agendamento, informação)</p></div>
       </div>
-      <div className="grid gap-3">
-        {agent.goals.length===0 && <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Nenhum goal. Ex: Agendar visita,Qualificar budget...</p>}
-        {agent.goals.map(g=>(
-          <Card key={g.id} className="border-blue-500/20">
-            <CardContent className="grid gap-3 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="grid flex-1 gap-1.5"><Label>Nome</Label><Input value={g.name} onChange={e=> update(id,{ goals: agent.goals.map(x=> x.id===g.id ? {...x, name:e.target.value}:x)})} /></div>
-                <Button variant="outline" size="sm" onClick={()=> update(id,{ goals: agent.goals.filter(x=>x.id!==g.id)})}><Trash2 className="size-3" /></Button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-1.5"><Label>Tipo</Label><Select value={g.type} onChange={e=> update(id,{ goals: agent.goals.map(x=> x.id===g.id ? {...x, type:e.target.value}:x)})}><option value="qualification">Qualificação</option><option value="booking">Agendamento</option><option value="information">Informação</option></Select></div>
-                <div className="flex items-end"><Badge variant={g.type==="booking"?"default":"outline"}>{g.type}</Badge></div>
-              </div>
-              <div className="grid gap-1.5"><Label>Prompt do goal</Label><Textarea rows={3} value={g.prompt} onChange={e=> update(id,{ goals: agent.goals.map(x=> x.id===g.id ? {...x, prompt:e.target.value}:x)})} placeholder="Ex: Pergunte disponibilidade para visita e confirme data/horário..." /></div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <Button onClick={()=>{
-        const nid=`g-${Date.now()}`
-        update(id, { goals:[...agent.goals, {id:nid, name:"Novo Goal", type:"booking", prompt:"Pergunte..."}]})
-      }}><Plus className="size-4" /> Novo Goal</Button>
+      <Card className="border-blue-500/20">
+        <CardHeader><CardTitle className="text-sm">Prompt de Metas (único)</CardTitle><p className="text-xs text-muted-foreground">Ex: "1. Qualificar budget - Perguntar renda e se tem entrada. 2. Agendar visita - Oferecer 2 horários. 3. Informar condomínio..."</p></CardHeader>
+        <CardContent className="grid gap-3">
+          <Textarea rows={10} value={texto} onChange={e=>setTexto(e.target.value)} placeholder="- Qualificar: Pergunte ..." className="font-mono text-sm" />
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">{texto.length} caracteres · {texto.split("\n").filter(Boolean).length} metas</span>
+            <Button onClick={salvar} disabled={saving} className="gap-2"><Save className="size-4" /> {saving?"Salvando...":"Salvar Metas"}</Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
