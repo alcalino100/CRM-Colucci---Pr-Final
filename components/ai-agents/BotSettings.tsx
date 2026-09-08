@@ -107,25 +107,26 @@ export function BotSettings({ id }: { id: string }){
           } onChange={e=>{
             const prov = e.target.value
             if(prov==="gemini") setLocal({...local, modelName:"gemini-2.5-flash", apiEndpoint:"https://generativelanguage.googleapis.com"} as any)
-            else if(prov==="claude") setLocal({...local, modelName:"claude-3-5-sonnet-20241022", apiEndpoint:"https://api.anthropic.com"} as any)
+            else if(prov==="claude") setLocal({...local, modelName:"claude-sonnet-5", apiEndpoint:"https://api.anthropic.com"} as any)
             else setLocal({...local, modelName:"gpt-4o-mini", apiEndpoint:"https://api.openai.com/v1"} as any)
           }}><option value="openai">OpenAI</option><option value="gemini">Gemini (sua atual)</option><option value="claude">Claude (Anthropic)</option></Select></div>
-          <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gemini-2.5-flash"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}>
+          <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gemini-1.5-flash"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}>
             {((local as any).modelName||"").includes("gemini") ? <>
-              <option value="gemini-2.5-flash">gemini-2.5-flash (recomendado - sua key)</option>
+              <option value="gemini-2.5-flash">gemini-2.5-flash (recomendado)</option>
               <option value="gemini-1.5-flash">gemini-1.5-flash</option>
               <option value="gemini-1.5-pro">gemini-1.5-pro</option>
             </> : (local as any).modelName?.includes("claude") ? <>
-              <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet (recomendado)</option>
-              <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
-              <option value="claude-3-haiku-20240307">claude-3-haiku (legado)</option>
+              <option value="claude-sonnet-5">claude-sonnet-5 (recomendado)</option>
+              <option value="claude-haiku-4-5">claude-haiku-4-5 (rápido)</option>
+              <option value="claude-opus-5">claude-opus-5</option>
+              <option value="claude-fable-5-1">claude-fable-5-1</option>
             </> : <>
               <option value="gpt-4o-mini">gpt-4o-mini</option>
               <option value="gpt-4o">gpt-4o</option>
               <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
             </>}
           </Select>
-            <p className="text-xs text-muted-foreground">Sua key tem alta demanda em 1.5 - use `2.5-flash` que está disponível.</p>
+            <p className="text-xs text-muted-foreground">Modelos atuais: Gemini 2.5 / Claude Sonnet 5 - use os recomendados.</p>
           </div>
           <div className="grid gap-1.5"><Label>API Endpoint (auto)</Label><Input value={(local as any).apiEndpoint || ""} onChange={e=>setLocal({...local, apiEndpoint:e.target.value} as any)} placeholder="auto preenchido ao trocar provedor" /></div>
           <div className="grid gap-1.5">

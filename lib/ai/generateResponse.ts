@@ -82,9 +82,9 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
     throw new Error(lastErr || "Gemini falhou - nenhum modelo disponível para esta key. Verifique em https://aistudio.google.com/app/apikey e billing.")
   }
 
-  // Claude - com fallback para modelo estável
+  // Claude - modelos atuais: sonnet-5, haiku-4-5, opus-5, fable-5-1
   if(provider==="claude"){
-    const tryModels = Array.from(new Set([model, "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-haiku-20240307"]))
+    const tryModels = Array.from(new Set([model, "claude-sonnet-5", "claude-haiku-4-5", "claude-opus-5", "claude-fable-5-1"]))
     let lastErr=""
     for(const m of tryModels){
       const url = "https://api.anthropic.com/v1/messages"
