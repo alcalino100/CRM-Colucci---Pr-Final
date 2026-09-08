@@ -123,7 +123,7 @@ export function InboxList() {
                   <span className="truncate text-xs text-slate-600 dark:text-slate-400">{c.ultimaMensagem}</span>
                   <span className="flex flex-wrap gap-1">
                     <span className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", badgeStyles[c.status])}>{badgeLabel[c.status]}</span>
-                    {(c.tags||[]).map(t=> <span key={t} className="w-fit rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">#{t.toLowerCase()}</span>)}
+{(c.tags||[]).map((t:any)=> { const nome = typeof t === "string" ? t : (t?.ref ?? ""); if(!nome) return null; return <span key={nome} className="w-fit rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">#{nome.toLowerCase()}</span> })}
                   </span>
                 </button>
               )
@@ -140,7 +140,7 @@ export function InboxList() {
             <span className="truncate text-xs text-slate-600 dark:text-slate-400">{c.ultimaMensagem}</span>
             <span className="flex flex-wrap gap-1">
               <span className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", badgeStyles[c.status])}>{badgeLabel[c.status]}</span>
-              {(c.tags||[]).map(t=> <span key={t} className="w-fit rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">#{t.toLowerCase()}</span>)}
+              {(c.tags||[]).map((t:any)=> { const nome = typeof t === "string" ? t : (t?.ref ?? ""); if(!nome) return null; return <span key={nome} className="w-fit rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">#{nome.toLowerCase()}</span> })}
             </span>
           </button>
         ))}
