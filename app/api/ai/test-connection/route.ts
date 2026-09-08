@@ -42,11 +42,17 @@ export async function POST(req: NextRequest){
       throw new Error(lastErr + (available.length ? ` | Disponíveis para esta key: ${available.slice(0,8).join(", ")}` : " | Nenhum modelo listado - verifique billing em https://aistudio.google.com/app/apikey"))
     }
     if(provider==="claude"){
-      const url = endpoint.includes("anthropic.com") ? `${endpoint.replace(/\/$/,"")}/v1/messages` : "https://api.anthropic.com/v1/messages"
-      const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json", "x-api-key": token, "anthropic-version":"2023-06-01"}, body: JSON.stringify({ model, max_tokens:10, messages:[{role:"user", content:"Diga ok"}] }) })
-      const j = await r.json()
-      if(!r.ok) throw new Error(j.error?.message || "Claude falhou")
-      return NextResponse.json({ ok:true, provider, model, response: j.content?.[0]?.text })
+      const tryModels = Array.from(new Set([model, "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-haiku-20240307"]))
+      let lastErr=""
+      for(const m of tryModels){
+        const r = await fetch("https://api.anthropic.com/v1/messages", { method:"POST", headers:{"Content-Type":"application/json", "x-api-key": token, "anthropic-version":"2023-06-01"}, body: JSON.stringify({ model:m, max_tokens:10, messages:[{role:"user", content:"Diga ok"}] }) })
+        const j = await r.json()
+        if(r.ok) return NextResponse.json({ ok:true, provider, model:m, response: j.content?.[0]?.text, note: m!==model ? `Modelo ${model} indisponível, usado ${m}` : undefined })
+        lastErr = j.error?.message || "Claude falhou"
+        const isModelErr = String(lastErr).toLowerCase().includes("not found") || String(lastErr).toLowerCase().includes("model")
+        if(!isModelErr) break
+      }
+      throw new Error(lastErr)
     }
     const client = new OpenAI({ apiKey: token, baseURL: endpoint.includes("openai.com") ? endpoint : undefined })
     const r = await client.chat.completions.create({ model, messages: [{ role:"user", content:"Diga 'ok' se você está funcionando." }], max_tokens: 5 })

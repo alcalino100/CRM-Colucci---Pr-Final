@@ -82,23 +82,32 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
     throw new Error(lastErr || "Gemini falhou - nenhum modelo disponível para esta key. Verifique em https://aistudio.google.com/app/apikey e billing.")
   }
 
-  // Claude
+  // Claude - com fallback para modelo estável
   if(provider==="claude"){
-    const url = endpoint.includes("anthropic.com") ? `${endpoint.replace(/\/$/,"")}/v1/messages` : "https://api.anthropic.com/v1/messages"
-    const r = await fetch(url, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json", "x-api-key": apiKey, "anthropic-version":"2023-06-01" },
-      body: JSON.stringify({
-        model,
-        max_tokens: 500,
-        system: systemPrompt,
-        messages: [...conversationHistory.map(m=> ({ role: m.role as "user"|"assistant", content: m.content })), { role:"user", content: userMessage }]
+    const tryModels = Array.from(new Set([model, "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-haiku-20240307"]))
+    let lastErr=""
+    for(const m of tryModels){
+      const url = "https://api.anthropic.com/v1/messages"
+      const r = await fetch(url, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json", "x-api-key": apiKey, "anthropic-version":"2023-06-01" },
+        body: JSON.stringify({
+          model: m,
+          max_tokens: 500,
+          system: systemPrompt,
+          messages: [...conversationHistory.map(mm=> ({ role: mm.role as "user"|"assistant", content: mm.content })), { role:"user", content: userMessage }]
+        })
       })
-    })
-    const j = await r.json()
-    if(!r.ok) throw new Error(j.error?.message || "Claude falhou")
-    const text = j.content?.[0]?.text || ""
-    return { message: text, tokensUsed: j.usage?.input_tokens + j.usage?.output_tokens || 0, model }
+      const j = await r.json()
+      if(r.ok){
+        const text = j.content?.[0]?.text || ""
+        return { message: text, tokensUsed: (j.usage?.input_tokens||0) + (j.usage?.output_tokens||0), model: m }
+      }
+      lastErr = j.error?.message || "Claude falhou"
+      const isModelErr = String(lastErr).toLowerCase().includes("not found") || String(lastErr).toLowerCase().includes("model")
+      if(!isModelErr) break
+    }
+    throw new Error(lastErr)
   }
 
   // OpenAI (default)

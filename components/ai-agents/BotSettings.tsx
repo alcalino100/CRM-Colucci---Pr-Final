@@ -107,18 +107,18 @@ export function BotSettings({ id }: { id: string }){
           } onChange={e=>{
             const prov = e.target.value
             if(prov==="gemini") setLocal({...local, modelName:"gemini-2.5-flash", apiEndpoint:"https://generativelanguage.googleapis.com"} as any)
-            else if(prov==="claude") setLocal({...local, modelName:"claude-3-5-sonnet", apiEndpoint:"https://api.anthropic.com"} as any)
+            else if(prov==="claude") setLocal({...local, modelName:"claude-3-5-sonnet-20241022", apiEndpoint:"https://api.anthropic.com"} as any)
             else setLocal({...local, modelName:"gpt-4o-mini", apiEndpoint:"https://api.openai.com/v1"} as any)
           }}><option value="openai">OpenAI</option><option value="gemini">Gemini (sua atual)</option><option value="claude">Claude (Anthropic)</option></Select></div>
           <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gemini-2.5-flash"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}>
             {((local as any).modelName||"").includes("gemini") ? <>
               <option value="gemini-2.5-flash">gemini-2.5-flash (recomendado - sua key)</option>
-              <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-              <option value="gemini-1.5-flash">gemini-1.5-flash (fallback)</option>
+              <option value="gemini-1.5-flash">gemini-1.5-flash</option>
               <option value="gemini-1.5-pro">gemini-1.5-pro</option>
             </> : (local as any).modelName?.includes("claude") ? <>
-              <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
-              <option value="claude-3-haiku">claude-3-haiku</option>
+              <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet (recomendado)</option>
+              <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
+              <option value="claude-3-haiku-20240307">claude-3-haiku (legado)</option>
             </> : <>
               <option value="gpt-4o-mini">gpt-4o-mini</option>
               <option value="gpt-4o">gpt-4o</option>
