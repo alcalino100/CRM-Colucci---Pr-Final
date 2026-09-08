@@ -3,11 +3,12 @@ import Link from "next/link"
 import { useAIAgentsStore } from "@/lib/ai-agents-store"
 import { Card, CardContent, CardHeader, CardTitle, Badge } from "@/components/ui/primitives"
 import { Button } from "@/components/ui/button"
-import { Bot, Plus } from "lucide-react"
+import { Bot, Plus, Pause, Play } from "lucide-react"
 
 export default function AIAgentsList(){
   const agents = useAIAgentsStore(s=>s.agents)
   const create = useAIAgentsStore(s=>s.createAgent)
+  const updateAgent = useAIAgentsStore(s=>s.updateAgent)
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
@@ -22,17 +23,29 @@ export default function AIAgentsList(){
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         {agents.map(a=>(
-          <Link key={a.id} href={`/ai-agents/${a.id}`}>
-            <Card className="hover:border-primary/30 transition">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base"><Bot className="size-4 text-cyan-500" /> {a.name} {a.isActive && <Badge className="bg-emerald-500 text-white">Ativo</Badge>}</CardTitle>
-                <p className="text-xs text-muted-foreground">{a.description}</p>
-              </CardHeader>
-              <CardContent className="text-xs text-muted-foreground">
-                <p>Template: {a.botTemplate} · Canais: {a.channels.join(", ")} · {a.goals.length} goals</p>
-              </CardContent>
-            </Card>
-          </Link>
+          <Card key={a.id} className="relative overflow-visible transition hover:border-primary/30">
+            <CardHeader className="pb-2 pr-24">
+              <CardTitle className="flex items-center gap-2 text-base"><Bot className="size-4 text-cyan-500" /> {a.name} {a.isActive && <Badge className="bg-emerald-500 text-white">Ativo</Badge>}</CardTitle>
+              <p className="text-xs text-muted-foreground">{a.description}</p>
+            </CardHeader>
+            <CardContent className="text-xs text-muted-foreground">
+              <p>Template: {a.botTemplate} · Canais: {a.channels.join(", ")} · {a.goals.length} goals</p>
+            </CardContent>
+            <div className="absolute right-3 top-3 flex gap-1.5">
+              <Button
+                size="sm"
+                variant={a.isActive ? "outline" : "default"}
+                className={a.isActive ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100" : "bg-emerald-600 text-white hover:bg-emerald-700"}
+                onClick={(e)=>{ e.stopPropagation(); updateAgent(a.id, { isActive: !a.isActive }) }}
+              >
+                {a.isActive ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+                {a.isActive ? "Pausar" : "Retomar"}
+              </Button>
+              <Link href={`/ai-agents/${a.id}`}>
+                <Button size="sm" variant="outline">Editar</Button>
+              </Link>
+            </div>
+          </Card>
         ))}
       </div>
     </div>

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { useAIAgentsStore } from "@/lib/ai-agents-store"
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, Select, Textarea } from "@/components/ui/primitives"
 import { Button } from "@/components/ui/button"
-import { Bot, Zap, MessageCircle, Clock, Save, Eye, EyeOff, CheckCircle, AlertCircle } from "lucide-react"
+import { Bot, Zap, MessageCircle, Clock, Save, Eye, EyeOff, CheckCircle, AlertCircle, Pause, Play } from "lucide-react"
 import { useToast } from "@/components/ui/primitives"
 
 export function BotSettings({ id }: { id: string }){
@@ -55,12 +55,29 @@ export function BotSettings({ id }: { id: string }){
 
   return (
     <div className="grid gap-6">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex size-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600"><Bot className="size-5" /></div>
-        <div>
+        <div className="min-w-0 flex-1">
           <h3 className="font-display text-base font-bold">Identidade do Agente</h3>
           <p className="text-xs text-muted-foreground">Defina quem é sua IA. Clique em Salvar em cada seção — nada é auto-salvo.</p>
         </div>
+        {local.isActive ? (
+          <button
+            onClick={async ()=>{ await save("status", { isActive: false }) }}
+            disabled={saving!=null}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+          >
+            <Pause className="size-4" /> {saving==="status" ? "Pausando..." : "Pausar IA"}
+          </button>
+        ) : (
+          <button
+            onClick={async ()=>{ await save("status", { isActive: true }) }}
+            disabled={saving!=null}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+          >
+            <Play className="size-4" /> {saving==="status" ? "Ativando..." : "Ativar IA"}
+          </button>
+        )}
       </div>
 
       <Card className="border-cyan-500/20">
