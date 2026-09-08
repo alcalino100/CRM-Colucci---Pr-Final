@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { normalizePhone } from "@/lib/labels"
+import { getRules } from "@/lib/ai/rules"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
 
@@ -111,6 +112,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{id:st
     return NextResponse.json({
       ok: true,
       agente: { id, name: (agente.data as any)?.name, is_active: !!((agente.data as any)?.is_active), config: (agente.data as any)?.config ?? {} },
+      regras: getRules((agente.data as any)?.config ?? {}),
       resumo: {
         conversas: linhas.length,
         mensagens: totalMsgs,

@@ -26,8 +26,9 @@ type Instancia = { instance_name: string; corretorNome: string; status: string }
 const DEFAULTS: AgentRules = {
   enable: true,
   schedule: { enabled: true, days: [1,2,3,4,5,6], start: "08:00", end: "19:00", timezone: "America/Sao_Paulo" },
-  target: { origensPermitidas: ["Tráfego Pago"], tags: [], tagsModo: "none", numeroTeste: ["5518981729340","18981729340"] },
-  style: { maxLines: 2, maxQuestions: 1, emojis: "poucos", tom: "acolhedor, claro e direto", proativarReativacao: true, saudacaoDefault: "" },
+  target: { origensPermitidas: ["Tráfego Pago"], tags: [], tagsModo: "none", numeroTeste: ["5518981729340","18981729340"], statusBloqueados: ["perdido","escalated"] },
+  style: { maxLines: 2, maxQuestions: 1, emojis: "poucos", tom: "acolhedor, claro e direto", proativarReativacao: true, saudacaoDefault: "", responseMode: "auto", waitMs: 0, maxMessages: 0 },
+  coordination: { paraleloComAutomacao: false, pausarPorInatividade: false, tempoInatividadeMin: 30 },
   channels: ["whatsapp"],
   whitelistInstances: [],
 }
@@ -45,7 +46,7 @@ export function ControlCenter({ id }: { id: string }) {
   const [dias, setDias] = useState(7)
 
   useEffect(() => { carregar(dias) }, [id])
-  useEffect(() => { if (dash) carregarInstancias() }, [])
+  useEffect(() => { carregarInstancias() }, [])
 
   async function carregar(days: number) {
     setLoading(true)
@@ -54,7 +55,7 @@ export function ControlCenter({ id }: { id: string }) {
       const j = await r.json()
       if (j.ok) {
         setDash(j)
-        if (j.agente?.config?.rules) setRules({ ...DEFAULTS, ...j.agente.config.rules, schedule: { ...DEFAULTS.schedule, ...(j.agente.config.rules.schedule||{}) }, target: { ...DEFAULTS.target, ...(j.agente.config.rules.target||{}) }, style: { ...DEFAULTS.style, ...(j.agente.config.rules.style||{}) } })
+        setRules(j.regras ? { ...DEFAULTS, ...j.regras } : DEFAULTS)
       }
     } catch {}
     setLoading(false)
@@ -248,6 +249,10 @@ export function ControlCenter({ id }: { id: string }) {
                 <Label>Números de teste (sempre respondem, mesmo sem lead)</Label>
                 <Input value={rules.target.numeroTeste.join(", ")} onChange={e=>setRules({...rules, target:{...rules.target, numeroTeste: e.target.value.split(",").map(s=>s.trim()).filter(Boolean)}})} />
               </div>
+              <div className="grid gap-1.5">
+                <Label>Status de lead que a IA NUNCA responde</Label>
+                <Input value={rules.target.statusBloqueados.join(", ")} placeholder="perdido, escalated" onChange={e=>setRules({...rules, target:{...rules.target, statusBloqueados: e.target.value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean)}})} />
+              </div>
             </CardContent>
           </Card>
 
@@ -266,6 +271,31 @@ export function ControlCenter({ id }: { id: string }) {
                 <div className="grid gap-1.5"><Label>Dias</Label><div className="flex flex-wrap gap-1">
                   {DAY_LABELS.map((d,i)=>(<button key={d} onClick={()=>setRules({...rules, schedule:{...rules.schedule, days: toggleVal(rules.schedule.days, i)}})} className={cn("h-7 rounded-md px-2 text-[11px]", rules.schedule.days.includes(i) ? "bg-cyan-500 text-white" : "bg-muted text-muted-foreground")}>{d.slice(0,3)}</button>))}
                 </div></div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* PARALELO E AUTOMAÇÃO */}
+          <Card>
+            <CardHeader className="flex items-center gap-2"><CardTitle className="flex items-center gap-2 text-sm"><ArrowUpRight className="size-4" /> PARALELO COM A AUTOMAÇÃO</CardTitle></CardHeader>
+            <CardContent className="grid gap-4">
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+                <div>
+                  <p className="text-sm font-semibold">IA trabalha em paralelo com a automação</p>
+                  <p className="text-xs text-muted-foreground">Desligado (recomendado): a automação de follow-up/reativação NÃO envia para leads com conversa IA ativa — evita mensagens duplicadas. Ligado: IA e automação agem independentes para o mesmo lead.</p>
+                </div>
+                <button onClick={()=>setRules({...rules, coordination:{...rules.coordination, paraleloComAutomacao: !rules.coordination.paraleloComAutomacao}})} className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition", rules.coordination.paraleloComAutomacao ? "bg-amber-500" : "bg-emerald-500")}><span className={cn("absolute size-4 rounded-full bg-white transition", rules.coordination.paraleloComAutomacao ? "left-6" : "left-1")} /></button>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+                <div>
+                  <p className="text-sm font-semibold">Pausar por inatividade</p>
+                  <p className="text-xs text-muted-foreground">Se o lead não responder em X minutos, a IA pausa a conversa e devolve o lead para a automação seguir.</p>
+                </div>
+                <button onClick={()=>setRules({...rules, coordination:{...rules.coordination, pausarPorInatividade: !rules.coordination.pausarPorInatividade}})} className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition", rules.coordination.pausarPorInatividade ? "bg-cyan-500" : "bg-slate-300")}><span className={cn("absolute size-4 rounded-full bg-white transition", rules.coordination.pausarPorInatividade ? "left-6" : "left-1")} /></button>
+              </div>
+              <div className="grid gap-1.5 max-w-48">
+                <Label>Tempo de inatividade (minutos)</Label>
+                <Input type="number" min={1} max={1440} value={rules.coordination.tempoInatividadeMin} onChange={e=>setRules({...rules, coordination:{...rules.coordination, tempoInatividadeMin: Number(e.target.value)||30}})} />
               </div>
             </CardContent>
           </Card>
@@ -300,6 +330,9 @@ export function ControlCenter({ id }: { id: string }) {
               <div className="grid gap-1.5"><Label>Emojis</Label><Select value={rules.style.emojis} onChange={e=>setRules({...rules, style:{...rules.style, emojis: e.target.value as any}})}><option value="none">Nenhum</option><option value="poucos">Poucos (máx. 1)</option><option value="normal">Com moderação</option></Select></div>
               <div className="grid gap-1.5"><Label>Máx. de linhas por resposta</Label><Input type="number" min={1} max={10} value={rules.style.maxLines} onChange={e=>setRules({...rules, style:{...rules.style, maxLines: Number(e.target.value)||2}})} /></div>
               <div className="grid gap-1.5"><Label>Perguntas por mensagem</Label><Select value={rules.style.maxQuestions} onChange={e=>setRules({...rules, style:{...rules.style, maxQuestions: Number(e.target.value)}})}><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></Select></div>
+              <div className="grid gap-1.5"><Label>Modo de resposta</Label><Select value={rules.style.responseMode} onChange={e=>setRules({...rules, style:{...rules.style, responseMode: e.target.value as any}})}><option value="auto">Automático (envia direto)</option><option value="sugestao">Sugestão (humano aprova)</option></Select></div>
+              <div className="grid gap-1.5"><Label>Espera antes de responder (ms)</Label><Input type="number" min={0} max={15000} step={500} value={rules.style.waitMs} onChange={e=>setRules({...rules, style:{...rules.style, waitMs: Number(e.target.value)||0}})} /></div>
+              <div className="grid gap-1.5"><Label>Máx. respostas da IA por conversa (0 = ilimitado)</Label><Input type="number" min={0} max={100} value={rules.style.maxMessages} onChange={e=>setRules({...rules, style:{...rules.style, maxMessages: Number(e.target.value)||0}})} /></div>
               <div className="grid gap-1.5 md:col-span-2">
                 <Label>Saudação padrão (1ª mensagem — <code>{"{nome_ia}"}</code> é substituído)</Label>
                 <Input value={rules.style.saudacaoDefault} onChange={e=>setRules({...rules, style:{...rules.style, saudacaoDefault: e.target.value}})} placeholder="Olá! Sou {nome_ia}, da Colucci Imóveis. Como posso ajudar?" />

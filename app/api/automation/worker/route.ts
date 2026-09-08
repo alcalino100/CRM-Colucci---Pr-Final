@@ -21,6 +21,7 @@ import {
 } from "@/lib/automation-services"
 import { wsupabase } from "@/lib/whatsapp/server"
 import type { AutomationJob, AutomationJobStatus } from "@/lib/automation-types"
+import { getRules } from "@/lib/ai/rules"
 
 // O worker faz várias consultas + envios; sem isto cairia no limite padrão de 10s do Hobby
 // e poderia ser morto no meio de um envio. 60s é o teto do Hobby.
@@ -30,12 +31,35 @@ export const maxDuration = 60
 
 const WORKER_ID = `worker-${Date.now()}`
 
+// ---- Coordenação IA x Automação ---------------------------------------------
+// Quando um agente IA está respondendo um lead (conversa IA ativa), o worker NÃO
+// cria follow-up/reativação para aquele lead — evita que automação e IA enviem para
+// o mesmo contato ao mesmo tempo. O semáforo pode ser desligado por agente via
+// regras.coordination.paraleloComAutomacao=true (default é coordenar).
+async function leadsComIAAtiva(): Promise<Set<string>> {
+  const { data } = await wsupabase
+    .from("conversations_ia")
+    .select("contact_id")
+    .eq("ai_responding", true)
+    .eq("status", "active")
+  return new Set((data || []).map((r: any) => r.contact_id))
+}
+
+// true = o worker deve respeitar o semáforo (pular leads com conversa IA ativa).
+// Desliga apenas se NENHUM agente ativo coordena com a automação.
+async function coordenarComIA(): Promise<boolean> {
+  const { data: agentes } = await wsupabase.from("ai_agents").select("is_active,config")
+  const ativos = (agentes || []).filter((a: any) => a.is_active)
+  if (!ativos.length) return false
+  return !ativos.every((a: any) => getRules(a.config).coordination.paraleloComAutomacao)
+}
+
 // Cria jobs de follow-up: pega os leads que receberam a mensagem da automação-mãe e não
 // responderam há mais de N horas, e agenda um novo envio (a fase de processamento cuida do
 // disparo). Garante no máximo 1 follow-up por lead e só para leads ainda elegíveis.
 // A automação de follow-up é identificada por trigger_type = "no_response_followup" e traz
 // em trigger_config: { parent_automation_id, no_response_hours }.
-async function criarJobsFollowup(automation: any, results: { created: number }): Promise<void> {
+async function criarJobsFollowup(automation: any, results: { created: number }, skipIA: Set<string> | null): Promise<void> {
   const cfg = automation.trigger_config ?? {}
   const parentId: string | undefined = cfg.parent_automation_id
   const horas: number = cfg.no_response_hours ?? 24
@@ -108,6 +132,12 @@ async function criarJobsFollowup(automation: any, results: { created: number }):
       continue
     }
 
+    // Semáforo IA x Automação: lead com conversa IA ativa é atendido pela IA, não pelo follow-up.
+    if (skipIA?.has(lead.id)) {
+      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead.nome}: conversa IA ativa — automação coordenada com a IA` })
+      continue
+    }
+
     const scheduledAt = calculateScheduledAt(automation.wait_config)
     const { error } = await wsupabase.from("automation_jobs").insert({
       automation_id: automation.id,
@@ -147,6 +177,7 @@ interface RejectionBreakdown {
   human_interaction_recent: number
   no_leads_found: number
   insert_error: number
+  ia_in_conversa: number
 }
 
 // Núcleo do worker — chamado pelo botão manual (POST) e pelo cron (GET autenticado).
@@ -169,12 +200,17 @@ async function runWorker() {
       human_interaction_recent: 0,
       no_leads_found: 0,
       insert_error: 0,
+      ia_in_conversa: 0,
     }
     const rejectionDetails: { lead_id: string; lead_nome: string; reason: string }[] = []
 
     // Follow-up tem gatilho próprio (jobs sem resposta), não o pool bruto de leads.
     const automacoesNormais = automations.filter((a) => a.trigger_type !== "no_response_followup")
     const automacoesFollowup = automations.filter((a) => a.trigger_type === "no_response_followup")
+
+    // Semáforo IA x Automação: se alguma IA ativa coordena com a automação, pula leads
+    // com conversa IA ativa (ai_responding=true) tanto na reativação quanto no follow-up.
+    const skipIA = (await coordenarComIA()) ? await leadsComIAAtiva() : null
 
     // FASE 1: Avaliar leads elegíveis e criar jobs
     for (const automation of automacoesNormais) {
@@ -214,6 +250,20 @@ async function runWorker() {
         if (await hasActiveJob(lead.id, automation.id)) {
           rejections.has_active_job++
           rejectionDetails.push({ lead_id: lead.id, lead_nome: lead.nome, reason: "Job ativo já existe" })
+          continue
+        }
+
+        // 1-b. Semáforo IA x Automação: lead com conversa IA ativa é atendido pela IA, não pela automação.
+        if (skipIA?.has(lead.id)) {
+          rejections.ia_in_conversa++
+          rejectionDetails.push({ lead_id: lead.id, lead_nome: lead.nome, reason: "Conversa IA ativa (coordenado)" })
+          await createLog({
+            automation_id: automation.id,
+            lead_id: lead.id,
+            event_type: "lead_not_eligible",
+            event_title: "Lead não elegível (IA ativa)",
+            event_description: `${lead.nome} possui conversa IA ativa — automação coordenada com a IA (desative em Regras → PARALELO para enviar também)`,
+          })
           continue
         }
 
@@ -334,7 +384,7 @@ async function runWorker() {
 
     // FASE 1-B: Criar jobs de follow-up (leads sem resposta da automação-mãe)
     for (const automation of automacoesFollowup) {
-      await criarJobsFollowup(automation, results)
+      await criarJobsFollowup(automation, results, skipIA)
     }
 
     await createLog({

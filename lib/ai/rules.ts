@@ -18,6 +18,7 @@ export type RulesTarget = {
   tags: string[]                       // ex.: ["teste-ia"] — vazio = qualquer tag
   tagsModo: "any" | "all" | "none"     // none = ignora tags (responde p/ qualquer tag da origem)
   numeroTeste: string[]
+  statusBloqueados: string[]           // status de lead que a IA NUNCA responde (ex.: perdido, escalated)
 }
 
 export type RulesStyle = {
@@ -27,6 +28,21 @@ export type RulesStyle = {
   tom: string                // adj. de tom (passa pro prompt)
   proativarReativacao: boolean  // se true, relembra imóvel/follow-up do lead
   saudacaoDefault: string    // ex.: "Olá! Sou {nome_ia}, da Colucci Imóveis. Como posso ajudar?"
+  responseMode: "auto" | "sugestao"  // auto envia; sugestao só registra sugestão p/ humano aprovar
+  waitMs: number             // espera antes de responder (0 = imediato; teto 15000)
+  maxMessages: number        // máx. msgs da IA por conversa (0 = ilimitado)
+}
+
+// Relação da IA com a automação de follow-ups (só WhatsApp).
+export type RulesCoordination = {
+  // Se true, IA e automação agem independentes (podem enviar para o mesmo lead).
+  // Se false (default), o worker de automação NÃO cria follow-up/reativação para
+  // leads com conversa IA ativa — evitando mensagens duplicadas/conflito.
+  paraleloComAutomacao: boolean
+  // Auto-pausa: se o lead não responder em X minutos, a IA pausa a conversa
+  // (ai_responding=false) e libera o lead de volta para a automação.
+  pausarPorInatividade: boolean
+  tempoInatividadeMin: number
 }
 
 export type AgentRules = {
@@ -34,6 +50,7 @@ export type AgentRules = {
   schedule: RulesSchedule
   target: RulesTarget
   style: RulesStyle
+  coordination: RulesCoordination
   channels: string[]            // onde responder (ex.: ["whatsapp"]); vazio = todos habilitados
   whitelistInstances: string[]  // instâncias vinculadas (espelha config.testInstance + extras)
 }
@@ -47,12 +64,13 @@ function parseCfg(cfg: unknown): Record<string, any> {
   return {}
 }
 
-export function getRules(config: unknown): AgentRules {
+export function getRules(config: unknown, fallback?: { wait_time_ms?: number | null; message_cap?: number | null; response_mode?: string | null }): AgentRules {
   const cfg = parseCfg(config)
   const r = cfg?.rules || {}
   const schedule = r?.schedule || {}
   const target = r?.target || {}
   const style = r?.style || {}
+  const coordination = r?.coordination || {}
   return {
     enable: r?.enable !== false,
     schedule: {
@@ -67,6 +85,7 @@ export function getRules(config: unknown): AgentRules {
       tags: Array.isArray(target?.tags) ? target.tags : [],
       tagsModo: (target?.tagsModo === "any" || target?.tagsModo === "all") ? target.tagsModo : "none",
       numeroTeste: Array.isArray(target?.numeroTeste) && target.numeroTeste.length ? target.numeroTeste : ["5518981729340","18981729340"],
+      statusBloqueados: Array.isArray(target?.statusBloqueados) ? target.statusBloqueados : ["perdido","escalated"],
     },
     style: {
       maxLines: typeof style?.maxLines === "number" ? style.maxLines : 2,
@@ -75,11 +94,21 @@ export function getRules(config: unknown): AgentRules {
       tom: typeof style?.tom === "string" ? style.tom : "acolhedor, claro e direto",
       proativarReativacao: style?.proativarReativacao !== false,
       saudacaoDefault: typeof style?.saudacaoDefault === "string" ? style.saudacaoDefault : "",
+      responseMode: style?.responseMode === "sugestao" ? "sugestao" : "auto",
+      waitMs: typeof style?.waitMs === "number" ? Math.min(Math.max(style.waitMs, 0), 15000) : (typeof fallback?.wait_time_ms === "number" ? Math.min(Math.max(fallback.wait_time_ms, 0), 15000) : 0),
+      maxMessages: typeof style?.maxMessages === "number" ? style.maxMessages : (typeof fallback?.message_cap === "number" ? fallback.message_cap : 0),
+    },
+    coordination: {
+      paraleloComAutomacao: coordination?.paraleloComAutomacao === true,
+      pausarPorInatividade: coordination?.pausarPorInatividade === true,
+      tempoInatividadeMin: typeof coordination?.tempoInatividadeMin === "number" && coordination.tempoInatividadeMin > 0 ? coordination.tempoInatividadeMin : 30,
     },
     channels: Array.isArray(r?.channels) ? r.channels : ["whatsapp"],
     whitelistInstances: Array.isArray(r?.whitelistInstances) ? r.whitelistInstances : [],
   }
 }
+
+export const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
 
 export function getBoundInstances(config: unknown): string[] {
   const cfg = parseCfg(config)

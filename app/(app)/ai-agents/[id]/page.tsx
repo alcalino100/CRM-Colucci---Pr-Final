@@ -1,5 +1,5 @@
 "use client"
-import { useState, use } from "react"
+import { useState, use, Component, type ReactNode } from "react"
 import Link from "next/link"
 import { useAIAgentsStore } from "@/lib/ai-agents-store"
 import { BotSettings } from "@/components/ai-agents/BotSettings"
@@ -26,6 +26,18 @@ const TABS = [
   { id:"audit", label:"Auditoria API" },
 ] as const
 
+class PanelBoundary extends Component<{ children: ReactNode }, { erro: string | null }> {
+  state = { erro: null as string | null }
+  static getDerivedStateFromError(e: any) {
+    return { erro: e?.message ? String(e.message) : "Erro desconhecido ao renderizar este painel." }
+  }
+  render() {
+    if (this.state.erro)
+      return <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">Não foi possível carregar este painel. {this.state.erro}</p>
+    return this.props.children
+  }
+}
+
 export default function AIAgentEditor({ params }: { params: Promise<{id:string}> }){
   const { id } = use(params)
   const agent = useAIAgentsStore(s=> s.agents.find(a=>a.id===id))
@@ -46,15 +58,15 @@ export default function AIAgentEditor({ params }: { params: Promise<{id:string}>
         ))}
       </div>
       <div className="pt-2">
-        {tab==="control" && <ControlCenter id={id} />}
-        {tab==="bot" && <BotSettings id={id} />}
-        {tab==="kb" && <KnowledgeBase id={id} />}
-        {tab==="prompts" && <PromptsVoice id={id} />}
-        {tab==="goals" && <Goals id={id} />}
-        {tab==="escalation" && <Escalation id={id} />}
-        {tab==="testing" && <Testing id={id} />}
-        {tab==="analytics" && <Analytics id={id} />}
-        {tab==="audit" && <ApiAudit id={id} />}
+        {tab==="control" && <PanelBoundary><ControlCenter id={id} /></PanelBoundary>}
+        {tab==="bot" && <PanelBoundary><BotSettings id={id} /></PanelBoundary>}
+        {tab==="kb" && <PanelBoundary><KnowledgeBase id={id} /></PanelBoundary>}
+        {tab==="prompts" && <PanelBoundary><PromptsVoice id={id} /></PanelBoundary>}
+        {tab==="goals" && <PanelBoundary><Goals id={id} /></PanelBoundary>}
+        {tab==="escalation" && <PanelBoundary><Escalation id={id} /></PanelBoundary>}
+        {tab==="testing" && <PanelBoundary><Testing id={id} /></PanelBoundary>}
+        {tab==="analytics" && <PanelBoundary><Analytics id={id} /></PanelBoundary>}
+        {tab==="audit" && <PanelBoundary><ApiAudit id={id} /></PanelBoundary>}
       </div>
     </div>
   )

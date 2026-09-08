@@ -2,16 +2,17 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { generateAIResponse } from "./generateResponse"
 import { normalizePhone } from "@/lib/labels"
-import { getBoundInstances, getRules, dentroDoHorario, leadAptoParaResposta, regrasParaPrompt, type AgentRules } from "./rules"
+import { getBoundInstances, getRules, dentroDoHorario, leadAptoParaResposta, regrasParaPrompt, sleep, type AgentRules } from "./rules"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
+const normalize = (v: string) => (v || "").toLowerCase().trim()
 
 // Resolve a IA que responde numa instância. REGRA DE OURO: a instância precisa estar
 // vinculada a um agente (config.testInstance ou whitelistInstances) E o agente precisa
 // estar ATIVO (is_active) com regras habilitadas (rules.enable). Sem isso, não responde NUNCA.
 async function agenteParaInstancia(instanceName: string | undefined): Promise<any | null> {
   if (!instanceName) return null
-  const { data: agentes, error } = await db().from("ai_agents").select("id,name,is_active,config")
+  const { data: agentes, error } = await db().from("ai_agents").select("id,name,is_active,config,wait_time_ms,message_cap,response_mode")
   if (error || !agentes?.length) return null
   const ativos = (agentes as any[]).filter((a) => a.is_active && getRules(a.config).enable)
   return ativos.find((a) => getBoundInstances(a.config).includes(instanceName)) || null
@@ -36,7 +37,7 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
     const agente = await agenteParaInstancia(instanceName)
     if(!agente) return
     const AI_ID = agente.id as string
-    const rules: AgentRules = getRules(agente.config)
+    const rules: AgentRules = getRules(agente.config, agente)
     const isTestNumber = rules.target.numeroTeste.includes(telefone)
 
     // 2) QUANDO: se houve horário configurado e fora do expediente, não responde agora
@@ -55,14 +56,15 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       lead = await acharLeadVinculado(telefone, instanceName)
     }
     if (!isTestNumber && !leadAptoParaResposta(rules, lead)) return
-    if (lead && (lead.status === "perdido" || lead.status === "escalated")) return
+    // Status bloqueados configurados (ex.: perdido/escalated) — nunca responde
+    if (lead && rules.target.statusBloqueados.map(normalize).includes(normalize(String(lead.status || "")))) return
 
     const leadIdEfetivo = lead?.id ?? undefined
 
     // 5) Busca ou cria conversa IA para este contato
     let convId: string
     const key = leadIdEfetivo || telefone
-    const { data: existing } = await db().from("conversations_ia").select("id,ai_responding").eq("ai_id", AI_ID).eq("contact_id", key).maybeSingle()
+    const { data: existing } = await db().from("conversations_ia").select("id,ai_responding,last_message_at").eq("ai_id", AI_ID).eq("contact_id", key).maybeSingle()
     if(existing?.id) convId = existing.id
     else {
       const { data: created } = await db().from("conversations_ia").insert({ id:`conv_${Date.now()}`, ai_id: AI_ID, contact_id: key, channel:"whatsapp", external_id: telefone, status:"active", ai_responding:true }).select("id").single()
@@ -71,6 +73,50 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
 
     // Atendimento pausado pelo gestor: IA não responde
     if(existing?.ai_responding === false) return
+
+    // 5b) Auto-pausa por inatividade: lead não respondeu há X min → pausa e libera p/ automação
+    if (rules.coordination.pausarPorInatividade && rules.coordination.tempoInatividadeMin > 0 && existing?.last_message_at) {
+      const ultimaMsg = new Date(existing.last_message_at).getTime()
+      if (Date.now() - ultimaMsg > rules.coordination.tempoInatividadeMin * 60_000) {
+        await db().from("conversations_ia").update({ ai_responding: false }).eq("id", convId)
+        return
+      }
+    }
+
+    // 5c) Modo sugestão: não envia — só registra a sugestão para aprovação humana
+    if (rules.style.responseMode === "sugestao") {
+      try {
+        await db().from("automation_logs").insert({
+          lead_id: leadIdEfetivo ?? null,
+          event_type: "ia_sugestao_resposta",
+          event_title: "IA sugeriu resposta (modo sugestão)",
+          event_description: `Sugestão para ${telefone} via ${instanceName}: "${texto.slice(0,80)}"`,
+          actor_type: "ia",
+        })
+      } catch { /* best-effort */ }
+      return
+    }
+
+    // 5d) Limite de mensagens: máx. msgs da IA por conversa (messageCap)
+    if (rules.style.maxMessages > 0) {
+      const { count } = await db().from("messages_ia").select("id", { count: "exact", head: true }).eq("conversation_id", convId).eq("role", "ai")
+      if ((count ?? 0) >= rules.style.maxMessages) {
+        await db().from("conversations_ia").update({ ai_responding: false }).eq("id", convId)
+        try {
+          await db().from("automation_logs").insert({
+            lead_id: leadIdEfetivo ?? null,
+            event_type: "ia_limite_atingido",
+            event_title: "Limite de mensagens da IA atingido",
+            event_description: `Conversa ${convId} pausada após ${count} respostas da IA (máx. ${rules.style.maxMessages}).`,
+            actor_type: "ia",
+          })
+        } catch { /* best-effort */ }
+        return
+      }
+    }
+
+    // 5e) Espera configurada antes de responder (anti-robô)
+    if (rules.style.waitMs > 0) await sleep(Math.min(rules.style.waitMs, 15000))
 
     const { data: history } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", {ascending:true}).limit(10)
     await db().from("messages_ia").insert({ id:`msg_${Date.now()}`, conversation_id: convId, role:"user", content: texto })
