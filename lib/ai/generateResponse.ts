@@ -69,8 +69,9 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
     let lastErr:any = null
     for(const m of tryModels){
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`
+      const historyText = conversationHistory.map(mm=> `${mm.role==="ai"?"assistant":mm.role}: ${mm.content}`).join("\n")
       const contents = [
-        { role:"user", parts:[{ text: systemPrompt + "\n\nHistórico:\n" + conversationHistory.map(mm=> `${mm.role}: ${mm.content}`).join("\n") + `\n\nUsuário: ${userMessage}` }] }
+        { role:"user", parts:[{ text: systemPrompt + "\n\nHistórico:\n" + historyText + `\n\nUsuário: ${userMessage}` }] }
       ]
       const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ contents }) })
       const j = await r.json()
@@ -91,6 +92,7 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
     let lastErr=""
     for(const m of tryModels){
       const url = "https://api.anthropic.com/v1/messages"
+      const historyForClaude = conversationHistory.map(mm=> ({ role: (mm.role==="ai" ? "assistant" : mm.role) as "user"|"assistant", content: mm.content }))
       const r = await fetch(url, {
         method:"POST",
         headers:{ "Content-Type":"application/json", "x-api-key": apiKey, "anthropic-version":"2023-06-01" },
@@ -98,7 +100,7 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
           model: m,
           max_tokens: 500,
           system: systemPrompt,
-          messages: [...conversationHistory.map(mm=> ({ role: mm.role as "user"|"assistant", content: mm.content })), { role:"user", content: userMessage }]
+          messages: [...historyForClaude, { role:"user", content: userMessage }]
         })
       })
       const j = await r.json()
@@ -116,11 +118,12 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
   // OpenAI (default)
   const baseURL = endpoint && endpoint.includes("openai.com") ? endpoint : undefined
   const openai = new OpenAI({ apiKey, baseURL })
+  const historyForOpenAI = conversationHistory.map(m=> ({ role: (m.role==="ai" ? "assistant" : m.role) as "user"|"assistant", content: m.content }))
   const resp = await openai.chat.completions.create({
     model,
     messages: [
       { role:"system", content: systemPrompt },
-      ...conversationHistory.map(m=> ({ role: m.role as "user"|"assistant", content: m.content })),
+      ...historyForOpenAI,
       { role:"user", content: userMessage }
     ],
     temperature: 0.7,
