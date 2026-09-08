@@ -116,12 +116,15 @@ export function InboxList() {
                 <button key={c.id} onClick={()=>setSelected(c.id)} aria-pressed={selectedId===c.id} style={{ position:"absolute", top:0, left:0, width:"100%", transform:`translateY(${v.start}px)`}} className={cn("flex flex-col gap-1 border-b border-slate-200/60 px-3 py-3 text-left transition hover:bg-slate-100 dark:border-slate-800/60 dark:hover:bg-slate-800", selectedId===c.id && "bg-slate-100 dark:bg-slate-800 border-l-2 border-l-cyan-500")}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-1.5 truncate text-sm font-medium text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>
-                      {c.leadName} {c.followUpAtivo && <span aria-label="Follow-up ativo">🤖</span>}
+                      {c.leadName} {c.followUpAtivo && <span aria-label="IA ativa">🤖</span>}
                     </span>
                     <span className="shrink-0 font-mono text-[11px] text-slate-500 dark:text-slate-400" style={{fontFamily:"var(--font-jetbrains)"}}>{timeAgo(c.timestamp)}</span>
                   </div>
                   <span className="truncate text-xs text-slate-600 dark:text-slate-400">{c.ultimaMensagem}</span>
-                  <span className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", badgeStyles[c.status])}>{badgeLabel[c.status]}</span>
+                  <span className="flex flex-wrap gap-1">
+                    <span className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", badgeStyles[c.status])}>{badgeLabel[c.status]}</span>
+                    {(c.tags||[]).map(t=> <span key={t} className="w-fit rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">#{t.toLowerCase()}</span>)}
+                  </span>
                 </button>
               )
             })}
@@ -130,12 +133,15 @@ export function InboxList() {
           <button key={c.id} onClick={()=>setSelected(c.id)} aria-pressed={selectedId===c.id} className={cn("flex w-full flex-col gap-1 border-b border-slate-200/60 px-3 py-3 text-left transition hover:bg-slate-100 dark:border-slate-800/60 dark:hover:bg-slate-800", selectedId===c.id && "bg-slate-100 dark:bg-slate-800 border-l-2 border-l-cyan-500")}>
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 truncate text-sm font-medium text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>
-                {c.leadName} {c.followUpAtivo && <span aria-label="Follow-up ativo">🤖</span>}
+                {c.leadName} {c.followUpAtivo && <span aria-label="IA ativa">🤖</span>}
               </span>
               <span className="shrink-0 font-mono text-[11px] text-slate-500 dark:text-slate-400" style={{fontFamily:"var(--font-jetbrains)"}}>{timeAgo(c.timestamp)}</span>
             </div>
             <span className="truncate text-xs text-slate-600 dark:text-slate-400">{c.ultimaMensagem}</span>
-            <span className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", badgeStyles[c.status])}>{badgeLabel[c.status]}</span>
+            <span className="flex flex-wrap gap-1">
+              <span className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", badgeStyles[c.status])}>{badgeLabel[c.status]}</span>
+              {(c.tags||[]).map(t=> <span key={t} className="w-fit rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">#{t.toLowerCase()}</span>)}
+            </span>
           </button>
         ))}
       </div>

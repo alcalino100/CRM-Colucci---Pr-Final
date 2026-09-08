@@ -61,10 +61,22 @@ export async function GET(request: Request) {
   const leadIds = Array.from(porConversa.values())
     .map((c) => c.leadId)
     .filter((id): id is string => !!id)
-  const nomes: Record<string, { nome: string; status: string }> = {}
+  const nomes: Record<string, { nome: string; status: string; tags: string[] }> = {}
   if (leadIds.length) {
-    const { data: leads } = await wsupabase.from("leads").select("id, nome, status").in("id", leadIds)
-    for (const l of leads ?? []) nomes[l.id] = { nome: l.nome, status: l.status }
+    const { data: leads } = await wsupabase.from("leads").select("id, nome, status, referencias").in("id", leadIds)
+    for (const l of leads ?? []) nomes[l.id] = { nome: l.nome, status: l.status, tags: l.referencias ?? [] }
+  }
+
+  // Estado da IA por telefone/lead (conversations_ia.ai_responding)
+  const telefones = Array.from(new Set(Array.from(porConversa.values()).map((c) => c.telefone))).filter(Boolean)
+  const iaAtiva: Record<string, boolean> = {}
+  if (telefones.length) {
+    const { data: convs } = await wsupabase
+      .from("conversations_ia")
+      .select("external_id, ai_responding")
+      .in("external_id", telefones)
+      .eq("status", "active")
+    for (const cv of convs ?? []) iaAtiva[cv.external_id ?? ""] = cv.ai_responding !== false
   }
 
   const conversas = Array.from(porConversa.values())
@@ -72,6 +84,8 @@ export async function GET(request: Request) {
       ...c,
       nome: c.leadId ? (nomes[c.leadId]?.nome ?? c.nomeContato ?? c.telefone) : (c.nomeContato ?? c.telefone),
       status: c.leadId ? (nomes[c.leadId]?.status ?? null) : null,
+      tags: c.leadId ? (nomes[c.leadId]?.tags ?? []) : [],
+      iaRespondendo: iaAtiva[c.telefone] ?? false,
     }))
     .sort((a, b) => (a.ultimaEm < b.ultimaEm ? 1 : -1))
 

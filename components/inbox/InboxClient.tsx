@@ -78,14 +78,16 @@ export function InboxClient(){
         const leadIds = filtradas.filter(c=>c.leadId).map(c=>c.leadId)
         let leadsMap = new Map<string, any>()
         if(leadIds.length>0){
-          const { data: leads } = await supabase.from("leads").select("id,origem,status").in("id", leadIds)
+          const { data: leads } = await supabase.from("leads").select("id,origem,status,referencias").in("id", leadIds)
           for(const l of leads||[]) leadsMap.set(l.id, l)
         }
         if(filtroTrafego){
           filtradas = filtradas.filter(c=>{
             if(!c.leadId) return false
             const l = leadsMap.get(c.leadId)
-            return l?.origem === "Tráfego Pago"
+            if(l?.origem !== "Tráfego Pago") return false
+            // Teste-IA / tags do lead sempre visíveis no filtro Tráfego Pago
+            return true
           })
         }
         // Nome do responsável vem da instância selecionada
@@ -98,13 +100,15 @@ export function InboxClient(){
           telefone: c.telefone || "",
           email: "",
           status: c.leadId && leadsMap.get(c.leadId) ? mapStatus(leadsMap.get(c.leadId).status) : (c.status ? mapStatus(c.status) : "aguardando_resposta"),
-          followUpAtivo: c.leadId ? leadsMap.get(c.leadId)?.status === "em_followup" : false,
+          followUpAtivo: c.iaRespondendo !== undefined ? c.iaRespondendo : (c.leadId ? leadsMap.get(c.leadId)?.status === "em_followup" : false),
           tentativasRestantes: c.leadId && leadsMap.get(c.leadId)?.status === "em_followup" ? 2 : undefined,
           proximaTentativaISO: c.leadId && leadsMap.get(c.leadId)?.status === "em_followup" ? new Date(Date.now()+2*3600_000).toISOString() : undefined,
           ultimaMensagem: c.ultima || "",
           timestamp: c.ultimaEm || new Date().toISOString(),
           unread: c.leadId && leadsMap.get(c.leadId)?.status === "novo" ? 1 : 0,
           origem: "WhatsApp" as const,
+          iaRespondendo: c.iaRespondendo,
+          tags: c.tags || [],
         }))
         if(!cancelled){
           if(conversas.length>0){

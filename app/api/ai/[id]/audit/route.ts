@@ -22,9 +22,35 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{id:st
     let wa:any[] = []
     if(inst){
       const { data } = await db().from("whatsapp_mensagens").select("mensagem_id,corpo,de_mim,criado_em,telefone,lead_id").eq("instance_name", inst).order("criado_em", {ascending:false}).limit(100)
-      wa = (data||[]).map((w:any)=> ({ id:w.mensagem_id, role: w.de_mim ? "você (WA)" : "lead (WA)", content:w.corpo, tokens:0, model:"whatsapp", created_at:w.criado_em, conversation_id: w.lead_id || w.telefone }))
+      wa = (data||[]).map((w:any)=> ({ id:`wa_${w.mensagem_id || w.criado_em}`, role: w.de_mim ? "você (WA)" : "lead (WA)", content:w.corpo, tokens:0, model:"whatsapp", created_at:w.criado_em, conversation_id: w.lead_id || w.telefone }))
     }
-    return NextResponse.json({ conversations: convs||[], messages: msgs, whatsapp: wa })
+
+    // Fusão deduplicada: a mesma mensagem recebida aparece em messages_ia (role user)
+    // E em whatsapp_mensagens (lead WA). Junta em um único evento com rótulo claro.
+    const iaMsgs = (msgs as any[]).map((m:any)=>({
+      id: m.id, role: m.role, content: m.content,
+      tokens: m.metadata?.tokensUsed || m.metadata?.tokens || 0,
+      model: m.metadata?.model || "",
+      created_at: m.created_at, conversation_id: m.conversation_id,
+    }))
+    const timeline: any[] = [...iaMsgs, ...wa]
+    const dedup: any[] = []
+    const visto = new Set<string>()
+    // normaliza "user" -> "lead (WA)" pois mesma origem
+    for(const e of timeline.sort((a,b)=> (a.created_at<b.created_at?1:-1))){
+      const chv = `${String(e.content||"").trim().toLowerCase()}|${new Date(e.created_at).getTime()/1000|0}`
+      if(visto.has(chv)) continue
+      visto.add(chv)
+      const dedupezao = timeline.filter(t=> `${String(t.content||"").trim().toLowerCase()}|${new Date(t.created_at).getTime()/1000|0}` === chv)
+      const temWA = dedupezao.some(t=> t.role==="lead (WA)" || t.role==="você (WA)")
+      const temIAuser = dedupezao.some(t=> t.role==="user")
+      dedup.push({ ...e, // usa o registro WA como base quando existe
+        ...(temWA ? (dedupezao.find(t=> t.role==="lead (WA)" || t.role==="você (WA)")) : {}),
+        role: e.role==="user" && temWA ? "lead (WA + IA)" : e.role,
+        count: dedupezao.length,
+      })
+    }
+    return NextResponse.json({ conversations: convs||[], messages: dedup, whatsapp: wa })
   }
   const { data: convs } = await db().from("conversations_ia").select("id").eq("ai_id", id).limit(50)
   if(!convs || convs.length===0) return NextResponse.json([])

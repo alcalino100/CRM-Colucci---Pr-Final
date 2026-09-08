@@ -25,6 +25,8 @@ export type InboxConversation = {
   timestamp: string
   unread: number
   origem: "WhatsApp" | "Instagram" | "Site"
+  iaRespondendo?: boolean
+  tags?: string[]
 }
 
 function hoursAgo(h: number) { return new Date(Date.now() - h * 3600_000).toISOString() }
