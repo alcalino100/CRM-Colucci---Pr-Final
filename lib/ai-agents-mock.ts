@@ -16,6 +16,8 @@ export type AIAgent = {
   brandVoice: string
   goals: { id:string; name:string; type:string; prompt:string }[]
   knowledgeBase?: { id:string; name:string; documents:{id:string; name:string; type:string}[] }
+  testInstance?: string
+  rules?: any
 }
 
 export const mockAgents: AIAgent[] = [

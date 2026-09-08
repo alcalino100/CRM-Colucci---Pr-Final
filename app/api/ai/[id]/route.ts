@@ -19,7 +19,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{id:st
     if(body.apiToken!==undefined) patch.api_token = body.apiToken
     if(body.apiEndpoint!==undefined) patch.api_endpoint = body.apiEndpoint
     if(body.modelName!==undefined) patch.model_name = body.modelName
-    if(body.testInstance!==undefined) patch.config = { ...((await db().from("ai_agents").select("config").eq("id", id).maybeSingle()).data?.config||{}), testInstance: body.testInstance }
+    if(body.testInstance!==undefined || body.rules!==undefined) {
+      const cfgAnterior = ((await db().from("ai_agents").select("config").eq("id", id).maybeSingle()).data?.config) || {}
+      const cfg = typeof cfgAnterior === "string" ? JSON.parse(cfgAnterior) : cfgAnterior
+      if(body.testInstance!==undefined) cfg.testInstance = body.testInstance
+      if(body.rules!==undefined) cfg.rules = body.rules
+      patch.config = cfg
+    }
     if(body.systemPrompt!==undefined) patch.system_prompt = body.systemPrompt
     if(body.additionalInstructions!==undefined) patch.additional_instructions = body.additionalInstructions
     if(body.brandVoice!==undefined) patch.brand_voice = body.brandVoice

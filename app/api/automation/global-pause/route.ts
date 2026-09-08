@@ -72,12 +72,14 @@ export async function POST(request: Request) {
     const erro = [e1?.message, e2?.message, e3?.message].filter(Boolean).join(" | ")
     if (erro) return NextResponse.json({ ok: false, erro }, { status: 500 })
 
-    await wsupabase.from("automation_logs").insert({
-      event_type: "global_pause",
-      event_title: "Stop automático — TUDO pausado",
-      event_description: "Parada de emergência: automações desativadas, jobs pendentes cancelados e IA desligada.",
-      actor_type: "gestor",
-    }).catch(() => {})
+    try {
+      await wsupabase.from("automation_logs").insert({
+        event_type: "global_pause",
+        event_title: "Stop automático — TUDO pausado",
+        event_description: "Parada de emergência: automações desativadas, jobs pendentes cancelados e IA desligada.",
+        actor_type: "gestor",
+      })
+    } catch { /* log é best-effort */ }
 
     return NextResponse.json({ ok: true, pausado: true })
   }
@@ -97,12 +99,14 @@ export async function POST(request: Request) {
   const erro = [e1?.message, e3?.message].filter(Boolean).join(" | ")
   if (erro) return NextResponse.json({ ok: false, erro }, { status: 500 })
 
-  await wsupabase.from("automation_logs").insert({
-    event_type: "global_resume",
-    event_title: "Automações retomadas",
-    event_description: "Automações reativadas e IA ligada novamente. Jobs pendentes cancelados NÃO são recriados automaticamente.",
-    actor_type: "gestor",
-  }).catch(() => {})
+  try {
+    await wsupabase.from("automation_logs").insert({
+      event_type: "global_resume",
+      event_title: "Automações retomadas",
+      event_description: "Automações reativadas e IA ligada novamente. Jobs pendentes cancelados NÃO são recriados automaticamente.",
+      actor_type: "gestor",
+    })
+  } catch { /* log é best-effort */ }
 
   return NextResponse.json({ ok: true, pausado: false })
 }

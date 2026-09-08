@@ -2,74 +2,66 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { generateAIResponse } from "./generateResponse"
 import { normalizePhone } from "@/lib/labels"
+import { getBoundInstances, getRules, dentroDoHorario, leadAptoParaResposta, regrasParaPrompt, type AgentRules } from "./rules"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
 
-function parseConfig(cfg: unknown): Record<string, any> {
-  if (!cfg) return {}
-  if (typeof cfg === "string") { try { return JSON.parse(cfg) } catch { return {} } }
-  if (typeof cfg === "object") return cfg as Record<string, any>
-  return {}
-}
-
-// Retorna a instância WhatsApp vinculada ao agente (config.testInstance),
-// ou null se o agente não tiver vínculo explícito.
-function instanciaVinculada(agente: any): string | null {
-  const cfg = parseConfig(agente?.config)
-  return cfg?.testInstance || cfg?.instance || null
-}
-
-// Resolve a IA que responde numa instância. REGRA NOVA (correção do bug):
-// SÓ responde na instância explicitamente vinculada ao agente (config.testInstance).
-// Se a instância não está vinculada a NENHUM agente ativo, não responde NUNCA —
-// independentemente de quem mandou mensagem. Sem fallback para "outras instâncias".
+// Resolve a IA que responde numa instância. REGRA DE OURO: a instância precisa estar
+// vinculada a um agente (config.testInstance ou whitelistInstances) E o agente precisa
+// estar ATIVO (is_active) com regras habilitadas (rules.enable). Sem isso, não responde NUNCA.
 async function agenteParaInstancia(instanceName: string | undefined): Promise<any | null> {
   if (!instanceName) return null
   const { data: agentes, error } = await db().from("ai_agents").select("id,name,is_active,config")
   if (error || !agentes?.length) return null
-  return (agentes as any[]).find((a) => a.is_active && instanciaVinculada(a) === instanceName) || null
+  const ativos = (agentes as any[]).filter((a) => a.is_active && getRules(a.config).enable)
+  return ativos.find((a) => getBoundInstances(a.config).includes(instanceName)) || null
 }
 
-// Acha o lead do mesmo corretor da instância cujo telefone bate com o contato.
-// Só respondemos para lead EXISTENTE de Tráfego Pago (ou número de teste) — nunca
-// para contato orgânico/pessoal sem vínculo (foi isso que causou respostas indevidas).
-async function acharLeadVinculado(telefone: string | undefined, instanceName: string | undefined): Promise<string | null> {
+// Acha o lead cujo telefone bate com o contato (mesmo corretor da instância quando possível).
+async function acharLeadVinculado(telefone: string | undefined, instanceName: string | undefined): Promise<any | null> {
   if (!telefone) return null
-  const { data: candidatos } = await db().from("leads").select("id, telefone, origem, status, corretor_id")
+  const { data: candidatos } = await db().from("leads").select("id, telefone, origem, status, corretor_id, referencias")
   const instancia = instanceName
     ? (await db().from("whatsapp_instancias").select("corretor_id").eq("instance_name", instanceName).maybeSingle()).data
     : null
   const corretorId = (instancia as any)?.corretor_id ?? null
   return (candidatos ?? [])
     .filter((l: any) => !corretorId || !l.corretor_id || l.corretor_id === corretorId)
-    .find((l: any) => normalizePhone(l.telefone) === normalizePhone(telefone))?.id ?? null
+    .find((l: any) => normalizePhone(l.telefone) === normalizePhone(telefone)) ?? null
 }
 
 export async function handlePatriciaInbound({ telefone, texto, leadId, instanceName }: { telefone: string; texto: string; leadId?: string; instanceName?: string }){
   try{
-    // 1) REGRA DE OURO: a instância precisa estar vinculada a uma IA ATIVA.
-    //    Sem isso, não respondemos (correção do bug que respondia em TODAS as instâncias).
+    // 1) REGRA DE OURO: instância vinculada a IA ativa + regras habilitadas
     const agente = await agenteParaInstancia(instanceName)
-    if(!agente) return // instância sem IA ativa vinculada → ignora completamente
+    if(!agente) return
     const AI_ID = agente.id as string
+    const rules: AgentRules = getRules(agente.config)
+    const isTestNumber = rules.target.numeroTeste.includes(telefone)
 
-    // 2) Só respondemos para o número de teste ou para LEAD real de Tráfego Pago
-    const isTestNumber = telefone === "5518981729340" || telefone === "18981729340"
-    if(!isTestNumber){
-      const leadResolvido = leadId || (await acharLeadVinculado(telefone, instanceName))
-      if(!leadResolvido){
-        // Mensagem orgânica/pessoal sem vínculo com lead Tráfego Pago → NÃO responde
-        return
-      }
-      leadId = leadResolvido
-      const { data: lead } = await db().from("leads").select("origem,status").eq("id", leadId).maybeSingle()
-      if(lead?.origem !== "Tráfego Pago") return
-      if(lead?.status === "escalated" || lead?.status === "perdido") return
+    // 2) QUANDO: se houve horário configurado e fora do expediente, não responde agora
+    if (!isTestNumber && !dentroDoHorario(rules)) return
+
+    // 3) ONDE: canal habilitado
+    if (rules.channels.length && !rules.channels.includes("whatsapp")) return
+
+    // 4) QUEM: só responde para lead apto (origem + tags) ou número de teste.
+    //    Mensagem orgânica/pessoal sem vínculo com lead permitido → NÃO responde.
+    let lead: any = null
+    if (leadId) {
+      const { data: l } = await db().from("leads").select("id,origem,status,referencias,corretor_id").eq("id", leadId).maybeSingle()
+      lead = l
+    } else if (!isTestNumber) {
+      lead = await acharLeadVinculado(telefone, instanceName)
     }
+    if (!isTestNumber && !leadAptoParaResposta(rules, lead)) return
+    if (lead && (lead.status === "perdido" || lead.status === "escalated")) return
 
-    // 3) Busca ou cria conversa IA para este contato
+    const leadIdEfetivo = lead?.id ?? undefined
+
+    // 5) Busca ou cria conversa IA para este contato
     let convId: string
-    const key = leadId || telefone
+    const key = leadIdEfetivo || telefone
     const { data: existing } = await db().from("conversations_ia").select("id,ai_responding").eq("ai_id", AI_ID).eq("contact_id", key).maybeSingle()
     if(existing?.id) convId = existing.id
     else {
@@ -77,17 +69,22 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       convId = created!.id
     }
 
-    // Atendimento pausado pelo gestor: IA não responde (e volta a responder quando reativado)
+    // Atendimento pausado pelo gestor: IA não responde
     if(existing?.ai_responding === false) return
 
     const { data: history } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", {ascending:true}).limit(10)
     await db().from("messages_ia").insert({ id:`msg_${Date.now()}`, conversation_id: convId, role:"user", content: texto })
 
-    const { message: aiResp } = await generateAIResponse({ aiId: AI_ID, userMessage: texto, conversationHistory: (history||[]).map((m:any)=>({role:m.role, content:m.content})) })
+    const { message: aiResp } = await generateAIResponse({
+      aiId: AI_ID,
+      userMessage: texto,
+      conversationHistory: (history||[]).map((m:any)=>({role:m.role, content:m.content})),
+      regrasSuplementares: regrasParaPrompt(rules, (agente.name || "assistente da Colucci Imóveis")),
+    })
 
     await db().from("messages_ia").insert({ id:`msg_${Date.now()+1}`, conversation_id: convId, role:"ai", content: aiResp })
 
-    // 4) Envia via WhatsApp da instância — UMA única chamada (evita duplicação).
+    // 6) Envia via WhatsApp da instância — UMA única chamada (evita duplicação).
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://crm-colucci-pre-final.vercel.app"
     let envRes = await fetch(`${siteUrl}/api/whatsapp/send`, {
       method:"POST",
@@ -106,14 +103,16 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       }
     }
     // Registra o resultado para auditoria/alertas imediatos
-    await db().from("automation_logs").insert({
-      lead_id: leadId || null,
-      event_type: envRes.ok ? "ia_resposta_enviada" : "ia_envio_falhou",
-      event_title: envRes.ok ? "IA respondeu no WhatsApp" : "Falha ao enviar resposta da IA",
-      event_description: envRes.ok ? `IA respondeu via ${instanceName} para ${telefone}` : `Falha ao enviar resposta via WhatsApp para ${telefone}: ${envRes.erro}`,
-      actor_type: "ia",
-      payload: JSON.stringify({ ai_id: AI_ID, convId, instance: instanceName }).slice(0,400),
-    }).catch(()=>{})
+    try {
+      await db().from("automation_logs").insert({
+        lead_id: leadIdEfetivo || null,
+        event_type: envRes.ok ? "ia_resposta_enviada" : "ia_envio_falhou",
+        event_title: envRes.ok ? "IA respondeu no WhatsApp" : "Falha ao enviar resposta da IA",
+        event_description: envRes.ok ? `IA respondeu via ${instanceName} para ${telefone}` : `Falha ao enviar resposta via WhatsApp para ${telefone}: ${envRes.erro}`,
+        actor_type: "ia",
+        payload: JSON.stringify({ ai_id: AI_ID, convId, instance: instanceName }).slice(0,400),
+      })
+    } catch { /* log é best-effort */ }
   }catch(e){
     console.error("[IA] erro inbox", e)
   }

@@ -10,10 +10,12 @@ import { Escalation } from "@/components/ai-agents/Escalation"
 import { Testing } from "@/components/ai-agents/Testing"
 import { Analytics } from "@/components/ai-agents/Analytics"
 import { ApiAudit } from "@/components/ai-agents/ApiAudit"
+import { ControlCenter } from "@/components/ai-agents/ControlCenter"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 
 const TABS = [
+  { id:"control", label:"Controle & Dashboard" },
   { id:"bot", label:"Bot Settings" },
   { id:"kb", label:"Knowledge Base" },
   { id:"prompts", label:"Prompts & Voz" },
@@ -44,6 +46,7 @@ export default function AIAgentEditor({ params }: { params: Promise<{id:string}>
         ))}
       </div>
       <div className="pt-2">
+        {tab==="control" && <ControlCenter id={id} />}
         {tab==="bot" && <BotSettings id={id} />}
         {tab==="kb" && <KnowledgeBase id={id} />}
         {tab==="prompts" && <PromptsVoice id={id} />}

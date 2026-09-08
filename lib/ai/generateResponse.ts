@@ -9,6 +9,7 @@ type Input = {
   aiId: string
   userMessage: string
   conversationHistory: { role:string; content:string }[]
+  regrasSuplementares?: string
 }
 
 function providerFromModel(model?: string){
@@ -18,7 +19,7 @@ function providerFromModel(model?: string){
   return "openai"
 }
 
-export async function generateAIResponse({ aiId, userMessage, conversationHistory }: Input){
+export async function generateAIResponse({ aiId, userMessage, conversationHistory, regrasSuplementares }: Input){
   const { data: ai } = await db().from("ai_agents").select("*").eq("id", aiId).single()
   if(!ai) throw new Error("AI not found")
 
@@ -37,6 +38,7 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
   let systemPrompt = (ai.system_prompt || "") + context + "\n\n" + (ai.additional_instructions || "")
   const brand = (ai as any).brand_voice || ""
   if(brand) systemPrompt += `\n\nTom de voz: ${brand}`
+  if(regrasSuplementares) systemPrompt += `\n\n${regrasSuplementares}`
 
   let apiKey: string | undefined
   const rawToken = (ai as any).api_token
