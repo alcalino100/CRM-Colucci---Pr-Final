@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useEffect } from "react"
 import { z } from "zod"
 import { AlertTriangle, Plus, Star, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -52,6 +53,13 @@ export function LeadForm({
   onSubmit: (v: LeadFormValues) => void
   onCancel: () => void
 }) {
+  const [catalogoTags, setCatalogoTags] = useState<string[]>([])
+  useEffect(() => {
+    fetch("/api/tags")
+      .then(r => r.json())
+      .then(j => { if (j.ok && Array.isArray(j.tags)) setCatalogoTags(j.tags.map((t: any) => t.name)) })
+      .catch(() => {})
+  }, [])
   const initialRefs: LeadRef[] =
     initial?.referencias?.length
       ? initial.referencias
@@ -229,8 +237,14 @@ export function LeadForm({
               }
             }}
             placeholder="Ex: AP-1006"
+            list="catalogo-tags"
             aria-label="Adicionar referência do imóvel"
           />
+          {catalogoTags.length > 0 && (
+            <datalist id="catalogo-tags">
+              {catalogoTags.map((t) => <option key={t} value={t} />)}
+            </datalist>
+          )}
           <Button type="button" variant="outline" onClick={addRef} aria-label="Adicionar referência"><Plus className="size-4" /></Button>
         </div>
         {v.referencias.length === 0 ? (

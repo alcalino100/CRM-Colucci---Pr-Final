@@ -9,6 +9,7 @@ import { OnlineDot } from "@/components/online-dot"
 import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate } from "@/lib/labels"
 import { type Lead, type Origem } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
+import { tagColor } from "@/lib/ai/tags-catalog"
 
 const ORIGEM_ICON: Record<Origem, any> = {
   Instagram: Camera,
@@ -33,6 +34,7 @@ export function LeadCard({
   onEnviarMeta,
   onArquivar,
   onDesarquivar,
+  tagColorMap = {},
 }: {
   lead: Lead
   showCorretor?: boolean
@@ -40,6 +42,7 @@ export function LeadCard({
   podeExcluir?: boolean
   isGestor?: boolean
   overdue?: boolean
+  tagColorMap?: Record<string, string>
   onOpen?: (lead: Lead) => void
   onEdit?: (lead: Lead) => void
   onDelete?: (lead: Lead) => void
@@ -204,14 +207,17 @@ export function LeadCard({
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <Badge variant={TEMP_VARIANT[lead.temperatura]}>{TEMP_LABEL[lead.temperatura]}</Badge>
-        {currentTags.map((r) => (
-          <span key={r} className="group/tag inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-            {r}
-            <button type="button" onClick={(e) => { stop(e); removeTag(r) }} className="hidden rounded-full p-0.5 text-destructive hover:bg-destructive/10 group-hover/tag:inline-flex">
-              <span className="sr-only">Remover</span>×
-            </button>
-          </span>
-        ))}
+        {currentTags.map((r) => {
+          const cor = tagColorMap[r] ?? tagColor(r)
+          return (
+            <span key={r} className="group/tag inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" style={{ borderWidth: 1, borderStyle: "solid", borderColor: cor, backgroundColor: `${cor}1a`, color: cor }}>
+              {r}
+              <button type="button" onClick={(e) => { stop(e); removeTag(r) }} className="hidden rounded-full p-0.5 text-destructive hover:bg-destructive/10 group-hover/tag:inline-flex">
+                <span className="sr-only">Remover</span>×
+              </button>
+            </span>
+          )
+        })}
         {canManage && (
           <button type="button" onClick={(e) => { stop(e); setShowTagEditor((s) => !s) }} className="inline-flex items-center justify-center rounded-full border border-dashed border-border p-0.5 text-muted-foreground hover:border-primary/50 hover:text-primary">
             <Plus className="size-3" />

@@ -64,6 +64,19 @@ export function KanbanBoard({
   const [tempFilter, setTempFilter] = useState<Temperatura | "todas">("todas")
   const [query, setQuery] = useState("")
   const [showArchived, setShowArchived] = useState(false)
+  const [tagColorMap, setTagColorMap] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    fetch("/api/tags")
+      .then(r => r.json())
+      .then(j => {
+        if (!j.ok || !Array.isArray(j.tags)) return
+        const map: Record<string, string> = {}
+        for (const t of j.tags) map[t.name] = t.color
+        setTagColorMap(map)
+      })
+      .catch(() => {})
+  }, [])
 
   const usuarioNome = user ? userName(user.id) : "Sistema"
   const canManage = (lead: Lead) => isGestor || lead.corretorId === currentCorretorId
@@ -630,6 +643,7 @@ export function KanbanBoard({
                                 canManage={canManage(lead)}
                                 podeExcluir={isGestor}
                                 isGestor={isGestor}
+                                tagColorMap={tagColorMap}
                                 onOpen={(item) => router.push(`/painel-corretor/${item.id}${queryFiltros(searchParams)}`)}
                                 onEdit={(item) => setEditLead(item)}
                                 onDelete={(item) => setDelLead(item)}

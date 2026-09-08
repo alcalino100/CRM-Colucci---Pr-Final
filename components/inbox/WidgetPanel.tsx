@@ -3,24 +3,25 @@ import { useEffect, useState } from "react"
 import { useInboxStore } from "@/lib/inbox-store"
 import { useToast } from "@/components/ui/primitives"
 import { normalizePhone } from "@/lib/labels"
+import { tagColor } from "@/lib/ai/tags-catalog"
 
-const TAG_SUGERIDAS = ["teste-ia", "novo lead", "em atendimento", "follow-up"]
+type TagItem = { name: string; color: string; emUso?: number; responderIA?: boolean; followUp?: boolean }
 
 export function WidgetPanel(){
   const { conversas, selectedId, criarFollowUp, cancelarFollowUp } = useInboxStore()
   const toast = useToast()
   const [salvandoTags, setSalvandoTags] = useState(false)
   const [tagInput, setTagInput] = useState("")
-  const [tagsExistentes, setTagsExistentes] = useState<string[]>(TAG_SUGERIDAS)
+  const [tagsExistentes, setTagsExistentes] = useState<TagItem[]>([])
   const [modalVincular, setModalVincular] = useState(false)
   const [buscando, setBuscando] = useState(false)
   const [acaoIniciando, setAcaoIniciando] = useState<string | null>(null)
   const conv = conversas.find(c=>c.id===selectedId) || null
 
   useEffect(() => {
-    fetch("/api/ai/contexto")
+    fetch("/api/tags")
       .then(r => r.json())
-      .then(j => { if (j.ok) setTagsExistentes((prev) => Array.from(new Set([...TAG_SUGERIDAS, ...(j.contexto?.tags ?? [])])).sort()) })
+      .then(j => { if (j.ok && Array.isArray(j.tags)) setTagsExistentes(j.tags) })
       .catch(() => {})
   }, [])
 
@@ -91,8 +92,9 @@ export function WidgetPanel(){
   async function addCustomTag(){
     const t = tagInput.trim().toLowerCase()
     if(!t || tags.includes(t)) { setTagInput(""); return }
+    if(!leadId) { toast("Vincule um lead para salvar tags","error"); return }
     salvarTags([...tags, t])
-    setTagsExistentes((prev) => Array.from(new Set([...prev, t])).sort())
+    setTagsExistentes((prev) => prev.some(x=>x.name===t) ? prev : [...prev, { name: t, color: tagColor(t) }])
     setTagInput("")
   }
 
@@ -168,10 +170,11 @@ export function WidgetPanel(){
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Etiquetas / Tags</h3>
         <div className="flex flex-wrap gap-1.5">
-          {tagsExistentes.map(t=>{
+          {tagsExistentes.map(tagItem=>{
+            const t = tagItem.name
             const ativa = tags.includes(t)
             return (
-              <button key={t} disabled={salvandoTags} onClick={()=>toggleTag(t)} className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-50 ${ativa ? "border-violet-500/40 bg-violet-500/15 text-violet-300" : "border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>
+              <button key={t} disabled={salvandoTags} onClick={()=>toggleTag(t)} style={ativa ? { borderColor: tagItem.color, backgroundColor: `${tagItem.color}22`, color: tagItem.color } : undefined} className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-50 ${ativa ? "" : "border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>
                 {ativa ? "✓ " : "#"}{t}
               </button>
             )

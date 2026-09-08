@@ -22,6 +22,7 @@ import {
 import { wsupabase } from "@/lib/whatsapp/server"
 import type { AutomationJob, AutomationJobStatus } from "@/lib/automation-types"
 import { getRules } from "@/lib/ai/rules"
+import { getTagsCatalog } from "@/lib/ai/tags-catalog"
 
 // O worker faz várias consultas + envios; sem isto cairia no limite padrão de 10s do Hobby
 // e poderia ser morto no meio de um envio. 60s é o teto do Hobby.
@@ -52,6 +53,29 @@ async function coordenarComIA(): Promise<boolean> {
   const ativos = (agentes || []).filter((a: any) => a.is_active)
   if (!ativos.length) return false
   return !ativos.every((a: any) => getRules(a.config).coordination.paraleloComAutomacao)
+}
+
+// Tags marcadas como "Follow-up" no catálogo: leads que as possuem entram na fila de
+// follow-up independente da origem (além do padrão Tráfego Pago). Vazio = sem extensão.
+async function tagsDeFollowUp(): Promise<Set<string>> {
+  try {
+    const catalog = await getTagsCatalog(false)
+    return new Set(catalog.tags.filter((t) => t.followUp).map((t) => t.name))
+  } catch {
+    return new Set()
+  }
+}
+
+// Tags do lead (referencias -> strings normalizadas)
+function tagsDoLead(referencias: unknown): string[] {
+  if (!Array.isArray(referencias)) return []
+  const out: string[] = []
+  for (const r of referencias) {
+    const v = typeof r === "string" ? r : (r as any)?.ref ?? ""
+    const s = String(v).trim().toLowerCase()
+    if (s) out.push(s)
+  }
+  return out
 }
 
 // Cria jobs de follow-up: pega os leads que receberam a mensagem da automação-mãe e não
@@ -211,14 +235,14 @@ async function runWorker() {
     // Semáforo IA x Automação: se alguma IA ativa coordena com a automação, pula leads
     // com conversa IA ativa (ai_responding=true) tanto na reativação quanto no follow-up.
     const skipIA = (await coordenarComIA()) ? await leadsComIAAtiva() : null
+    const tagsFollowUp = await tagsDeFollowUp()
 
     // FASE 1: Avaliar leads elegíveis e criar jobs
     for (const automation of automacoesNormais) {
       const { data: leads, error: leadsErr } = await wsupabase
         .from("leads")
-        .select("id, nome, telefone, temperatura, status, origem, corretor_id, criado_em, gestor_responsavel, arquivado_em, fechado_em")
+        .select("id, nome, telefone, temperatura, status, origem, corretor_id, criado_em, gestor_responsavel, arquivado_em, fechado_em, referencias")
         .eq("status", "novo")
-        .eq("origem", "Tráfego Pago")
         .is("arquivado_em", null)
         .is("fechado_em", null)
 
@@ -238,13 +262,20 @@ async function runWorker() {
           automation_id: automation.id,
           event_type: "lead_not_eligible",
           event_title: "Nenhum lead encontrado",
-          event_description: "Nenhum lead com status=novo, origem=Tráfego Pago, não arquivado, não fechado",
+          event_description: "Nenhum lead com status=novo, não arquivado, não fechado",
         })
         continue
       }
 
       for (const lead of leads) {
         results.evaluated++
+
+        // Elegibilidade por origem OU tag de follow-up: origem Tráfego Pago é o padrão;
+        // tags marcadas como "Follow-up" no catálogo estendem o público para outras origens.
+        const temTagFollowUp = tagsFollowUp.size > 0 && tagsDoLead(lead.referencias).some((t) => tagsFollowUp.has(t))
+        if (lead.origem !== "Tráfego Pago" && !temTagFollowUp) {
+          continue
+        }
 
         // 1. Verificar job ativo (idempotência)
         if (await hasActiveJob(lead.id, automation.id)) {
@@ -414,14 +445,15 @@ async function runWorker() {
 
         const { data: lead } = await wsupabase
           .from("leads")
-          .select("id, nome, telefone, temperatura, status, origem, corretor_id, criado_em, gestor_responsavel, arquivado_em, fechado_em")
+          .select("id, nome, telefone, temperatura, status, origem, corretor_id, criado_em, gestor_responsavel, arquivado_em, fechado_em, referencias")
           .eq("id", job.lead_id)
           .maybeSingle()
 
         // Automações normais exigem status=novo; follow-up aceita em_atendimento/em_followup
         const isFollowup = automation.trigger_type === "no_response_followup"
         const validStatuses = isFollowup ? ["em_atendimento", "em_followup"] : ["novo"]
-        if (!lead || !validStatuses.includes(lead.status) || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) {
+        const temTagFollowUp = tagsFollowUp.size > 0 && tagsDoLead(lead.referencias).some((t) => tagsFollowUp.has(t))
+        if (!lead || !validStatuses.includes(lead.status) || (lead.origem !== "Tráfego Pago" && !temTagFollowUp) || lead.fechado_em || lead.arquivado_em) {
           await cancelJob(job.id, "Lead não atende mais às condições", "system")
           results.cancelled++
           continue
