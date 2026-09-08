@@ -4,16 +4,23 @@ import { generateAIResponse } from "./generateResponse"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
 
-// Chamado pelo webhook do WhatsApp após salvar mensagem inbound da Patrícia
-export async function handlePatriciaInbound({ telefone, texto, leadId }: { telefone: string; texto: string; leadId?: string }){
-  const PATRICIA_AI = "ai_patricia_01"
-  const INSTANCE = "patricia-6c2875b4"
+// Mapeia instância -> AI (para teste, Guilherme usa ai_guilherme_01)
+const INSTANCE_AI_MAP: Record<string,string> = {
+  "patricia-6c2875b4": "ai_patricia_01",
+  "guilherme-garcia-c044c57d": "ai_guilherme_01",
+}
+
+export async function handlePatriciaInbound({ telefone, texto, leadId, instanceName }: { telefone: string; texto: string; leadId?: string; instanceName?: string }){
+  // compat: se chamado com 3 args, usa Patricia como default
+  const INSTANCE = instanceName || "patricia-6c2875b4"
+  const AI_ID = INSTANCE_AI_MAP[INSTANCE] || "ai_patricia_01"
   try{
-    const { data: ai } = await db().from("ai_agents").select("id,is_active").eq("id", PATRICIA_AI).maybeSingle()
+    const { data: ai } = await db().from("ai_agents").select("id,is_active").eq("id", AI_ID).maybeSingle()
     if(!ai?.is_active) return // IA pausada
 
-    // Se leadId existe, verifica se é Tráfego Pago (tag)
-    if(leadId){
+    // Para teste com número da namorada (sem lead), não exige Tráfego Pago
+    const isTestNumber = telefone === "5518981729340" || telefone === "18981729340"
+    if(leadId && !isTestNumber){
       const { data: lead } = await db().from("leads").select("origem,status").eq("id", leadId).maybeSingle()
       if(lead?.origem !== "Tráfego Pago") return
       if(lead?.status === "escalated" || lead?.status === "perdido") return
@@ -21,17 +28,17 @@ export async function handlePatriciaInbound({ telefone, texto, leadId }: { telef
 
     // Busca ou cria conversa IA para este contato
     let convId: string
-    const { data: existing } = await db().from("conversations_ia").select("id").eq("ai_id", PATRICIA_AI).eq("contact_id", leadId || telefone).maybeSingle()
+    const { data: existing } = await db().from("conversations_ia").select("id").eq("ai_id", AI_ID).eq("contact_id", leadId || telefone).maybeSingle()
     if(existing?.id) convId = existing.id
     else {
-      const { data: created } = await db().from("conversations_ia").insert({ id:`conv_${Date.now()}`, ai_id: PATRICIA_AI, contact_id: leadId || telefone, channel:"whatsapp", external_id: telefone, status:"active", ai_responding:true }).select("id").single()
+      const { data: created } = await db().from("conversations_ia").insert({ id:`conv_${Date.now()}`, ai_id: AI_ID, contact_id: leadId || telefone, channel:"whatsapp", external_id: telefone, status:"active", ai_responding:true }).select("id").single()
       convId = created!.id
     }
 
     const { data: history } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", {ascending:true}).limit(10)
     await db().from("messages_ia").insert({ id:`msg_${Date.now()}`, conversation_id: convId, role:"user", content: texto })
 
-    const { message: aiResp } = await generateAIResponse({ aiId: PATRICIA_AI, userMessage: texto, conversationHistory: (history||[]).map((m:any)=>({role:m.role, content:m.content})) })
+    const { message: aiResp } = await generateAIResponse({ aiId: AI_ID, userMessage: texto, conversationHistory: (history||[]).map((m:any)=>({role:m.role, content:m.content})) })
 
     await db().from("messages_ia").insert({ id:`msg_${Date.now()+1}`, conversation_id: convId, role:"ai", content: aiResp })
 

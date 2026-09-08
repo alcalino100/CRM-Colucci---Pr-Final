@@ -253,8 +253,8 @@ async function handleMessageUpsert(payload: any) {
       ...camposMidia(midia),
     })
     await preencherMidiaUrl(instanceName, mensagemId, midia)
-    if (instanceName === "patricia-6c2875b4" && !msg?.key?.fromMe) {
-      void handlePatriciaInbound({ telefone, texto: corpo, leadId: leadIdExistente || undefined }).catch(()=>{})
+    if (!msg?.key?.fromMe) {
+      void handlePatriciaInbound({ telefone, texto: corpo, leadId: leadIdExistente || undefined, instanceName }).catch(()=>{})
     }
     return
   }
@@ -463,9 +463,9 @@ async function handleMessageUpsert(payload: any) {
   })
   await preencherMidiaUrl(instanceName, mensagemId, midia)
 
-  // IA Patrícia: dispara resposta automática para Tráfego Pago (best-effort)
-  if (instanceName === "patricia-6c2875b4" && !msg?.key?.fromMe) {
-    void handlePatriciaInbound({ telefone, texto: corpo, leadId: leadId || leadIdExistente || undefined }).catch(()=>{})
+  // IA: dispara resposta automática (Patrícia ou Guilherme - teste)
+  if (!msg?.key?.fromMe) {
+    void handlePatriciaInbound({ telefone, texto: corpo, leadId: leadId || leadIdExistente || undefined, instanceName }).catch(()=>{})
   }
 }
 
