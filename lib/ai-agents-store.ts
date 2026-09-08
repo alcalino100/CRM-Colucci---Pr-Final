@@ -79,6 +79,7 @@ export const useAIAgentsStore = create<Store>((set, get)=>({
             apiToken: row.api_token || "",
             apiEndpoint: row.api_endpoint || "",
             modelName: row.model_name || "gemini-1.5-flash",
+            testInstance: row.config?.testInstance || "patricia-6c2875b4",
           } as any
         }))
         set({ agents: mapped, loaded:true })
