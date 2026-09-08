@@ -29,7 +29,8 @@ const PALETA = ["#8b5cf6", "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#ec4899"
 // Cor determinística e estável por nome (mesma cor aparece no Kanban, Inbox e painel).
 export function tagColor(name: string): string {
   let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  const s = (name ?? "").trim().toLowerCase()
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
   return PALETA[h % PALETA.length]
 }
 

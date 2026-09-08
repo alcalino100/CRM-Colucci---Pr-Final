@@ -63,7 +63,10 @@ export function LeadCard({
   const stop = (e: React.SyntheticEvent) => e.stopPropagation()
   const gestorNome = lead.gestorResponsavel ? userName(lead.gestorResponsavel) : null
 
-  const currentTags = (lead.referencias?.length ? lead.referencias.map((r) => r.ref) : lead.imovelRef ? [lead.imovelRef] : [])
+  const normRefs = ((lead.referencias ?? []) as any[])
+    .map((r) => (typeof r === "string" ? r : r?.ref))
+    .filter((t): t is string => typeof t === "string" && Boolean(t.trim()))
+  const currentTags = normRefs.length ? normRefs : lead.imovelRef ? [lead.imovelRef] : []
 
   async function addTag() {
     const tag = newTag.trim()
