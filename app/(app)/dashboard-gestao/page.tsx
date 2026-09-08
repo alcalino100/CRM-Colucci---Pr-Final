@@ -80,7 +80,6 @@ export default function DashboardGestaoPage() {
   const { leads, visits, corretores, userName } = useLeads()
   const { online, usoHoje } = usePresenca()
   const { user } = useAuth()
-  if (!user || !isGestorNivel(user.role) || !podeVendas(user.role)) return <p className="py-16 text-center text-muted-foreground">Acesso restrito aos gestores de vendas.</p>
   const [loading, setLoading] = useState(true)
   const [subAba, setSubAba] = useState<"andamento" | "fechadas">("andamento")
   const [periodo, setPeriodo] = useState<Periodo>("mes_atual")
@@ -233,6 +232,8 @@ export default function DashboardGestaoPage() {
   const propostasFechadas = leads.filter((l) => !l.arquivadoEm && l.status === "fechado")
   const listaProp = subAba === "andamento" ? propostasAndamento : propostasFechadas
   const totalAba = listaProp.reduce((s, l) => s + (l.valorNegociacao ?? 0), 0)
+
+  if (!user || !isGestorNivel(user.role) || !podeVendas(user.role)) return <p className="py-16 text-center text-muted-foreground">Acesso restrito aos gestores de vendas.</p>
 
   if (loading) {
     return (
