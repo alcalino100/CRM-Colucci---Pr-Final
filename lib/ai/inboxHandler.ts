@@ -3,7 +3,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { generateAIResponse } from "./generateResponse"
 import { normalizePhone } from "@/lib/labels"
 import { sendWhatsAppText } from "@/lib/whatsapp/server"
-import { getBoundInstances, getRules, dentroDoHorario, leadAptoParaResposta, regrasParaPrompt, sleep, type AgentRules } from "./rules"
+import { getBoundInstances, getRules, dentroDoHorario, leadAptoParaResposta, nomeApresentacao, regrasParaPrompt, sleep, type AgentRules } from "./rules"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
 const normalize = (v: string) => (v || "").toLowerCase().trim()
@@ -132,7 +132,7 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
       aiId: AI_ID,
       userMessage,
       conversationHistory: (history || []).map((m: any) => ({ role: m.role, content: m.content })),
-      regrasSuplementares: regrasParaPrompt(rules, agenteNome || "assistente da Colucci Imóveis"),
+      regrasSuplementares: regrasParaPrompt(rules, nomeApresentacao(agenteNome)),
     })
     await db().from("messages_ia").insert({ id: `msg_${Date.now() + 1}`, conversation_id: convId, role: "ai", content: aiResp })
 

@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react"
 import { useInboxStore } from "@/lib/inbox-store"
 import { useAuth } from "@/lib/auth-context"
-import { useToast, Select } from "@/components/ui/primitives"
+import { Button } from "@/components/ui/button"
+import { useToast, Select, Dialog, Label, Textarea } from "@/components/ui/primitives"
 import { normalizePhone, LEAD_STATUSES, STATUS_LABEL, MOTIVOS_EXCLUSAO } from "@/lib/labels"
 import { tagColor } from "@/lib/ai/tags-catalog"
 import type { LeadStatus } from "@/lib/mock-data"
@@ -286,59 +287,55 @@ export function WidgetPanel(){
         ) : <p className="text-xs text-slate-400">Sem follow-up ativo</p>}
       </div>
 
-      {modalVincular && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={()=>setModalVincular(false)}>
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={(e)=>e.stopPropagation()}>
-            <h3 className="mb-1 font-display text-base font-bold text-slate-900 dark:text-slate-100">Vincular conversa a um lead</h3>
-            <p className="mb-4 text-xs text-slate-500">Conversa: {conv.leadName} · {conv.telefone}. O sistema busca automaticamente um lead pelo telefone; se não houver, você cria um novo.</p>
-            <div className="flex flex-col gap-2">
-              <button disabled={buscando} onClick={()=>vincularLead(false)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 disabled:opacity-50">
-                {buscando ? "Buscando…" : "Vincular a lead existente"}
-              </button>
-              <button disabled={buscando} onClick={()=>vincularLead(true)} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-                {buscando ? "Criando…" : "Criar novo lead"}
-              </button>
-              <button onClick={()=>setModalVincular(false)} className="rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">Cancelar</button>
-            </div>
-          </div>
+      {/* Mesmo padrão de modal do Kanban (Dialog compartilhado: Esc + clique fora + X). */}
+      <Dialog open={modalVincular} onClose={() => (!buscando ? setModalVincular(false) : undefined)} title="Vincular conversa a um lead">
+        <p className="mb-4 text-sm text-muted-foreground">Conversa: {conv.leadName} · {conv.telefone}. O sistema busca automaticamente um lead pelo telefone; se não houver, você cria um novo.</p>
+        <div className="flex flex-col gap-2">
+          <Button type="button" variant="outline" disabled={buscando} onClick={()=>vincularLead(false)}>
+            {buscando ? "Buscando…" : "Vincular a lead existente"}
+          </Button>
+          <Button type="button" disabled={buscando} onClick={()=>vincularLead(true)}>
+            {buscando ? "Criando…" : "Criar novo lead"}
+          </Button>
+          <Button type="button" variant="ghost" onClick={()=>setModalVincular(false)} disabled={buscando}>Cancelar</Button>
         </div>
-      )}
+      </Dialog>
 
-      {modalDesvincular && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={()=>setModalDesvincular(false)}>
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={(e)=>e.stopPropagation()}>
-            <h3 className="mb-1 font-display text-base font-bold text-slate-900 dark:text-slate-100">Desvincular lead</h3>
-            <p className="mb-4 text-xs text-slate-500">A conversa de {conv.leadName} deixa de apontar para o lead, mas o lead e o histórico seguem intactos no CRM. É possível vincular novamente depois.</p>
-            <div className="flex flex-col gap-2">
-              <button disabled={desvinculando} onClick={()=>desvincularLead()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 disabled:opacity-50">
-                {desvinculando ? "Desvinculando…" : "Confirmar desvinculação"}
-              </button>
-              <button onClick={()=>setModalDesvincular(false)} className="rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">Cancelar</button>
-            </div>
-          </div>
+      <Dialog open={modalDesvincular} onClose={() => (!desvinculando ? setModalDesvincular(false) : undefined)} title="Desvincular lead">
+        <p className="mb-4 text-sm text-muted-foreground">A conversa de {conv.leadName} deixa de apontar para o lead, mas o lead e o histórico seguem intactos no CRM. É possível vincular novamente depois.</p>
+        <div className="flex flex-col gap-2">
+          <Button type="button" variant="outline" disabled={desvinculando} onClick={()=>desvincularLead()}>
+            {desvinculando ? "Desvinculando…" : "Confirmar desvinculação"}
+          </Button>
+          <Button type="button" variant="ghost" onClick={()=>setModalDesvincular(false)} disabled={desvinculando}>Cancelar</Button>
         </div>
-      )}
+      </Dialog>
 
-      {modalExcluir && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={()=>setModalExcluir(false)}>
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={(e)=>e.stopPropagation()}>
-            <h3 className="mb-1 font-display text-base font-bold text-red-600 dark:text-red-400">Excluir lead</h3>
-            <p className="mb-3 text-xs text-slate-500">Isso exclui permanentemente o lead {conv.leadName} (id <span className="font-mono">{leadId}</span>) do CRM. A conversa permanece no Inbox, apenas sem lead vinculado. A ação fica registrada na auditoria.</p>
-            <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">Motivo</label>
-            <Select value={motivoExcluir} onChange={(e)=>setMotivoExcluir(e.target.value)} className="mb-3 h-8 w-full text-xs">
-              {MOTIVOS_EXCLUSAO.map((m)=> <option key={m} value={m}>{m}</option>)}
-            </Select>
-            <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">Detalhe do motivo</label>
-            <textarea value={detalheExcluir} onChange={(e)=>setDetalheExcluir(e.target.value)} rows={2} placeholder="Descreva por que está excluindo…" className="mb-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" />
-            <div className="flex flex-col gap-2">
-              <button disabled={excluindo || !detalheExcluir.trim()} onClick={()=>excluirLead()} className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
-                {excluindo ? "Excluindo…" : "Excluir permanentemente"}
-              </button>
-              <button onClick={()=>setModalExcluir(false)} className="rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">Cancelar</button>
-            </div>
-          </div>
+      <Dialog open={modalExcluir} onClose={() => (!excluindo ? setModalExcluir(false) : undefined)} title="Excluir lead">
+        <p className="mb-3 text-sm text-muted-foreground">Isso exclui permanentemente o lead {conv.leadName} do CRM. A conversa permanece no Inbox, apenas sem lead vinculado. A ação fica registrada na auditoria.</p>
+        <div className="grid gap-1.5">
+          <Label htmlFor="inbox-del-motivo">Motivo da exclusão</Label>
+          <Select id="inbox-del-motivo" value={motivoExcluir} onChange={(e)=>setMotivoExcluir(e.target.value)} className="h-8 w-full text-xs">
+            {MOTIVOS_EXCLUSAO.map((m)=> <option key={m} value={m}>{m}</option>)}
+          </Select>
         </div>
-      )}
+        <div className="mt-3 grid gap-1.5">
+          <Label htmlFor="inbox-del-detalhe">Detalhe (obrigatório)</Label>
+          <Textarea
+            id="inbox-del-detalhe"
+            rows={2}
+            value={detalheExcluir}
+            onChange={(e)=>setDetalheExcluir(e.target.value)}
+            placeholder="Explique o motivo desta exclusão para o registro de auditoria."
+          />
+        </div>
+        <div className="mt-4 flex flex-col gap-2">
+          <Button type="button" className="bg-destructive text-white hover:bg-destructive/90" disabled={excluindo || !detalheExcluir.trim()} onClick={()=>excluirLead()}>
+            {excluindo ? "Excluindo…" : "Excluir permanentemente"}
+          </Button>
+          <Button type="button" variant="ghost" onClick={()=>setModalExcluir(false)} disabled={excluindo}>Cancelar</Button>
+        </div>
+      </Dialog>
     </div>
   )
 }

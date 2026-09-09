@@ -25,6 +25,14 @@ export async function POST(request: Request) {
       .update({ ai_responding: false })
       .eq("external_id", telefone)
     if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
+    try {
+      await wsupabase.from("automation_logs").insert({
+        event_type: "ia_pausa_manual",
+        event_title: "IA pausada manualmente no Inbox",
+        event_description: `Gestor pausou a IA para ${telefone} (${body.instanceName || "instância?"}). A IA segue arquivando, mas não responde.`,
+        actor_type: "gestor",
+      })
+    } catch { /* log é best-effort */ }
     return NextResponse.json({ ok: true, pausado })
   }
 
@@ -43,6 +51,17 @@ export async function POST(request: Request) {
   } catch (e: any) {
     aviso = String(e?.message ?? e)
   }
+
+  try {
+    await wsupabase.from("automation_logs").insert({
+      event_type: "ia_retomada_manual",
+      event_title: "IA retomada manualmente no Inbox",
+      event_description: aviso
+        ? `Gestor retomou a IA para ${telefone} (${body.instanceName || "instância?"}), mas sem resposta imediata: ${aviso}`
+        : `Gestor retomou a IA para ${telefone} (${body.instanceName || "instância?"}) com resposta imediata enviada.`,
+      actor_type: "gestor",
+    })
+  } catch { /* log é best-effort */ }
 
   return NextResponse.json({ ok: true, pausado, aviso })
 }

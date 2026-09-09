@@ -110,6 +110,12 @@ export function getRules(config: unknown, fallback?: { wait_time_ms?: number | n
 
 export const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
 
+// Nome de apresentação do agente (remove sufixos operacionais como " - Teste").
+export function nomeApresentacao(nome: string | null | undefined): string {
+  const base = String(nome || "").split(" - ")[0].trim()
+  return base || "assistente da Colucci Imóveis"
+}
+
 export function getBoundInstances(config: unknown): string[] {
   const cfg = parseCfg(config)
   const rules = getRules(config)
@@ -152,6 +158,8 @@ export function leadAptoParaResposta(rules: AgentRules, lead: { origem?: string 
 export function regrasParaPrompt(rules: AgentRules, nomeIA: string): string {
   const s = rules.style
   const linhas: string[] = [
+    `[IDENTIDADE — sempre respeitar, prevalece sobre qualquer outro nome no prompt]`,
+    `Você se apresenta e assina SEMPRE como "${nomeIA}". Nunca use outro nome de assistente.`,
     `[REGRA DE ESTILO — sempre aplicar]`,
     `Respostas com no máximo ${s.maxLines} linhas.`,
     `Faça apenas ${s.maxQuestions === 1 ? "1 pergunta" : `${s.maxQuestions} perguntas`} por mensagem.`,

@@ -34,5 +34,18 @@ export async function POST(request: Request) {
     .in("telefone", variantes)
 
   if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
+
+  try {
+    await wsupabase.from("automation_logs").insert({
+      event_type: unlink ? "conversa_desvinculada" : "conversa_vinculada",
+      event_title: unlink ? "Conversa desvinculada do lead" : "Conversa vinculada ao lead",
+      event_description: unlink
+        ? `Conversa ${telefone} (${instanceName}) desvinculada pelo Inbox.`
+        : `Conversa ${telefone} (${instanceName}) vinculada ao lead ${leadId} pelo Inbox.`,
+      actor_type: "gestor",
+      lead_id: unlink ? null : leadId,
+    })
+  } catch { /* log é best-effort */ }
+
   return NextResponse.json({ ok: true })
 }

@@ -79,5 +79,22 @@ export async function PATCH(
 
   const { error } = await wsupabase.from("leads").update(patch).eq("id", id)
   if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
+
+  try {
+    const mudancas: string[] = []
+    if (body.status !== undefined) mudancas.push(`etapa → ${body.status}`)
+    if (body.tags !== undefined) mudancas.push(`tags → [${(Array.isArray(body.tags) ? body.tags : []).filter(Boolean).join(", ") || "—"}]`)
+    if (body.observacoes !== undefined) mudancas.push("observações atualizadas")
+    if (mudancas.length) {
+      await wsupabase.from("automation_logs").insert({
+        event_type: "lead_atualizado_inbox",
+        event_title: "Lead atualizado pelo Inbox",
+        event_description: mudancas.join(" · "),
+        actor_type: "gestor",
+        lead_id: id,
+      })
+    }
+  } catch { /* log é best-effort */ }
+
   return NextResponse.json({ ok: true })
 }

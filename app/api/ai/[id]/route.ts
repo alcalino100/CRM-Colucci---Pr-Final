@@ -4,6 +4,37 @@ import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
 
+// Resumo auditável dos campos alterados (segredos nunca entram no log).
+function resumoAlteracao(body: any): string {
+  const partes: string[] = []
+  if (body.name !== undefined) partes.push(`nome="${body.name}"`)
+  if (body.isActive !== undefined) partes.push(body.isActive ? "ATIVADA" : "DESATIVADA")
+  if (body.testInstance !== undefined) partes.push(`instância-teste="${body.testInstance}"`)
+  if (body.responseMode !== undefined) partes.push(`modo="${body.responseMode}"`)
+  if (body.modelName !== undefined) partes.push(`modelo="${body.modelName}"`)
+  if (body.waitTimeMs !== undefined) partes.push(`espera=${body.waitTimeMs}ms`)
+  if (body.messageCap !== undefined) partes.push(`limite=${body.messageCap}`)
+  if (body.channels !== undefined) partes.push(`canais=[${(body.channels || []).join(",")}]`)
+  if (body.apiToken !== undefined) partes.push("token=alterado")
+  if (body.apiEndpoint !== undefined) partes.push("endpoint=alterado")
+  if (body.systemPrompt !== undefined) partes.push("prompt-sistema=alterado")
+  if (body.additionalInstructions !== undefined) partes.push("instruções=alteradas")
+  if (body.brandVoice !== undefined) partes.push("tom-de-voz=alterado")
+  if (body.handoffRules !== undefined) partes.push("regras-handoff=alteradas")
+  if (body.rules !== undefined) {
+    const r = body.rules || {}
+    const t = r.target || {}
+    if (t.origensPermitidas !== undefined) partes.push(`origens=[${(t.origensPermitidas || []).join(",")}]`)
+    if (t.tags !== undefined) partes.push(`tags=[${(t.tags || []).join(",")}]`)
+    if (t.numeroTeste !== undefined) partes.push(`números-teste=[${(t.numeroTeste || []).join(",")}]`)
+    if (r.enable !== undefined) partes.push(r.enable ? "regras=ON" : "regras=OFF")
+    if (r.whitelistInstances !== undefined) partes.push(`instâncias=[${(r.whitelistInstances || []).join(",")}]`)
+    if (r.schedule !== undefined) partes.push("horário=alterado")
+    if (r.style !== undefined) partes.push("estilo=alterado")
+  }
+  return partes.length ? partes.join(" · ") : "campos não identificados"
+}
+
 export async function PUT(req: NextRequest, { params }: { params: Promise<{id:string}> }){
   const { id } = await params
   const body = await req.json()
@@ -45,6 +76,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{id:st
       data = r.data; error = r.error
     }
     if(error) throw error
+    // Auditoria: toda alteração de agente (liga/desliga, prompt, regras) fica registrada.
+    try {
+      await db().from("automation_logs").insert({
+        event_type: "ia_config_alterada",
+        event_title: `Configuração da IA alterada (${(data as any)?.name ?? id})`,
+        event_description: resumoAlteracao(body),
+        actor_type: "gestor",
+      })
+    } catch { /* log é best-effort */ }
     return NextResponse.json(data)
   }catch(e:any){
     return NextResponse.json({ error:e.message }, {status:500})

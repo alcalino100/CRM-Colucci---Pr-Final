@@ -56,5 +56,16 @@ export async function POST(request: Request) {
   }).select("id").maybeSingle()
 
   if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
+
+  try {
+    await wsupabase.from("automation_logs").insert({
+      event_type: "lead_criado_inbox",
+      event_title: `Lead criado pelo Inbox (${nome})`,
+      event_description: `Lead ${nome} (${telefone}) criado com origem "${origem}" e tags [${tags.join(", ") || "—"}].`,
+      actor_type: "gestor",
+      lead_id: data?.id ?? null,
+    })
+  } catch { /* log é best-effort */ }
+
   return NextResponse.json({ ok: true, lead: { id: data?.id } })
 }
