@@ -78,6 +78,7 @@ export function WidgetPanel(){
       const r = await fetch(`/api/leads/${encodeURIComponent(leadId)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ tags: t })})
       const j = await r.json()
       if(!j.ok) throw new Error(j.erro || "falha")
+      useInboxStore.getState().setConversaTags(conv.id, t)
       toast("Tags salvas")
     }catch(e:any){
       toast(e.message || "Erro ao salvar tags","error")
@@ -101,19 +102,28 @@ export function WidgetPanel(){
   async function vincularLead(criarNovo: boolean){
     setBuscando(true)
     try{
-      const phone = normalizePhone(conv.telefone).replace(/\D/g,"")
+      const rPhone = normalizePhone(conv.telefone)
       let lid = leadId
+      let leadTags: string[] = tags
       if(!lid){
         // busca lead existente por telefone
-        const busca = await fetch(`/api/leads?search=${encodeURIComponent(phone)}`).then(r=>r.json())
-        const existente = busca?.leads?.find((l:any)=>String(l.telefone||"").replace(/\D/g,"")===phone)
-        if(existente){ lid = existente.id }
+        const busca = await fetch(`/api/leads?search=${encodeURIComponent(rPhone)}`).then(r=>r.json())
+        const existente = busca?.leads?.find((l:any)=> normalizePhone(String(l.telefone||"")) === rPhone)
+        if(existente){
+          lid = existente.id
+          leadTags = ((existente.referencias||[]) as any[]).map((x:any)=> typeof x === "string" ? x : x?.ref ?? "").filter(Boolean)
+        }
         else if(criarNovo){
-          const criado = await fetch("/api/leads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ nome: conv.leadName, telefone: phone, origem: conv.origem === "Instagram" ? "Instagram" : conv.origem === "Site" ? "Site" : "WhatsApp", status:"novo", referencias: tags, observacoes: "Criado pelo inbox WhatsApp" })}).then(r=>r.json())
-          if(criado?.lead?.id) lid = criado.lead.id
+          const criado = await fetch("/api/leads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ nome: conv.leadName, telefone: conv.telefone, origem: conv.origem === "Instagram" ? "Instagram" : conv.origem === "Site" ? "Site" : "WhatsApp", status:"novo", referencias: tags, observacoes: "Criado pelo inbox WhatsApp" })}).then(r=>r.json())
+          if(criado?.lead?.id){ lid = criado.lead.id; leadTags = tags }
         }
       }
       if(!lid) throw new Error("Não foi possível encontrar/criar um lead")
+      // reflete o vínculo no store para a UI e o salvamento de tags funcionarem já
+      const st = useInboxStore.getState()
+      st.setConversaLead(conv.id, lid, leadTags)
+      // persiste o vínculo nas mensagens da instância (sobrevive ao reload)
+      await fetch("/api/whatsapp/chat/vincular",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ instanceName: st.instanciaSelecionada, telefone: conv.telefone, leadId: lid })}).catch(()=>{})
       toast("Conversa vinculada ao lead")
       setModalVincular(false)
     }catch(e:any){
