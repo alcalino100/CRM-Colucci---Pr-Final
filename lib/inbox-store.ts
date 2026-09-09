@@ -21,6 +21,7 @@ type InboxState = {
   setConversas: (c: InboxConversation[]) => void
   setConversaLead: (id: string, leadId: string, tags?: string[]) => void
   setConversaTags: (id: string, tags: string[]) => void
+  setConversaStatus: (id: string, status: string) => void
   setMensagens: (m: Record<string, InboxMessage[]>) => void
   setModoReal: (v: boolean) => void
   setInstancia: (v: string) => void
@@ -56,6 +57,10 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   setConversaTags: (id, tags) =>
     set((s) => ({
       conversas: s.conversas.map((c) => (c.id === id ? { ...c, tags } : c)),
+    })),
+  setConversaStatus: (id, status) =>
+    set((s) => ({
+      conversas: s.conversas.map((c) => (c.id === id ? { ...c, leadStatus: status } : c)),
     })),
   setMensagens: (m) => set({ mensagens: m }),
   setModoReal: (v) => set({ modoReal: v }),

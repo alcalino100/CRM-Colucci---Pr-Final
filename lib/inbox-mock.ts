@@ -18,6 +18,7 @@ export type InboxConversation = {
   telefone: string
   email: string
   status: InboxStatus
+  leadStatus?: string
   followUpAtivo: boolean
   tentativasRestantes?: number
   proximaTentativaISO?: string

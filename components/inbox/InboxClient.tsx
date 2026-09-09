@@ -100,6 +100,7 @@ export function InboxClient(){
           telefone: c.telefone || "",
           email: "",
           status: c.leadId && leadsMap.get(c.leadId) ? mapStatus(leadsMap.get(c.leadId).status) : (c.status ? mapStatus(c.status) : "aguardando_resposta"),
+          leadStatus: c.leadId && leadsMap.get(c.leadId) ? (leadsMap.get(c.leadId).status as string) : (c.leadStatus ?? undefined),
           followUpAtivo: c.iaRespondendo !== undefined ? c.iaRespondendo : (c.leadId ? leadsMap.get(c.leadId)?.status === "em_followup" : false),
           tentativasRestantes: c.leadId && leadsMap.get(c.leadId)?.status === "em_followup" ? 2 : undefined,
           proximaTentativaISO: c.leadId && leadsMap.get(c.leadId)?.status === "em_followup" ? new Date(Date.now()+2*3600_000).toISOString() : undefined,
