@@ -1,7 +1,8 @@
 // Avisa no WhatsApp (gestor + Pati + Kleber) quando um lead entra em negociação com valor.
+// Exclusivo da pipeline de VENDA — locação não chama esta rota (ver kanban-board-locacao.tsx).
 // POST best-effort: nunca derruba o fluxo do CRM.
 import { NextResponse } from "next/server"
-import { notifyGestorWhatsApp, resolveNotifyTarget, sendWhatsAppText } from "@/lib/whatsapp/server"
+import { notifyGestorWhatsApp, resolveNotifyTarget, sendWhatsAppText, wsupabase } from "@/lib/whatsapp/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -44,6 +45,15 @@ export async function POST(request: Request) {
     extraOk = r.ok
     extraErro = r.erro
   }
+
+  try {
+    await wsupabase.from("automation_logs").insert({
+      event_type: "notificacao_negociacao",
+      event_title: `Aviso de negociação (venda): ${nome}`,
+      event_description: `Proposta de VENDA — ${nome} · ${brl(valor)} · ${corretorNome ?? "—"}${refProposta?.trim() ? ` · Ref ${refProposta.trim()}` : ""} · gestor:${res.ok ? "ok" : "falha"} extra:${extraOk ? "ok" : "falha"}`,
+      actor_type: "system",
+    })
+  } catch { /* log é best-effort */ }
 
   return NextResponse.json({ ok: res.ok && extraOk, erro: res.erro ?? extraErro ?? null })
 }

@@ -208,17 +208,9 @@ export function KanbanBoardLocacao({
       notify(`Proposta registrada no seu lead ${propLead.nome}: ${brl(valor)}`, { tipo: "proposta", paraUsuarioId: propLead.corretorId, leadId: propLead.id })
     }
     toast("Proposta registrada. Gestores notificados.")
-    fetch("/api/whatsapp/notify-proposta", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      keepalive: true,
-      body: JSON.stringify({
-        nome: propLead.nome,
-        valor,
-        corretorNome: userName(propLead.corretorId),
-        refProposta: pRefs.trim(),
-      }),
-    }).catch(() => {})
+    // Locação NÃO dispara o "🤝 LEAD EM NEGOCIAÇÃO 🤝" no WhatsApp — esse aviso é
+    // exclusivo das negociações de VENDA (kanban-board.tsx). As notificações
+    // internas acima continuam valendo para locação.
     setPropLead(null)
   }
 
