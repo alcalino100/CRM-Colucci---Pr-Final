@@ -4,7 +4,7 @@ import { baixarEArmazenarMidia, detectarMidia, mapConnectionState, notifyDisconn
 import { registrarRespostaDeLead, registrarStatusEntrega } from "@/lib/automation-services"
 import { enviarLeadCapi } from "@/lib/meta/capi"
 import { TELEFONES_BLOQUEADOS, isTelefoneBloqueado as isBlockedCentral } from "@/lib/telefones-bloqueados"
-import { handlePatriciaInbound, pausarIaMensagemManual } from "@/lib/ai/inboxHandler"
+import { handlePatriciaInbound, isNumeroTesteIA, pausarIaMensagemManual } from "@/lib/ai/inboxHandler"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -178,7 +178,10 @@ async function handleMessageUpsert(payload: any) {
   const telefone = onlyDigits(remoteJid.split("@")[0])
   if (!telefone) return
   // Números internos bloqueados: ignora completamente (sem lead, sem mensagem, sem notificação)
-  if (isBlocked(telefone)) return
+  // — EXCETO números de teste configurados num agente IA ativo: sem esse bypass, testar o
+  // bot com o próprio time (ex.: corretor na lista de bloqueio) é impossível, pois o "oi"
+  // de teste é descartado antes de chegar à IA.
+  if (isBlocked(telefone) && !(await isNumeroTesteIA(telefone))) return
   const mensagemId: string | null = msg?.key?.id ?? null
   const midia = detectarMidia(msg?.message)
   // Corpo: texto puro, ou a legenda da mídia (imagem/vídeo/documento podem ter legenda).

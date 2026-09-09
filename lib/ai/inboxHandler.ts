@@ -200,6 +200,26 @@ export async function dispararRespostaIA({ telefone, instanceName }: { telefone:
   }
 }
 
+// Número de teste de algum agente ATIVO (com regras habilitadas)? Comparação
+// normalizada (com/sem 55) para aceitar "18991502791" e "5518991502791" igual.
+// Usado pelo webhook para NÃO descartar mensagens de teste vindas de números
+// internos bloqueados — sem isso, testar o bot com o próprio time é impossível.
+export async function isNumeroTesteIA(telefone: string | undefined): Promise<boolean> {
+  if (!telefone) return false
+  const alvo = normalizePhone(telefone)
+  if (!alvo) return false
+  try {
+    const { data: agentes } = await db().from("ai_agents").select("config,is_active")
+    return (agentes ?? []).some((a: any) => {
+      if (!a?.is_active || !getRules(a.config).enable) return false
+      const lista: string[] = getRules(a.config).target.numeroTeste || []
+      return lista.some((n) => normalizePhone(String(n || "")) === alvo)
+    })
+  } catch {
+    return false
+  }
+}
+
 export async function handlePatriciaInbound({ telefone, texto, leadId, instanceName }: { telefone: string; texto: string; leadId?: string; instanceName?: string }){
   try{
     // 1) REGRA DE OURO: instância vinculada a IA ativa + regras habilitadas
@@ -207,7 +227,8 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
     if(!agente) return
     const AI_ID = agente.id as string
     const rules: AgentRules = getRules(agente.config, agente)
-    const isTestNumber = rules.target.numeroTeste.includes(telefone)
+    // Match normalizado: "18991502791" bate com "5518991502791" e vice-versa.
+    const isTestNumber = (rules.target.numeroTeste || []).some((n) => normalizePhone(String(n || "")) === normalizePhone(telefone))
 
     // 2) QUANDO: se houve horário configurado e fora do expediente, não responde agora
     if (!isTestNumber && !dentroDoHorario(rules)) return
