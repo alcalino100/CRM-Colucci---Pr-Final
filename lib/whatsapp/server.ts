@@ -191,7 +191,7 @@ export async function resolveNotifyTarget(): Promise<NotifyTarget | null> {
 }
 
 // Envia um texto pela Evolution. number aceita telefone (só dígitos) ou JID de grupo (@g.us).
-export async function sendWhatsAppText(instanceName: string, number: string, text: string): Promise<{ ok: boolean; erro?: string }> {
+export async function sendWhatsAppText(instanceName: string, number: string, text: string): Promise<{ ok: boolean; erro?: string; keyId?: string }> {
   const cfg = evolutionConfig()
   if (!cfg.ok) return { ok: false, erro: "Integração WhatsApp não configurada." }
   try {
@@ -204,7 +204,11 @@ export async function sendWhatsAppText(instanceName: string, number: string, tex
       const txt = (await res.text().catch(() => "")).slice(0, 200)
       return { ok: false, erro: `HTTP ${res.status} ${txt}` }
     }
-    return { ok: true }
+    // O corpo 201 da Evolution traz a "key" do envio — usada para correlacionar o eco
+    // (fromMe) e evitar duplicata no Inbox.
+    const j = await res.json().catch(() => null)
+    const keyId: string | undefined = j?.key?.id ?? undefined
+    return { ok: true, keyId }
   } catch (err) {
     const cause = (err as any)?.cause?.code || (err as any)?.name || "UNKNOWN"
     return { ok: false, erro: cause }

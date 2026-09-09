@@ -145,10 +145,11 @@ export function WidgetPanel(){
   async function iniciarAcao(acao: "ia" | "automacao"){
     setAcaoIniciando(acao)
     try{
-      const r = await fetch(`/api/whatsapp/chat/ia-pause`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ telefone: conv.telefone, pausado: acao === "automacao" })})
+      const instanciaSelecionada = useInboxStore.getState().instanciaSelecionada
+      const r = await fetch(`/api/whatsapp/chat/ia-pause`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ telefone: conv.telefone, instanceName: instanciaSelecionada, pausado: acao === "automacao" })})
       const j = await r.json()
       if(!j.ok) throw new Error(j.erro || "falha")
-      if(acao === "ia"){ criarFollowUp(conv.id); toast("Atendimento IA iniciado nesta conversa") }
+      if(acao === "ia"){ criarFollowUp(conv.id); toast(j.aviso ? `IA iniciada (aviso: ${j.aviso})` : "IA iniciada e respondendo agora nesta conversa") }
       else { cancelarFollowUp(conv.id); toast("Automação de follow-up iniciada (IA pausada)") }
     }catch(e:any){
       toast(e.message || "Erro ao iniciar","error")

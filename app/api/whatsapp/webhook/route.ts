@@ -192,6 +192,11 @@ async function handleMessageUpsert(payload: any) {
   // aparecer no chat do gestor, ligada ao lead quando o telefone bate. Não passa pela
   // detecção de anúncio nem cria lead — essa lógica é só para mensagens recebidas.
   if (msg?.key?.fromMe === true) {
+    // Eco de uma resposta já registrada pela IA (key_id correlaciona): não duplica.
+    const { data: jaExiste } = mensagemId
+      ? await wsupabase.from("whatsapp_mensagens").select("id").eq("mensagem_id", mensagemId).maybeSingle()
+      : { data: null }
+    if (jaExiste) return
     await wsupabase.from("whatsapp_mensagens").insert({
       instance_name: instanceName,
       telefone,
@@ -204,8 +209,9 @@ async function handleMessageUpsert(payload: any) {
     })
     await preencherMidiaUrl(instanceName, mensagemId, midia)
     // Atendimento manual: pausa a conversa IA deste contato (ai_responding=false) e
-    // move o lead para em_atendimento — o corretor assumiu o papo.
-    void pausarIaMensagemManual({ telefone, instanceName }).catch(() => {})
+    // move o lead para em_atendimento — o corretor assumiu o papo. (Ecos da própria IA
+    // são ignorados dentro de pausarIaMensagemManual via textoOutbound.)
+    void pausarIaMensagemManual({ telefone, instanceName, textoOutbound: corpo }).catch(() => {})
     return
   }
 

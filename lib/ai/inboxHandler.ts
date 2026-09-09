@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { generateAIResponse } from "./generateResponse"
 import { normalizePhone } from "@/lib/labels"
+import { sendWhatsAppText } from "@/lib/whatsapp/server"
 import { getBoundInstances, getRules, dentroDoHorario, leadAptoParaResposta, regrasParaPrompt, sleep, type AgentRules } from "./rules"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
@@ -57,7 +58,7 @@ async function moverLeadPipeline(leadId: string, para: string): Promise<void> {
 // STOP automático: gestor/corretor enviou mensagem manualmente na instância. A conversa
 // IA daquele contato é PAUSADA (ai_responding=false), leva o lead para em_atendimento e
 // registra o resumo nas observações — o atendimento passa a ser manual.
-export async function pausarIaMensagemManual({ telefone, instanceName }: { telefone: string; instanceName?: string }): Promise<void> {
+export async function pausarIaMensagemManual({ telefone, instanceName, textoOutbound }: { telefone: string; instanceName?: string; textoOutbound?: string }): Promise<void> {
   try {
     const { data: agentes } = await db().from("ai_agents").select("id,name,config")
     const agente = (agentes ?? []).find((a: any) => getBoundInstances(a.config).includes(instanceName || ""))
@@ -67,6 +68,15 @@ export async function pausarIaMensagemManual({ telefone, instanceName }: { telef
     if (agente) {
       const { data: conv } = await db().from("conversations_ia").select("id,ai_responding").eq("ai_id", agente.id).eq("contact_id", key).maybeSingle()
       if (conv?.id) {
+        // Eco da própria IA (o envio de uma resposta gera um evento fromMe na Evolution).
+        // Se o texto que saiu é igual à última resposta da IA, NÃO é atendimento manual —
+        // e não pode pausar a conversa nem mover o lead.
+        if (textoOutbound) {
+          try {
+            const { data: ultima } = await db().from("messages_ia").select("content").eq("conversation_id", conv.id).eq("role", "ai").order("created_at", { ascending: false }).limit(1).maybeSingle()
+            if (ultima && (ultima.content || "").trim() === (textoOutbound || "").trim()) return
+          } catch { /* comparação é best-effort */ }
+        }
         if (conv.ai_responding) await registrarResumoConversa(conv.id, lead?.id, "pausada — atendimento manual pelo corretor")
         await db().from("conversations_ia").update({ ai_responding: false }).eq("id", conv.id)
       }
@@ -82,6 +92,112 @@ export async function pausarIaMensagemManual({ telefone, instanceName }: { telef
       })
     } catch { /* best-effort */ }
   } catch { /* best-effort */ }
+}
+
+// Gera + registra + ENVIA a resposta da IA numa conversa já existente (com limite de
+// mensagens, espera anti-robô, gravação no histórico, envio Evolution e auditoria).
+// Usado pelo fluxo automático (handlePatriciaInbound) e pelo disparo manual ("Iniciar IA").
+// O envio também joga a mensagem direto no Inbox (de_mim) para o gestor ver na hora,
+// com deduplicação via key_id quando a Evolution ecoa o fromMe de volta.
+async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfetivo, telefone, instanceName, userMessage, inserirUsuario, ignorarLimite }: {
+  convId: string; AI_ID: string; agenteNome: string; rules: AgentRules;
+  leadIdEfetivo?: string; telefone: string; instanceName?: string;
+  userMessage: string; inserirUsuario: boolean; ignorarLimite: boolean;
+}): Promise<{ ok: boolean; erro?: string }> {
+  try {
+    if (!ignorarLimite && rules.style.maxMessages > 0) {
+      const { count } = await db().from("messages_ia").select("id", { count: "exact", head: true }).eq("conversation_id", convId).eq("role", "ai")
+      if ((count ?? 0) >= rules.style.maxMessages) {
+        await registrarResumoConversa(convId, leadIdEfetivo, `atingiu o limite de ${rules.style.maxMessages} mensagens da IA`)
+        await db().from("conversations_ia").update({ ai_responding: false }).eq("id", convId)
+        try {
+          await db().from("automation_logs").insert({
+            lead_id: leadIdEfetivo ?? null,
+            event_type: "ia_limite_atingido",
+            event_title: "Limite de mensagens da IA atingido",
+            event_description: `Conversa ${convId} pausada após ${count} respostas da IA (máx. ${rules.style.maxMessages}).`,
+            actor_type: "ia",
+          })
+        } catch { /* log é best-effort */ }
+        return { ok: false, erro: "Limite de mensagens da IA atingido." }
+      }
+    }
+
+    if (rules.style.waitMs > 0) await sleep(Math.min(rules.style.waitMs, 15000))
+
+    const { data: history } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", { ascending: true }).limit(10)
+    if (inserirUsuario) await db().from("messages_ia").insert({ id: `msg_${Date.now()}`, conversation_id: convId, role: "user", content: userMessage })
+
+    const { message: aiResp } = await generateAIResponse({
+      aiId: AI_ID,
+      userMessage,
+      conversationHistory: (history || []).map((m: any) => ({ role: m.role, content: m.content })),
+      regrasSuplementares: regrasParaPrompt(rules, agenteNome || "assistente da Colucci Imóveis"),
+    })
+    await db().from("messages_ia").insert({ id: `msg_${Date.now() + 1}`, conversation_id: convId, role: "ai", content: aiResp })
+
+    if (!instanceName) return { ok: false, erro: "Instância não informada." }
+    const envRes = await sendWhatsAppText(instanceName, telefone, aiResp)
+
+    // Reflete a resposta no Inbox imediatamente (o gestor vê na hora; o eco fromMe da
+    // Evolution apenas confirma a entrega e NÃO duplica graças ao key_id).
+    if (envRes.ok) {
+      try {
+        await db().from("whatsapp_mensagens").insert({
+          instance_name: instanceName,
+          telefone,
+          nome_contato: null,
+          corpo: aiResp,
+          lead_id: leadIdEfetivo ?? null,
+          de_mim: true,
+          veio_de_anuncio: false,
+          mensagem_id: envRes.keyId ?? null,
+        })
+      } catch { /* vitrine é best-effort */ }
+    }
+
+    try {
+      await db().from("automation_logs").insert({
+        lead_id: leadIdEfetivo || null,
+        event_type: envRes.ok ? "ia_resposta_enviada" : "ia_envio_falhou",
+        event_title: envRes.ok ? "IA respondeu no WhatsApp" : "Falha ao enviar resposta da IA",
+        event_description: envRes.ok ? `IA respondeu via ${instanceName} para ${telefone}` : `Falha ao enviar resposta via WhatsApp para ${telefone}: ${envRes.erro}`,
+        actor_type: "ia",
+        payload: JSON.stringify({ ai_id: AI_ID, convId, instance: instanceName, key_id: envRes.keyId ?? null }).slice(0, 400),
+      })
+    } catch { /* log é best-effort */ }
+
+    return envRes.ok ? { ok: true } : { ok: false, erro: envRes.erro }
+  } catch (e: any) {
+    console.error("[IA] erro responder", e)
+    return { ok: false, erro: String(e?.message ?? e) }
+  }
+}
+
+// Botão "Iniciar IA aqui"/"Retomar IA" do Inbox: reativa a conversa e dispara uma resposta
+// IMEDIATA para a última mensagem do lead — diferente do fluxo automático, que só responde
+// quando chega mensagem nova.
+export async function dispararRespostaIA({ telefone, instanceName }: { telefone: string; instanceName?: string }): Promise<{ ok: boolean; erro?: string }> {
+  try {
+    const agente = await agenteParaInstancia(instanceName)
+    if (!agente) return { ok: false, erro: "Nenhum agente IA ativo está vinculado a esta instância do WhatsApp." }
+    const AI_ID = agente.id as string
+    const rules = getRules(agente.config, agente)
+    const lead = await acharLeadVinculado(telefone, instanceName)
+    const key = lead?.id ?? telefone
+    const { data: conv } = await db().from("conversations_ia").select("id,ai_responding").eq("ai_id", AI_ID).eq("contact_id", key).maybeSingle()
+    if (!conv?.id) return { ok: false, erro: "Este contato ainda não tem conversa IA registrada. Quando chegar a próxima mensagem, a IA responderá sozinha." }
+    if (!conv.ai_responding) await db().from("conversations_ia").update({ ai_responding: true }).eq("id", conv.id)
+    const { data: ultima } = await db().from("messages_ia").select("content").eq("conversation_id", conv.id).eq("role", "user").order("created_at", { ascending: false }).limit(1).maybeSingle()
+    if (!ultima?.content) return { ok: false, erro: "Essa conversa ainda não tem mensagem do lead para responder." }
+    return await responderConversaIa({
+      convId: conv.id, AI_ID, agenteNome: agente.name, rules,
+      leadIdEfetivo: lead?.id, telefone, instanceName,
+      userMessage: ultima.content, inserirUsuario: false, ignorarLimite: true,
+    })
+  } catch (e: any) {
+    return { ok: false, erro: String(e?.message ?? e) }
+  }
 }
 
 export async function handlePatriciaInbound({ telefone, texto, leadId, instanceName }: { telefone: string; texto: string; leadId?: string; instanceName?: string }){
@@ -154,69 +270,12 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       return
     }
 
-    // 5d) Limite de mensagens: máx. msgs da IA por conversa (messageCap)
-    if (rules.style.maxMessages > 0) {
-      const { count } = await db().from("messages_ia").select("id", { count: "exact", head: true }).eq("conversation_id", convId).eq("role", "ai")
-      if ((count ?? 0) >= rules.style.maxMessages) {
-        await registrarResumoConversa(convId, leadIdEfetivo, `atingiu o limite de ${rules.style.maxMessages} mensagens da IA`)
-        await db().from("conversations_ia").update({ ai_responding: false }).eq("id", convId)
-        try {
-          await db().from("automation_logs").insert({
-            lead_id: leadIdEfetivo ?? null,
-            event_type: "ia_limite_atingido",
-            event_title: "Limite de mensagens da IA atingido",
-            event_description: `Conversa ${convId} pausada após ${count} respostas da IA (máx. ${rules.style.maxMessages}).`,
-            actor_type: "ia",
-          })
-        } catch { /* best-effort */ }
-        return
-      }
-    }
-
-    // 5e) Espera configurada antes de responder (anti-robô)
-    if (rules.style.waitMs > 0) await sleep(Math.min(rules.style.waitMs, 15000))
-
-    const { data: history } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", {ascending:true}).limit(10)
-    await db().from("messages_ia").insert({ id:`msg_${Date.now()}`, conversation_id: convId, role:"user", content: texto })
-
-    const { message: aiResp } = await generateAIResponse({
-      aiId: AI_ID,
-      userMessage: texto,
-      conversationHistory: (history||[]).map((m:any)=>({role:m.role, content:m.content})),
-      regrasSuplementares: regrasParaPrompt(rules, (agente.name || "assistente da Colucci Imóveis")),
+    // 5d) Gera, registra e envia (com espera anti-robô, limite de mensagens e auditoria)
+    await responderConversaIa({
+      convId, AI_ID, agenteNome: agente.name, rules,
+      leadIdEfetivo, telefone, instanceName,
+      userMessage: texto, inserirUsuario: true, ignorarLimite: false,
     })
-
-    await db().from("messages_ia").insert({ id:`msg_${Date.now()+1}`, conversation_id: convId, role:"ai", content: aiResp })
-
-    // 6) Envia via WhatsApp da instância — UMA única chamada (evita duplicação).
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://crm-colucci-pre-final.vercel.app"
-    let envRes = await fetch(`${siteUrl}/api/whatsapp/send`, {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ instanceName, telefone, texto: aiResp })
-    }).then(async r=>({ok:r.ok, erro: r.ok ? "" : await r.text()})).catch((e:any)=>({ok:false, erro:String(e)}))
-    if(!envRes.ok){
-      const evoUrl = process.env.EVOLUTION_API_URL
-      const evoKey = process.env.EVOLUTION_API_KEY
-      if(evoUrl && evoKey){
-        envRes = await fetch(`${evoUrl}/message/sendText/${instanceName}`, {
-          method:"POST",
-          headers:{ "Content-Type":"application/json", "apikey": evoKey },
-          body: JSON.stringify({ number: telefone, text: aiResp })
-        }).then(async r=>({ok:r.ok, erro: r.ok ? "" : await r.text()})).catch((e:any)=>({ok:false, erro:String(e)}))
-      }
-    }
-    // Registra o resultado para auditoria/alertas imediatos
-    try {
-      await db().from("automation_logs").insert({
-        lead_id: leadIdEfetivo || null,
-        event_type: envRes.ok ? "ia_resposta_enviada" : "ia_envio_falhou",
-        event_title: envRes.ok ? "IA respondeu no WhatsApp" : "Falha ao enviar resposta da IA",
-        event_description: envRes.ok ? `IA respondeu via ${instanceName} para ${telefone}` : `Falha ao enviar resposta via WhatsApp para ${telefone}: ${envRes.erro}`,
-        actor_type: "ia",
-        payload: JSON.stringify({ ai_id: AI_ID, convId, instance: instanceName }).slice(0,400),
-      })
-    } catch { /* log é best-effort */ }
   }catch(e){
     console.error("[IA] erro inbox", e)
   }
