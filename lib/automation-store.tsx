@@ -240,6 +240,21 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     }
   }, [])
 
+  // ---------- Auditoria do painel ----------
+  // Toda mudança feita no painel de automações (liga/desliga, config, jobs, leads)
+  // fica registrada em automation_logs — nada muda "em silêncio".
+  const auditPainel = async (eventType: string, titulo: string, descricao: string, leadId?: string | null) => {
+    try {
+      await supabase.from("automation_logs").insert({
+        event_type: eventType,
+        event_title: titulo,
+        event_description: descricao,
+        actor_type: "gestor",
+        lead_id: leadId ?? null,
+      })
+    } catch { /* auditoria é best-effort */ }
+  }
+
   // ---------- CRUD ----------
   const addAutomation: AutomationStore["addAutomation"] = async (a) => {
     const { data, error } = await supabase.from("automations").insert({
@@ -269,6 +284,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     }).select("id").maybeSingle()
     if (error) return { ok: false, error: error.message }
     await loadAutomations()
+    await auditPainel("automacao_criada", `Automação criada (${a.name})`, `Automação "${a.name}" criada no painel (status inicial: ${a.status}).`)
     return { ok: true, id: data?.id }
   }
 
@@ -280,13 +296,17 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     const { error } = await supabase.from("automations").update(row).eq("id", id)
     if (error) return { ok: false, error: error.message }
     await loadAutomations()
+    const nome = automations.find((x) => x.id === id)?.name ?? id
+    await auditPainel("automacao_atualizada", `Automação atualizada (${nome})`, `Automação "${nome}" alterada no painel (campos: ${Object.keys(row).join(", ") || "—"}).`)
     return { ok: true }
   }
 
   const deleteAutomation: AutomationStore["deleteAutomation"] = async (id) => {
+    const nome = automations.find((x) => x.id === id)?.name ?? id
     const { error } = await supabase.from("automations").update({ deleted_at: new Date().toISOString() }).eq("id", id)
     if (error) return { ok: false, error: error.message }
     await loadAutomations()
+    await auditPainel("automacao_excluida", `Automação excluída (${nome})`, `Automação "${nome}" excluída no painel.`)
     return { ok: true }
   }
 
@@ -294,13 +314,22 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     const auto = automations.find((a) => a.id === id)
     if (!auto) return { ok: false, error: "Automação não encontrada." }
     const newStatus = auto.status === "active" ? "paused" : "active"
-    return updateAutomation(id, { status: newStatus })
+    const { error } = await supabase.from("automations").update({ status: newStatus }).eq("id", id)
+    if (error) return { ok: false, error: error.message }
+    await loadAutomations()
+    await auditPainel(
+      newStatus === "paused" ? "automacao_pausada" : "automacao_ativada",
+      newStatus === "paused" ? `Automação pausada (${auto.name})` : `Automação ativada (${auto.name})`,
+      `Automação "${auto.name}" ${newStatus === "paused" ? "PAUSADA" : "ATIVADA"} no painel.`,
+    )
+    return { ok: true }
   }
 
   const addTemplate: AutomationStore["addTemplate"] = async (t) => {
     const { data, error } = await supabase.from("automation_message_templates").insert(t).select("id").maybeSingle()
     if (error) return { ok: false, error: error.message }
     await loadTemplates()
+    await auditPainel("template_criado", "Modelo de mensagem criado", `Modelo "${(t as any)?.name ?? (t as any)?.title ?? "—"}" criado no painel.`)
     return { ok: true, id: data?.id }
   }
 
@@ -308,6 +337,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     const { error } = await supabase.from("automation_message_templates").update(patch).eq("id", id)
     if (error) return { ok: false, error: error.message }
     await loadTemplates()
+    await auditPainel("template_atualizado", "Modelo de mensagem atualizado", `Modelo ${id} alterado no painel (campos: ${Object.keys(patch).join(", ") || "—"}).`)
     return { ok: true }
   }
 
@@ -318,6 +348,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
       .eq("id", jobId)
     if (error) return { ok: false, error: error.message }
     await loadJobs()
+    await auditPainel("job_cancelado", "Job cancelado manualmente", `Job ${jobId} cancelado no painel (motivo: ${reason}).`, jobs.find((j: any) => j.id === jobId)?.lead_id ?? null)
     return { ok: true }
   }
 
@@ -331,6 +362,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
       .select("id")
     if (error) return { ok: false, error: error.message }
     await loadJobs()
+    await auditPainel("fila_limpa", "Fila de automação limpa", `Fila limpa no painel: ${data?.length ?? 0} job(s) cancelado(s) (motivo: ${reason}).`)
     return { ok: true, cancelled: data?.length ?? 0 }
   }
 
@@ -341,6 +373,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
       .eq("id", jobId)
     if (error) return { ok: false, error: error.message }
     await loadJobs()
+    await auditPainel("job_reagendado", "Job reagendado manualmente", `Job ${jobId} reagendado no painel.`, jobs.find((j: any) => j.id === jobId)?.lead_id ?? null)
     return { ok: true }
   }
 
@@ -353,6 +386,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     }, { onConflict: "lead_id" })
     if (error) return { ok: false, error: error.message }
     await loadLeadSettings(leadId)
+    await auditPainel("lead_pausado_automacao", "Automação pausada para o lead", `Automação pausada para o lead no painel (motivo: ${reason}).`, leadId)
     return { ok: true }
   }
 
@@ -365,6 +399,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     }, { onConflict: "lead_id" })
     if (error) return { ok: false, error: error.message }
     await loadLeadSettings(leadId)
+    await auditPainel("lead_retomado_automacao", "Automação retomada para o lead", "Automação retomada para o lead no painel.", leadId)
     return { ok: true }
   }
 
@@ -376,6 +411,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     }, { onConflict: "lead_id" })
     if (error) return { ok: false, error: error.message }
     await loadLeadSettings(leadId)
+    await auditPainel("lead_bloqueado_automacao", "Lead bloqueado (não contatar)", `Lead marcado como não contatar no painel (motivo: ${reason}).`, leadId)
     return { ok: true }
   }
 
@@ -384,6 +420,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     const { error } = await supabase.from("automation_global_settings").update(patch).eq("id", globalSettings.id)
     if (error) return { ok: false, error: error.message }
     await loadGlobalSettings()
+    await auditPainel("config_global_automacao", "Configuração global de automação alterada", `Config global alterada no painel (campos: ${Object.keys(patch).join(", ") || "—"}).`)
     return { ok: true }
   }
 

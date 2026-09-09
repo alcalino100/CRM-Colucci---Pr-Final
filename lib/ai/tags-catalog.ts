@@ -120,5 +120,13 @@ export async function saveTagsCatalog(tags: TagDef[]): Promise<{ ok: boolean; er
   cfg.tagsCatalog = tags
   const { error } = await wsupabase.from("ai_agents").update({ config: cfg, updated_at: new Date().toISOString() }).eq("id", masterAgentId)
   if (error) return { ok: false, error: error.message }
+  try {
+    await wsupabase.from("automation_logs").insert({
+      event_type: "ia_config_alterada",
+      event_title: "Catálogo de tags atualizado",
+      event_description: `Catálogo de tags do agente ${masterAgentId} atualizado no painel (${tags.length} tag(s)).`,
+      actor_type: "gestor",
+    })
+  } catch { /* auditoria é best-effort */ }
   return { ok: true }
 }
