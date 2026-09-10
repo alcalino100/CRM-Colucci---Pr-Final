@@ -57,13 +57,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { data, error } = await db().from("documents").insert(row).select("id").single()
     if (error) throw error
     const docId = (data as { id: string }).id
-    let indexed = { chunks: 0, dim: 0, model: "" }
+    let indexed = { chunks: 0, dim: 0, model: "", erro: null as string | null }
     if (content.trim()) {
       try {
         const { indexDocument } = await import("@/lib/ai/ragSearch")
-        indexed = await indexDocument(docId, content)
-      } catch (e) {
-        console.error("[KB] falha ao indexar", e)
+        const r = await indexDocument(docId, content)
+        indexed = { ...r, erro: r.chunks === 0 ? "embedding falhou para todos os chunks (verifique GEMINI_API_KEY/OPENAI_API_KEY no ambiente)" : null }
+      } catch (e: unknown) {
+        indexed.erro = e instanceof Error ? e.message : String(e)
+        console.error("[KB] falha ao indexar", indexed.erro)
       }
     }
     try {
