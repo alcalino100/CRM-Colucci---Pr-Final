@@ -99,28 +99,35 @@ async function embeddingGemini(text: string): Promise<EmbeddingOut> {
   if (!ordem.length) throw new Error("Gemini: nenhum modelo com suporte a embedContent")
   let ultimoErro = ""
   for (const m of ordem) {
-    let r: Response
-    try {
-      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:embedContent?key=${key}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: { parts: [{ text }] } }),
-      })
-    } catch (e: unknown) {
-      ultimoErro = `rede (${e instanceof Error ? e.message : String(e)})`
-      continue
-    }
-    const j = await r.json().catch(() => null)
-    if (r.ok) {
-      const vector: number[] = j?.embedding?.values ?? []
-      if (!vector.length) {
-        ultimoErro = "vetor vazio"
+    // Tenta primeiro com saída 1536d (cabe na coluna vector(1536) + índice ivfflat);
+    // se o modelo recusar o parâmetro, tenta sem ele.
+    const tentativas: Record<string, unknown>[] = m === "embedding-001"
+      ? [{ content: { parts: [{ text }] } }]
+      : [{ content: { parts: [{ text }] }, outputDimensionality: 1536 }, { content: { parts: [{ text }] } }]
+    for (const corpo of tentativas) {
+      let r: Response
+      try {
+        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:embedContent?key=${key}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(corpo),
+        })
+      } catch (e: unknown) {
+        ultimoErro = `rede (${e instanceof Error ? e.message : String(e)})`
         continue
       }
-      return { vector, dim: vector.length, model: m }
+      const j = await r.json().catch(() => null)
+      if (r.ok) {
+        const vector: number[] = j?.embedding?.values ?? []
+        if (!vector.length) {
+          ultimoErro = "vetor vazio"
+          continue
+        }
+        return { vector, dim: vector.length, model: m }
+      }
+      ultimoErro = `HTTP ${r.status} (${j?.error?.message || "sem detalhe"})`
+      if (!/not found|not supported/i.test(ultimoErro)) break
     }
-    ultimoErro = `HTTP ${r.status} (${j?.error?.message || "sem detalhe"})`
-    if (!/not found|not supported/i.test(ultimoErro)) break
   }
   throw new Error(`Gemini embeddings falhou: ${ultimoErro}`)
 }
