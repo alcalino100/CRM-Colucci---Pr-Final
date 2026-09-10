@@ -262,6 +262,7 @@ export function KanbanBoard({
       notify(`Proposta registrada no seu lead ${propLead.nome}: ${brl(valor)}`, { tipo: "proposta", paraUsuarioId: propLead.corretorId, leadId: propLead.id })
     }
     toast("Proposta registrada. Gestores notificados.")
+    // Aviso de WhatsApp é exclusivo de VENDA (a rota recusa sem modulo:"venda").
     fetch("/api/whatsapp/notify-proposta", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -270,8 +271,12 @@ export function KanbanBoard({
         nome: propLead.nome,
         valor,
         corretorNome: userName(propLead.corretorId),
+        corretorId: propLead.corretorId ?? null,
         refProposta: pRefs.trim(),
+        modulo: "venda",
       }),
+    }).then(async (r) => {
+      if (!r.ok) toast("Proposta salva, mas o aviso de WhatsApp foi bloqueado — recarregue a página (Ctrl/Cmd+Shift+R).", "error")
     }).catch(() => {})
     setPropLead(null)
   }

@@ -353,7 +353,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       referencias: e.referencias ?? null,
       motivo: e.motivo ?? null,
       motivo_detalhe: e.motivoDetalhe ?? null,
-    }).then(() => loadAudit())
+    }).then(() => loadAudit(), (err) => console.warn("[auditoria] falha ao gravar:", err?.message ?? err))
   }
 
   // Log legado (admin/logs) — também gera registro na auditoria persistida

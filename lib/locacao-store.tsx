@@ -243,7 +243,10 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
       referencias: e.referencias ?? null,
       motivo: e.motivo ?? null,
       motivo_detalhe: e.motivoDetalhe ?? null,
-    })
+    }).then(
+      () => {},
+      (err) => console.warn("[auditoria] falha ao gravar:", err?.message ?? err),
+    )
   }
 
   const logChange: Store["logChange"] = (e) => {
