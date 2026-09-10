@@ -55,6 +55,15 @@ function template(tipo: GoalType, stamp: number): Goal {
   }
 }
 
+const TIPOS_VALIDOS: GoalType[] = ["qualification", "booking", "info", "custom"]
+const normalizar = (g: Goal): Goal => ({
+  ...g,
+  type: (TIPOS_VALIDOS as string[]).includes(g.type) ? g.type : "custom",
+  questions: Array.isArray(g.questions) ? g.questions : [],
+  description: g.description ?? "",
+  prompt: g.prompt ?? "",
+})
+
 const vazio = (): Goal => ({
   id: `goal_${Date.now()}`,
   ai_id: "",
@@ -80,10 +89,10 @@ export function Goals({ id }: { id: string }) {
     try {
       const r = await fetch(`/api/ai/${encodeURIComponent(id)}/goals`)
       const j = await r.json()
-      if (r.ok && j.ok) setGoals(j.goals)
+      if (r.ok && j.ok) setGoals((j.goals as Goal[]).map(normalizar))
       else if (Array.isArray(j)) {
         // compat: formato antigo retornava array cru
-        setGoals(j.map((g: Record<string, unknown>) => ({ ...(g as object), questions: Array.isArray(g.questions) ? g.questions : [] }) as Goal))
+        setGoals((j as Goal[]).map(normalizar))
       } else throw new Error(j.error || "falha ao carregar")
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : "Erro ao carregar metas", "error")
