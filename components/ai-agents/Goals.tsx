@@ -172,18 +172,21 @@ export function Goals({ id }: { id: string }) {
           ) : goals.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma meta. Crie a partir de um template acima.</p>
           ) : (
-            goals.map((g) => (
-              <div key={g.id} className="flex items-start justify-between gap-2 rounded-xl border border-border p-3">
-                <div>
-                  <p className="text-sm font-semibold">{g.name} <Badge variant="outline" className="ml-1 text-[10px]">{g.type}</Badge></p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{g.description || "—"} · {(g.questions || []).length} pergunta(s){g.next_step ? ` · depois: ${g.next_step}` : ""}{g.fallback ? ` · fallback: ${g.fallback}` : ""}</p>
+            goals.map((g) => {
+              const invalida = !g.name.trim() || (g.prompt || "").trim().length < 10
+              return (
+                <div key={g.id} className="flex items-start justify-between gap-2 rounded-xl border border-border p-3">
+                  <div>
+                    <p className="text-sm font-semibold">{g.name || "(sem nome)"} <Badge variant="outline" className="ml-1 text-[10px]">{g.type}</Badge>{invalida && <Badge variant="outline" className="ml-1 border-amber-500/40 text-[10px] text-amber-600">revisar</Badge>}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{g.description || "—"} · {(g.questions || []).length} pergunta(s){g.next_step ? ` · depois: ${g.next_step}` : ""}{g.fallback ? ` · fallback: ${g.fallback}` : ""}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button type="button" variant="ghost" size="icon" onClick={() => { setEditing({ ...g, questions: [...(g.questions || [])] }); setIsNew(false) }} aria-label={`Editar ${g.name}`}><Pencil className="size-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" disabled={saving} onClick={() => excluir(g.id)} aria-label={`Excluir ${g.name}`}><Trash2 className="size-4 text-destructive" /></Button>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <Button type="button" variant="ghost" size="icon" onClick={() => { setEditing({ ...g, questions: [...(g.questions || [])] }); setIsNew(false) }} aria-label={`Editar ${g.name}`}><Pencil className="size-4" /></Button>
-                  <Button type="button" variant="ghost" size="icon" disabled={saving} onClick={() => excluir(g.id)} aria-label={`Excluir ${g.name}`}><Trash2 className="size-4 text-destructive" /></Button>
-                </div>
-              </div>
-            ))
+              )
+            })
           )}
         </CardContent>
       </Card>
