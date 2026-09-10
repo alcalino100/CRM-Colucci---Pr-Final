@@ -94,6 +94,34 @@ export async function pausarIaMensagemManual({ telefone, instanceName, textoOutb
   } catch { /* best-effort */ }
 }
 
+// Estimativa de custo USD por 1k tokens (blend in/out; documentado como estimativa).
+function custoPor1k(modelo: string): number {
+  const m = (modelo || "").toLowerCase()
+  if (m.includes("gpt-4o-mini")) return 0.00015
+  if (m.includes("gpt-4o")) return 0.0025
+  if (m.includes("claude")) return 0.001
+  if (m.includes("gemini")) return 0.0002
+  return 0.0002
+}
+
+// Métrica por resposta (alimenta conversation_analytics → aba Analytics).
+async function registrarAnalytics(params: {
+  convId: string; aiId: string; ms: number; tokens: number; modelo: string; semEscalacao: boolean;
+}): Promise<void> {
+  try {
+    await db().from("conversation_analytics").insert({
+      id: `an_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      conversation_id: params.convId,
+      ai_id: params.aiId,
+      resolved_without_escalation: params.semEscalacao,
+      response_time_ms: Math.round(params.ms),
+      user_satisfaction: null,
+      api_cost_usd: Number(((params.tokens / 1000) * custoPor1k(params.modelo)).toFixed(6)),
+      tokens_used: params.tokens,
+    })
+  } catch { /* analytics é best-effort */ }
+}
+
 // Gera + registra + ENVIA a resposta da IA numa conversa já existente (com limite de
 // mensagens, espera anti-robô, gravação no histórico, envio Evolution e auditoria).
 // Usado pelo fluxo automático (handlePatriciaInbound) e pelo disparo manual ("Iniciar IA").
@@ -104,6 +132,7 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
   leadIdEfetivo?: string; telefone: string; instanceName?: string;
   userMessage: string; inserirUsuario: boolean; ignorarLimite: boolean;
 }): Promise<{ ok: boolean; erro?: string }> {
+  const t0 = Date.now()
   try {
     if (!ignorarLimite && rules.style.maxMessages > 0) {
       const { count } = await db().from("messages_ia").select("id", { count: "exact", head: true }).eq("conversation_id", convId).eq("role", "ai")
@@ -149,14 +178,22 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
           telefone,
           instanceName,
         })
+        await registrarAnalytics({ convId, aiId: AI_ID, ms: Date.now() - t0, tokens: 0, modelo: "", semEscalacao: false })
         return { ok: true, erro: `Escalação: ${esc.reason}` }
       }
     } catch (e) {
       console.error("[IA] erro escalation check", e)
     }
-    if (inserirUsuario) await db().from("messages_ia").insert({ id: `msg_${Date.now()}`, conversation_id: convId, role: "user", content: userMessage })
+    if (inserirUsuario) {
+      await db().from("messages_ia").insert({ id: `msg_${Date.now()}`, conversation_id: convId, role: "user", content: userMessage })
+      try {
+        await db().from("conversations_ia").update({ last_user_message_at: new Date().toISOString() }).eq("id", convId)
+      } catch {
+        /* coluna pode não existir em bancos antigos */
+      }
+    }
 
-    const { message: aiResp } = await generateAIResponse({
+    const { message: aiResp, tokensUsed, model } = await generateAIResponse({
       aiId: AI_ID,
       userMessage,
       conversationHistory: (history || []).map((m: any) => ({ role: m.role, content: m.content })),
@@ -195,6 +232,7 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
       })
     } catch { /* log é best-effort */ }
 
+    await registrarAnalytics({ convId, aiId: AI_ID, ms: Date.now() - t0, tokens: tokensUsed ?? 0, modelo: model ?? "", semEscalacao: true })
     return envRes.ok ? { ok: true } : { ok: false, erro: envRes.erro }
   } catch (e: any) {
     console.error("[IA] erro responder", e)
@@ -285,19 +323,29 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
     // 5) Busca ou cria conversa IA para este contato
     let convId: string
     const key = leadIdEfetivo || telefone
-    const { data: existing } = await db().from("conversations_ia").select("id,ai_responding,last_message_at").eq("ai_id", AI_ID).eq("contact_id", key).maybeSingle()
+    const { data: existing } = await db().from("conversations_ia").select("id,ai_responding,last_message_at,last_user_message_at").eq("ai_id", AI_ID).eq("contact_id", key).maybeSingle()
     if(existing?.id) convId = existing.id
     else {
-      const { data: created } = await db().from("conversations_ia").insert({ id:`conv_${Date.now()}`, ai_id: AI_ID, contact_id: key, channel:"whatsapp", external_id: telefone, status:"active", ai_responding:true }).select("id").single()
-      convId = created!.id
+      const base = { id: `conv_${Date.now()}`, ai_id: AI_ID, contact_id: key, channel: "whatsapp", external_id: telefone, status: "active", ai_responding: true }
+      const agora = new Date().toISOString()
+      const tentativa = await db().from("conversations_ia").insert({ ...base, last_message_at: agora, last_user_message_at: agora }).select("id").single()
+      if (tentativa.error && String(tentativa.error.message || "").includes("last_user_message_at")) {
+        const { data: created } = await db().from("conversations_ia").insert({ ...base, last_message_at: agora }).select("id").single()
+        convId = created!.id
+      } else {
+        if (tentativa.error) throw tentativa.error
+        convId = tentativa.data!.id
+      }
     }
 
     // Atendimento pausado pelo gestor: IA não responde
     if(existing?.ai_responding === false) return
 
-    // 5b) Auto-pausa por inatividade: lead não respondeu há X min → pausa e libera p/ automação
-    if (rules.coordination.pausarPorInatividade && rules.coordination.tempoInatividadeMin > 0 && existing?.last_message_at) {
-      const ultimaMsg = new Date(existing.last_message_at).getTime()
+    // 5b) Auto-pausa por inatividade: conta a partir da última mensagem DO LEAD
+    // (last_user_message_at) — não de qualquer evento da conversa. Sem essa ref
+    // (conversas antigas), não pausa para não matar conversas válidas.
+    if (rules.coordination.pausarPorInatividade && rules.coordination.tempoInatividadeMin > 0 && existing?.last_user_message_at) {
+      const ultimaMsg = new Date(existing.last_user_message_at).getTime()
       if (Date.now() - ultimaMsg > rules.coordination.tempoInatividadeMin * 60_000) {
         await registrarResumoConversa(convId, leadIdEfetivo, "pausada por inatividade do lead")
         await db().from("conversations_ia").update({ ai_responding: false }).eq("id", convId)
@@ -305,15 +353,24 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       }
     }
 
-    // 5c) Modo sugestão: não envia — só registra a sugestão para aprovação humana
+    // 5c) Modo sugestão: gera a resposta mas NÃO envia — registra o texto completo
+    // para aprovação humana no Inbox ([Enviar] [Descartar]).
     if (rules.style.responseMode === "sugestao") {
       try {
+        const { data: histSug } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", { ascending: true }).limit(10)
+        const { message: sugestao } = await generateAIResponse({
+          aiId: AI_ID,
+          userMessage: texto,
+          conversationHistory: ((histSug || []) as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content })),
+          regrasSuplementares: regrasParaPrompt(rules, nomeApresentacao(agente.name)),
+        })
         await db().from("automation_logs").insert({
           lead_id: leadIdEfetivo ?? null,
           event_type: "ia_sugestao_resposta",
           event_title: "IA sugeriu resposta (modo sugestão)",
-          event_description: `Sugestão para ${telefone} via ${instanceName}: "${texto.slice(0,80)}"`,
+          event_description: `Sugestão para ${telefone} via ${instanceName}: "${sugestao.slice(0, 80)}"`,
           actor_type: "ia",
+          payload: JSON.stringify({ convId, telefone, instance: instanceName, sugestao }).slice(0, 2000),
         })
       } catch { /* best-effort */ }
       return

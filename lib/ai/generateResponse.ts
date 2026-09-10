@@ -26,10 +26,20 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
   let context = ""
   const { data: kb } = await db().from("knowledge_bases").select("id").eq("ai_id", aiId).maybeSingle()
   if(kb?.id){
-    const { data: docs } = await db().from("documents").select("content").eq("knowledge_base_id", kb.id).limit(3)
+    // RAG semântico: top-3 chunks relevantes. Fallback: FIFO (docs mais antigos).
+    let docParts: string[] = []
+    try {
+      const { searchKBSemantic } = await import("./ragSearch")
+      const hits = await searchKBSemantic(kb.id, userMessage, 3)
+      docParts = hits.map(h => h.chunk_text)
+    } catch { /* fallback abaixo */ }
+    if(!docParts.length){
+      const { data: docs } = await db().from("documents").select("content").eq("knowledge_base_id", kb.id).limit(3)
+      docParts = (docs||[]).map((d:any)=> String(d.content || "")).filter(Boolean)
+    }
     const { data: faqs } = await db().from("faqs").select("question,answer").eq("knowledge_base_id", kb.id).limit(2)
     const parts = [
-      ...(docs||[]).map((d:any)=> d.content),
+      ...docParts,
       ...(faqs||[]).map((f:any)=> `Q: ${f.question}\nA: ${f.answer}`)
     ]
     if(parts.length) context = "\n\n# CONTEXTO RELEVANTE:\n" + parts.join("\n\n")

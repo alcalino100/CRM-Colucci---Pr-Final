@@ -128,10 +128,11 @@ export function dentroDoHorario(rules: AgentRules, agora = new Date()): boolean 
   const s = rules.schedule
   if (!s.enabled) return true
   const part = new Intl.DateTimeFormat("pt-BR", { timeZone: s.timezone, weekday: "short" as const, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(agora)
-  const wk = part.find(p => p.type === "weekday")?.value.toLowerCase() || ""
+  const wkRaw = (part.find(p => p.type === "weekday")?.value.toLowerCase() || "").replace(/\./g, "")
+  // pt-BR abrevia com ponto ("qua.", "sáb.") — compara por prefixo para não quebrar.
+  const idx = wkRaw.startsWith("dom") ? 0 : wkRaw.startsWith("seg") ? 1 : wkRaw.startsWith("ter") ? 2 : wkRaw.startsWith("qua") ? 3 : wkRaw.startsWith("qui") ? 4 : wkRaw.startsWith("sex") ? 5 : 6
   const hora = part.find(p => p.type === "hour")?.value || "00"
   const min = part.find(p => p.type === "minute")?.value || "00"
-  const idx = wk === "dom" ? 0 : wk === "seg" ? 1 : wk === "ter" ? 2 : wk === "qua" ? 3 : wk === "qui" ? 4 : wk === "sex" ? 5 : 6
   if (!s.days.includes(idx)) return false
   const nowMin = parseInt(hora, 10) * 60 + parseInt(min, 10)
   const [sh, sm] = s.start.split(":").map(Number)

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { FlaskConical, Send, RotateCcw, CheckCircle, XCircle, Smile, Trash2, Plus } from "lucide-react"
 import { useAIAgentsStore } from "@/lib/ai-agents-store"
 
-type Turn = { role:"lead"|"ia"; content:string; meta?:any }
+type Turn = { role:"lead"|"ia"; content:string; meta?:{ tokens?:number; model?:string; escalated?:boolean; reason?:string; severity?:string; ms?:number } }
 
 export function Testing({ id }: { id: string }){
   const agent = useAIAgentsStore(s=> s.agents.find(a=>a.id===id))
@@ -31,15 +31,17 @@ export function Testing({ id }: { id: string }){
     try{
       let cId = convId
       if(!cId){
-        const r = await fetch("/api/conversations", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ aiId: id, contactId: "test_"+Date.now(), channel:"web"}) })
+        const r = await fetch("/api/conversations", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ aiId: id, contactId: "test_"+Date.now(), channel:"test", testMode: true }) })
         if(!r.ok) throw new Error("falha ao criar conversa")
         const j=await r.json(); cId=j.id; setConvId(cId)
       }
+      const t0 = Date.now()
       const r = await fetch(`/api/conversations/${cId}/messages`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message: textoEnviado, aiId: id }) })
       const j = await r.json()
       if(!r.ok) throw new Error(j.error || "IA falhou")
+      const ms = j.executionTimeMs ?? (Date.now() - t0)
       // usa modelo real retornado para fixação
-      setHistorico(h=> [...h, { role:"ia", content: j.aiMessage?.content, meta:{tokens:j.aiMessage?.metadata?.tokensUsed, model:j.aiMessage?.metadata?.model, escalated:j.escalated}}])
+      setHistorico(h=> [...h, { role:"ia", content: j.aiMessage?.content, meta:{ tokens: j.aiMessage?.metadata?.tokensUsed, model: j.aiMessage?.metadata?.model, escalated: j.escalated, reason: j.escalationReason ?? j.aiMessage?.metadata?.trigger, severity: j.severity ?? j.aiMessage?.metadata?.severity, ms }}])
     }catch(e:any){
       // não faz fallback silencioso para mock quando já houve resposta real antes — mostra erro real
       const isFirstTurn = historico.length===1 // só lead + falha = primeiro turno
@@ -55,7 +57,12 @@ export function Testing({ id }: { id: string }){
     }
   }
 
-  const reset = ()=>{ setHistorico([]); setConvId(null); setValidado(null) }
+  const reset = async ()=>{
+    if(convId){
+      try { await fetch(`/api/conversations/${convId}`, { method:"DELETE" }) } catch { /* limpeza best-effort */ }
+    }
+    setHistorico([]); setConvId(null); setValidado(null)
+  }
 
   return (
     <div className="grid gap-6">
@@ -110,6 +117,7 @@ export function Testing({ id }: { id: string }){
                 "Olá, qual o valor?",
                 "Ainda tem o apê da Vila Mariana?",
                 "Quero falar com humano",
+                "QUERO FALAR COM ALGUEM!!!",
                 "Não tenho interesse",
                 "Me manda mais fotos",
                 "Qual o valor do condomínio?"
@@ -127,9 +135,11 @@ export function Testing({ id }: { id: string }){
               {historico.length===0 ? <p className="py-10 text-center text-sm text-muted-foreground">Nenhuma mensagem ainda. Envie a primeira como lead.</p> :
                 historico.map((t,i)=>(
                   <div key={i} className={`flex ${t.role==="lead"?"justify-start":"justify-end"}`}>
-                    <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${t.role==="lead"?"bg-slate-800 text-white rounded-bl-sm":"bg-cyan-500 text-slate-950 rounded-br-sm"}`}>
+                    <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${t.role==="lead"?"bg-slate-800 text-white rounded-bl-sm":t.meta?.escalated?"bg-amber-500 text-slate-950 rounded-br-sm":"bg-cyan-500 text-slate-950 rounded-br-sm"}`}>
                       <p className="whitespace-pre-wrap">{t.content}</p>
-                      {t.meta && <p className="mt-1 text-[10px] opacity-70">tokens: {t.meta.tokens ?? 0} {t.meta.escalated && "· escalado"}</p>}
+                      {t.meta && <p className="mt-1 text-[10px] opacity-70">
+                        {t.meta.ms != null ? `⏱️ ${(t.meta.ms/1000).toFixed(1)}s · ` : ""}💬 {t.meta.tokens ?? 0} tokens{t.meta.model ? ` · ${t.meta.model}` : ""}{t.meta.escalated ? ` · ⚠️ ESCALADO${t.meta.severity ? ` (${t.meta.severity})` : ""}${t.meta.reason ? ` — ${t.meta.reason}` : ""}` : " · ✅ sem escalação"}
+                      </p>}
                     </div>
                   </div>
                 ))}

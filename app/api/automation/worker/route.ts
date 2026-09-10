@@ -22,6 +22,7 @@ import {
 import { wsupabase } from "@/lib/whatsapp/server"
 import type { AutomationJob, AutomationJobStatus } from "@/lib/automation-types"
 import { getRules } from "@/lib/ai/rules"
+import { normalizePhone } from "@/lib/labels"
 import { getTagsCatalog } from "@/lib/ai/tags-catalog"
 
 // O worker faz várias consultas + envios; sem isto cairia no limite padrão de 10s do Hobby
@@ -40,19 +41,41 @@ const WORKER_ID = `worker-${Date.now()}`
 async function leadsComIAAtiva(): Promise<Set<string>> {
   const { data } = await wsupabase
     .from("conversations_ia")
-    .select("contact_id")
+    .select("contact_id,external_id")
     .eq("ai_responding", true)
-    .eq("status", "active")
-  return new Set((data || []).map((r: any) => r.contact_id))
+    .neq("channel", "test")
+  const set = new Set<string>()
+  for (const r of (data || []) as { contact_id?: string; external_id?: string }[]) {
+    if (r.contact_id) set.add(String(r.contact_id))
+    // Conversas orgânicas usam o telefone como chave — inclui variações com/sem 55.
+    if (r.external_id) {
+      const d = String(r.external_id).replace(/\D/g, "")
+      if (!d) continue
+      set.add(d)
+      set.add(d.startsWith("55") ? d.slice(2) : `55${d}`)
+    }
+  }
+  return set
+}
+
+// true = o lead tem conversa IA ativa (por id do lead ou por telefone).
+function leadTemIAAtiva(skipIA: Set<string> | null, lead: { id: string; telefone?: string | null }): boolean {
+  if (!skipIA) return false
+  if (skipIA.has(lead.id)) return true
+  const digits = String(lead.telefone || "").replace(/\D/g, "")
+  if (digits && skipIA.has(digits)) return true
+  const norm = normalizePhone(String(lead.telefone || ""))
+  if (norm && skipIA.has(norm)) return true
+  return false
 }
 
 // true = o worker deve respeitar o semáforo (pular leads com conversa IA ativa).
-// Desliga apenas se NENHUM agente ativo coordena com a automação.
+// Desliga apenas se NENHUM agente ativo (com regras habilitadas) coordena com a automação.
 async function coordenarComIA(): Promise<boolean> {
   const { data: agentes } = await wsupabase.from("ai_agents").select("is_active,config")
-  const ativos = (agentes || []).filter((a: any) => a.is_active)
+  const ativos = (agentes || []).filter((a: { is_active?: boolean; config?: unknown }) => a.is_active && getRules(a.config).enable)
   if (!ativos.length) return false
-  return !ativos.every((a: any) => getRules(a.config).coordination.paraleloComAutomacao)
+  return !ativos.every((a: { config?: unknown }) => getRules(a.config).coordination.paraleloComAutomacao)
 }
 
 // Tags marcadas como "Follow-up" no catálogo: leads que as possuem entram na fila de
@@ -157,7 +180,7 @@ async function criarJobsFollowup(automation: any, results: { created: number }, 
     }
 
     // Semáforo IA x Automação: lead com conversa IA ativa é atendido pela IA, não pelo follow-up.
-    if (skipIA?.has(lead.id)) {
+    if (leadTemIAAtiva(skipIA, lead)) {
       await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead.nome}: conversa IA ativa — automação coordenada com a IA` })
       continue
     }
@@ -285,7 +308,7 @@ async function runWorker() {
         }
 
         // 1-b. Semáforo IA x Automação: lead com conversa IA ativa é atendido pela IA, não pela automação.
-        if (skipIA?.has(lead.id)) {
+        if (leadTemIAAtiva(skipIA, lead)) {
           rejections.ia_in_conversa++
           rejectionDetails.push({ lead_id: lead.id, lead_nome: lead.nome, reason: "Conversa IA ativa (coordenado)" })
           await createLog({

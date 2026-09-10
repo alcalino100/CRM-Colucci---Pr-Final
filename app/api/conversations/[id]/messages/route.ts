@@ -3,46 +3,98 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { generateAIResponse } from "@/lib/ai/generateResponse"
 
-function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const maxDuration = 60
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{id:string}> }){
+function db() {
+  return createClient(SUPABASE_URL, SUPABASE_KEY)
+}
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const t0 = Date.now()
   const { id } = await params
-  const { message, aiId } = await req.json()
-  if(!message || !aiId) return NextResponse.json({ error:"message e aiId obrigatórios" }, {status:400})
-  try{
+  const { message, aiId } = await req.json().catch(() => ({}))
+  if (!message || !aiId) return NextResponse.json({ error: "message e aiId obrigatórios" }, { status: 400 })
+  try {
     const { data: conv } = await db().from("conversations_ia").select("*").eq("id", id).single()
-    if(!conv) return NextResponse.json({ error:"Conversation not found" }, {status:404})
+    if (!conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
 
-    const { data: history } = await db().from("messages_ia").select("role,content").eq("conversation_id", id).order("created_at", {ascending:true}).limit(10)
+    const { data: history } = await db()
+      .from("messages_ia")
+      .select("role,content")
+      .eq("conversation_id", id)
+      .order("created_at", { ascending: true })
+      .limit(20)
 
-    const userMsg = await db().from("messages_ia").insert({ id:`msg_${Date.now()}`, conversation_id: id, role:"user", content: message }).select("*").single()
-
-    const { message: aiResp, tokensUsed } = await generateAIResponse({ aiId, userMessage: message, conversationHistory: (history||[]).map((m:any)=>({role:m.role, content:m.content})) })
-
-    // Checa escalation simples por keywords
-    const { data: triggers } = await db().from("escalation_triggers").select("*").eq("ai_id", aiId)
-    let shouldEscalate = false
-    for(const t of triggers||[]){
-      if((t.detection_keywords||[]).some((kw:string)=> message.toUpperCase().includes(kw.toUpperCase()))){
-        shouldEscalate = true; break
-      }
-      if(t.condition==="max_turns" && (history?.length||0) >= 10) { shouldEscalate = true; break }
-    }
-
-    let aiMsg
-    if(shouldEscalate){
-      const { data: ai } = await db().from("ai_agents").select("handoff_rules").eq("id", aiId).single()
-      aiMsg = await db().from("messages_ia").insert({ id:`msg_${Date.now()+1}`, conversation_id: id, role:"ai", content: ai?.handoff_rules || "Deixe-me conectar você com um especialista...", metadata:{ escalated:true, tokensUsed } }).select("*").single()
-      await db().from("conversations_ia").update({ status:"escalated", ai_responding:false, last_message_at: new Date().toISOString() }).eq("id", id)
-      // TODO: notifyTeamOfEscalation(id, aiId) -> integrar com Slack/Email da Patrícia
-    } else {
-      aiMsg = await db().from("messages_ia").insert({ id:`msg_${Date.now()+1}`, conversation_id: id, role:"ai", content: aiResp, metadata:{ tokensUsed } }).select("*").single()
+    const userMsg = await db()
+      .from("messages_ia")
+      .insert({ id: `msg_${Date.now()}`, conversation_id: id, role: "user", content: message })
+      .select("*")
+      .single()
+    try {
+      await db()
+        .from("conversations_ia")
+        .update({ last_message_at: new Date().toISOString(), last_user_message_at: new Date().toISOString() })
+        .eq("id", id)
+    } catch {
       await db().from("conversations_ia").update({ last_message_at: new Date().toISOString() }).eq("id", id)
     }
 
-    return NextResponse.json({ userMessage: userMsg.data, aiMessage: aiMsg.data, escalated: shouldEscalate })
-  }catch(e:any){
+    // Escalação real (mesmos triggers da produção).
+    const { detectEscalation } = await import("@/lib/ai/escalationDetector")
+    const esc = await detectEscalation(
+      aiId,
+      message,
+      ((history || []) as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content })),
+      { maxMessages: 10 },
+    )
+
+    let aiMsg
+    if (esc.shouldEscalate) {
+      const { notificarEscalacao } = await import("@/lib/ai/handoffNotifications")
+      await notificarEscalacao({
+        conversationId: id,
+        aiId,
+        reason: esc.reason,
+        triggerName: esc.triggerName,
+        telefone: String((conv as { external_id?: string }).external_id || (conv as { contact_id?: string }).contact_id || "teste"),
+        instanceName: undefined,
+      })
+      aiMsg = await db()
+        .from("messages_ia")
+        .insert({
+          id: `msg_${Date.now() + 1}`,
+          conversation_id: id,
+          role: "ai",
+          content: `🚨 ESCALADO: ${esc.reason}`,
+          metadata: { escalated: true, trigger: esc.triggerName ?? null, severity: esc.severity },
+        })
+        .select("*")
+        .single()
+    } else {
+      const { message: aiResp, tokensUsed, model } = await generateAIResponse({
+        aiId,
+        userMessage: message,
+        conversationHistory: ((history || []) as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content })),
+      })
+      aiMsg = await db()
+        .from("messages_ia")
+        .insert({ id: `msg_${Date.now() + 1}`, conversation_id: id, role: "ai", content: aiResp, metadata: { tokensUsed, model } })
+        .select("*")
+        .single()
+    }
+
+    return NextResponse.json({
+      userMessage: userMsg.data,
+      aiMessage: aiMsg.data,
+      escalated: esc.shouldEscalate,
+      escalationReason: esc.shouldEscalate ? esc.reason : null,
+      severity: esc.severity,
+      executionTimeMs: Date.now() - t0,
+    })
+  } catch (e: unknown) {
     console.error(e)
-    return NextResponse.json({ error:e.message }, {status:500})
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 }

@@ -27,6 +27,9 @@ export function WidgetPanel(){
   const [motivoExcluir, setMotivoExcluir] = useState(MOTIVOS_EXCLUSAO[0])
   const [detalheExcluir, setDetalheExcluir] = useState("")
   const [acaoIniciando, setAcaoIniciando] = useState<string | null>(null)
+  type Sugestao = { id: string; created_at: string; telefone: string; instance: string | null; sugestao: string }
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([])
+  const [sugAgindo, setSugAgindo] = useState<string | null>(null)
   const conv = conversas.find(c=>c.id===selectedId) || null
 
   useEffect(() => {
@@ -157,6 +160,37 @@ export function WidgetPanel(){
     }finally{ setAcaoIniciando(null) }
   }
 
+  useEffect(() => {
+    if (!conv) { setSugestoes([]); return }
+    let vivo = true
+    fetch(`/api/whatsapp/chat/sugestao?telefone=${encodeURIComponent(conv.telefone)}`)
+      .then((r) => r.json())
+      .then((j) => { if (vivo && j.ok) setSugestoes(j.sugestoes ?? []) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [conv?.id])
+
+  async function agirSugestao(s: Sugestao, acao: "enviar" | "descartar") {
+    if (!conv || sugAgindo) return
+    setSugAgindo(s.id)
+    try {
+      const instanciaSelecionada = useInboxStore.getState().instanciaSelecionada
+      const r = await fetch("/api/whatsapp/chat/sugestao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: acao, telefone: conv.telefone, instanceName: instanciaSelecionada, texto: s.sugestao, leadId: leadId || null }),
+      })
+      const j = await r.json()
+      if (!j.ok) throw new Error(j.erro || "falha")
+      setSugestoes((prev) => prev.filter((x) => x.id !== s.id))
+      toast(acao === "enviar" ? "Sugestão enviada no WhatsApp" : "Sugestão descartada")
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : "Erro na sugestão", "error")
+    } finally {
+      setSugAgindo(null)
+    }
+  }
+
   async function mudarStatus(s: string){
     if(!leadId) return
     setSalvandoStatus(true)
@@ -252,6 +286,28 @@ export function WidgetPanel(){
         </div>
         <p className="mt-1 text-[11px] text-slate-500">Com IA ligada o bot responde sozinho. Automação mantém a IA pausada e roda follow-ups programados.</p>
       </div>
+      {sugestoes.length > 0 && (
+        <div className="rounded-xl border border-violet-500/40 bg-violet-500/5 p-4">
+          <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>💡 Sugestões da IA ({sugestoes.length})</h3>
+          <div className="grid gap-2">
+            {sugestoes.map((s) => (
+              <div key={s.id} className="rounded-lg border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-900">
+                <p className="whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-200">{s.sugestao}</p>
+                <p className="mt-1 text-[10px] text-slate-500">{new Date(s.created_at).toLocaleString("pt-BR")}</p>
+                <div className="mt-2 flex gap-1.5">
+                  <button disabled={sugAgindo !== null} onClick={() => agirSugestao(s, "enviar")} className="flex-1 rounded-lg bg-emerald-600 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                    {sugAgindo === s.id ? "Enviando…" : "Enviar"}
+                  </button>
+                  <button disabled={sugAgindo !== null} onClick={() => agirSugestao(s, "descartar")} className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-[11px] font-medium text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50">
+                    Descartar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">Modo sugestão: a IA sugere, você aprova.</p>
+        </div>
+      )}
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Etiquetas / Tags</h3>
         <div className="flex flex-wrap gap-1.5">
