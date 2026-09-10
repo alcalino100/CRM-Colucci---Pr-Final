@@ -81,16 +81,21 @@ async function embeddingOpenAI(text: string): Promise<EmbeddingOut> {
 
 async function embeddingGemini(text: string): Promise<EmbeddingOut> {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
-  if (!key) throw new Error("GEMINI_API_KEY não configurada")
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content: { parts: [{ text }] } }),
-  })
+  if (!key) throw new Error("GEMINI_API_KEY ausente no ambiente")
+  let r: Response
+  try {
+    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: { parts: [{ text }] } }),
+    })
+  } catch (e: unknown) {
+    throw new Error(`Gemini embeddings: falha de rede (${e instanceof Error ? e.message : String(e)})`)
+  }
   const j = await r.json().catch(() => null)
-  if (!r.ok) throw new Error(j?.error?.message || "Gemini embeddings falhou")
+  if (!r.ok) throw new Error(`Gemini embeddings: HTTP ${r.status} (${j?.error?.message || "sem detalhe"})`)
   const vector: number[] = j?.embedding?.values ?? []
-  if (!vector.length) throw new Error("Embedding vazio")
+  if (!vector.length) throw new Error("Gemini embeddings: vetor vazio")
   return { vector, dim: vector.length, model: "text-embedding-004" }
 }
 
@@ -98,7 +103,8 @@ export async function generateEmbedding(text: string): Promise<EmbeddingOut> {
   const t = String(text || "").slice(0, 8000)
   if (!t.trim()) throw new Error("Texto vazio")
   if (process.env.OPENAI_API_KEY) return embeddingOpenAI(t)
-  return embeddingGemini(t)
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) return embeddingGemini(t)
+  throw new Error("Sem chave de embedding no ambiente (OPENAI_API_KEY/GEMINI_API_KEY ausentes)")
 }
 
 // ---------------------------------------------------------------------------
