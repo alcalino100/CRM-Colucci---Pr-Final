@@ -82,21 +82,47 @@ async function embeddingOpenAI(text: string): Promise<EmbeddingOut> {
 async function embeddingGemini(text: string): Promise<EmbeddingOut> {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
   if (!key) throw new Error("GEMINI_API_KEY ausente no ambiente")
-  let r: Response
+  // Descobre modelos com suporte a embedContent (nomes variam por conta/versão).
+  let candidatos: string[] = []
   try {
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: { parts: [{ text }] } }),
-    })
-  } catch (e: unknown) {
-    throw new Error(`Gemini embeddings: falha de rede (${e instanceof Error ? e.message : String(e)})`)
+    const lr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`)
+    const lj = await lr.json().catch(() => null)
+    if (lr.ok && Array.isArray(lj?.models)) {
+      candidatos = lj.models
+        .filter((m: { supportedGenerationMethods?: string[] }) => (m.supportedGenerationMethods || []).includes("embedContent"))
+        .map((m: { name?: string }) => String(m.name || "").replace("models/", ""))
+        .filter(Boolean)
+    }
+  } catch { /* segue para a lista fixa */ }
+  const preferidos = ["text-embedding-005", "gemini-embedding-001", "text-embedding-004", "embedding-001"]
+  const ordem = Array.from(new Set([...preferidos.filter((m) => !candidatos.length || candidatos.includes(m)), ...candidatos])).slice(0, 5)
+  if (!ordem.length) throw new Error("Gemini: nenhum modelo com suporte a embedContent")
+  let ultimoErro = ""
+  for (const m of ordem) {
+    let r: Response
+    try {
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:embedContent?key=${key}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: { parts: [{ text }] } }),
+      })
+    } catch (e: unknown) {
+      ultimoErro = `rede (${e instanceof Error ? e.message : String(e)})`
+      continue
+    }
+    const j = await r.json().catch(() => null)
+    if (r.ok) {
+      const vector: number[] = j?.embedding?.values ?? []
+      if (!vector.length) {
+        ultimoErro = "vetor vazio"
+        continue
+      }
+      return { vector, dim: vector.length, model: m }
+    }
+    ultimoErro = `HTTP ${r.status} (${j?.error?.message || "sem detalhe"})`
+    if (!/not found|not supported/i.test(ultimoErro)) break
   }
-  const j = await r.json().catch(() => null)
-  if (!r.ok) throw new Error(`Gemini embeddings: HTTP ${r.status} (${j?.error?.message || "sem detalhe"})`)
-  const vector: number[] = j?.embedding?.values ?? []
-  if (!vector.length) throw new Error("Gemini embeddings: vetor vazio")
-  return { vector, dim: vector.length, model: "text-embedding-004" }
+  throw new Error(`Gemini embeddings falhou: ${ultimoErro}`)
 }
 
 export async function generateEmbedding(text: string): Promise<EmbeddingOut> {
