@@ -142,14 +142,21 @@ export async function searchKBSemantic(kb_id: string, query: string, limit = 3):
 }
 
 // Indexa (ou reindexa) um documento: chunk + embedding + contagem.
-export async function indexDocument(documentId: string, text: string): Promise<{ chunks: number; dim: number; model: string }> {
+export async function indexDocument(documentId: string, text: string): Promise<{ chunks: number; dim: number; model: string; erro?: string }> {
   const chunks = chunkText(text).slice(0, 40)
   await db().from("document_embeddings").delete().eq("document_id", documentId)
   let dim = 0
   let model = ""
   let n = 0
+  let primeiroErro: string | undefined
   for (let i = 0; i < chunks.length; i++) {
-    const emb = await generateEmbedding(chunks[i]).catch(() => null)
+    let emb: EmbeddingOut | null = null
+    try {
+      emb = await generateEmbedding(chunks[i])
+    } catch (e: unknown) {
+      if (!primeiroErro) primeiroErro = e instanceof Error ? e.message : String(e)
+      continue
+    }
     if (!emb || !emb.vector.length) continue
     dim = emb.dim
     model = emb.model
@@ -161,11 +168,12 @@ export async function indexDocument(documentId: string, text: string): Promise<{
       chunk_order: i,
     })
     if (!error) n++
+    else if (!primeiroErro) primeiroErro = `insert: ${error.message}`
   }
   try {
     await db().from("documents").update({ chunks_count: n }).eq("id", documentId)
   } catch {
     /* coluna pode não existir em bancos antigos */
   }
-  return { chunks: n, dim, model }
+  return { chunks: n, dim, model, erro: n === 0 ? primeiroErro : undefined }
 }

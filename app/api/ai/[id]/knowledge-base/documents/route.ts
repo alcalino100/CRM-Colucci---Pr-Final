@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       try {
         const { indexDocument } = await import("@/lib/ai/ragSearch")
         const r = await indexDocument(docId, content)
-        indexed = { ...r, erro: r.chunks === 0 ? "embedding falhou para todos os chunks (verifique GEMINI_API_KEY/OPENAI_API_KEY no ambiente)" : null }
+        indexed = { chunks: r.chunks, dim: r.dim, model: r.model, erro: r.chunks === 0 ? (r.erro ?? "embedding falhou para todos os chunks") : null }
       } catch (e: unknown) {
         indexed.erro = e instanceof Error ? e.message : String(e)
         console.error("[KB] falha ao indexar", indexed.erro)
