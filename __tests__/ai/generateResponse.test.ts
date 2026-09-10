@@ -1,7 +1,9 @@
+import { describe, expect, it } from "vitest"
 import { generateAIResponse } from "@/lib/ai/generateResponse"
 
 // Mock simples - para rodar com `pnpm test` quando jest/vitest for configurado
 describe("generateAIResponse", () => {
+  // Requer banco acessível; roda isolado (não quebra a suite offline).
   it("deve gerar resposta a partir da mensagem do usuário", async () => {
     // Este teste requer OPENAI_API_KEY e ai_agents populado no Supabase
     // Mock para MVP: verifica que a função existe e lança erro se AI não existe

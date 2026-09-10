@@ -125,7 +125,35 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
 
     if (rules.style.waitMs > 0) await sleep(Math.min(rules.style.waitMs, 15000))
 
-    const { data: history } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", { ascending: true }).limit(10)
+    const { data: historyFull } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", { ascending: true }).limit(50)
+    const history = (historyFull || []).slice(0, 10)
+
+    // Escalação automática: triggers do agente (keyword/sentimento/turnos). Se ativar,
+    // NÃO gera resposta — pausa a IA, move o lead e audita (handoff para humano).
+    try {
+      const { detectEscalation } = await import("./escalationDetector")
+      const esc = await detectEscalation(
+        AI_ID,
+        userMessage,
+        (historyFull || []).map((m: { role: string; content: string }) => ({ role: m.role, content: m.content })),
+        { maxMessages: rules.style.maxMessages > 0 ? rules.style.maxMessages : 10 },
+      )
+      if (esc.shouldEscalate) {
+        const { notificarEscalacao } = await import("./handoffNotifications")
+        await notificarEscalacao({
+          conversationId: convId,
+          leadId: leadIdEfetivo,
+          aiId: AI_ID,
+          reason: esc.reason,
+          triggerName: esc.triggerName,
+          telefone,
+          instanceName,
+        })
+        return { ok: true, erro: `Escalação: ${esc.reason}` }
+      }
+    } catch (e) {
+      console.error("[IA] erro escalation check", e)
+    }
     if (inserirUsuario) await db().from("messages_ia").insert({ id: `msg_${Date.now()}`, conversation_id: convId, role: "user", content: userMessage })
 
     const { message: aiResp } = await generateAIResponse({
