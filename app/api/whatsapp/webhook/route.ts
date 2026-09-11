@@ -186,12 +186,18 @@ async function handleMessageUpsert(payload: any) {
   if (remoteJid.includes("@g.us") || remoteJid.includes("broadcast")) return
   const telefone = onlyDigits(remoteJid.split("@")[0])
   if (!telefone) return
-  // Números internos bloqueados: ignora completamente (sem lead, sem mensagem, sem notificação)
-  // — EXCETO números de teste configurados num agente IA ativo: sem esse bypass, testar o
+  // Números internos bloqueados: ignora completamente — EXCETO números de teste
+  // configurados num agente IA ativo: sem esse bypass, testar o
   // bot com o próprio time (ex.: corretor na lista de bloqueio) é impossível, pois o "oi"
   // de teste é descartado antes de chegar à IA.
   if (isBlocked(telefone) && !(await isNumeroTesteIA(telefone))) return
   const mensagemId: string | null = msg?.key?.id ?? null
+  // Idempotência: Evolution reentrega o mesmo evento em retry/timeout. Sem esse
+  // guarda, a mesma mensagem geraria 2 linhas + 2 respostas da IA.
+  if (mensagemId) {
+    const { data: jaProcessada } = await wsupabase.from("whatsapp_mensagens").select("id").eq("mensagem_id", mensagemId).maybeSingle()
+    if (jaProcessada) return
+  }
   const midia = detectarMidia(msg?.message)
   // Corpo: texto puro, ou a legenda da mídia (imagem/vídeo/documento podem ter legenda).
   // Sem mídia e sem texto, mantém o rótulo antigo por segurança.
@@ -223,7 +229,9 @@ async function handleMessageUpsert(payload: any) {
     // Atendimento manual: pausa a conversa IA deste contato (ai_responding=false) e
     // move o lead para em_atendimento — o corretor assumiu o papo. (Ecos da própria IA
     // são ignorados dentro de pausarIaMensagemManual via textoOutbound.)
-    void pausarIaMensagemManual({ telefone, instanceName, textoOutbound: corpo }).catch(() => {})
+    // Aguardado (não fire-and-forget): se a resposta voltar antes, a Vercel pode
+    // congelar o trabalho em background e a pausa nunca acontece.
+    await pausarIaMensagemManual({ telefone, instanceName, textoOutbound: corpo }).catch(() => {})
     return
   }
 
@@ -275,7 +283,10 @@ async function handleMessageUpsert(payload: any) {
     })
     await preencherMidiaUrl(instanceName, mensagemId, midia)
     if (!msg?.key?.fromMe) {
-      void handlePatriciaInbound({ telefone, texto: corpo, leadId: leadIdExistente || undefined, instanceName }).catch(()=>{})
+      // Aguardado de propósito: fire-and-forget (void) pode ser congelado pela
+      // Vercel ao retornar a resposta — a IA "morre" no meio do caminho sem rastro.
+      // Com idempotência por mensagem_id acima, retry da Evolution é seguro.
+      await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadIdExistente || undefined, instanceName }).catch(() => {})
     }
     return
   }
@@ -494,9 +505,10 @@ async function handleMessageUpsert(payload: any) {
   })
   await preencherMidiaUrl(instanceName, mensagemId, midia)
 
-  // IA: dispara resposta automática (Patrícia ou Guilherme - teste)
+  // IA: dispara resposta automática (Patrícia ou Guilherme - teste). Aguardado pelo
+  // mesmo motivo acima (nada de void): sem await, a resposta pode morrer sem rastro.
   if (!msg?.key?.fromMe) {
-    void handlePatriciaInbound({ telefone, texto: corpo, leadId: leadId || leadIdExistente || undefined, instanceName }).catch(()=>{})
+    await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadId || leadIdExistente || undefined, instanceName }).catch(() => {})
   }
 }
 
