@@ -201,10 +201,33 @@ async function handleMessageUpsert(payload: any) {
   const midia = detectarMidia(msg?.message)
   // Corpo: texto puro, ou a legenda da mídia (imagem/vídeo/documento podem ter legenda).
   // Sem mídia e sem texto, mantém o rótulo antigo por segurança.
-  const corpo =
+  let corpo =
     msg?.message?.conversation ??
     msg?.message?.extendedTextMessage?.text ??
     (midia ? (midia.legenda ?? "") : "[mídia]")
+
+  // ÁUDIO: transcreve para texto e segue o fluxo NORMAL (vínculo, regras, IA,
+  // escalação, auditoria). Antes o áudio era só registrado e ignorado.
+  if (midia?.tipo === "audio" && !corpo.trim() && mensagemId) {
+    try {
+      const { obterAudioBase64 } = await import("@/lib/whatsapp/server")
+      const { transcreverAudio } = await import("@/lib/ai/audioTranscriber")
+      const b64 = await obterAudioBase64(instanceName, mensagemId)
+      if (b64) {
+        const t = await transcreverAudio(b64.base64, b64.mimeType ?? midia.mimeType)
+        if (t.texto.trim()) corpo = t.texto.trim()
+      }
+    } catch (e: unknown) {
+      try {
+        await wsupabase.from("automation_logs").insert({
+          event_type: "ia_audio_nao_transcrito",
+          event_title: "Áudio não transcrito",
+          event_description: `Áudio de ${telefone} (${instanceName}) registrado sem transcrição: ${e instanceof Error ? e.message : String(e)}.`,
+          actor_type: "ia",
+        })
+      } catch { /* log é best-effort */ }
+    }
+  }
 
   // Mensagem enviada pelo corretor (pelo CRM ou pelo próprio celular): só registra para
   // aparecer no chat do gestor, ligada ao lead quando o telefone bate. Não passa pela

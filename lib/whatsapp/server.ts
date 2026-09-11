@@ -78,7 +78,18 @@ async function baixarMidiaBase64(instanceName: string, mensagemId: string): Prom
   }
 }
 
-// Baixa a mídia da Evolution e guarda no Storage; retorna a URL pública (ou null se falhar).
+// Obtém o áudio de uma mensagem como base64 (para transcrição por IA).
+// Retorna null se a mídia expirou, a instância recusar ou passar de ~8MB.
+export async function obterAudioBase64(
+  instanceName: string,
+  mensagemId: string | null,
+): Promise<{ base64: string; mimeType: string | null } | null> {
+  if (!mensagemId) return null
+  const baixado = await baixarMidiaBase64(instanceName, mensagemId)
+  if (!baixado) return null
+  if (baixado.base64.length > 11_000_000) return null
+  return baixado
+}
 export async function baixarEArmazenarMidia(
   instanceName: string,
   mensagemId: string,
