@@ -49,7 +49,12 @@ function mapStatus(s: string): "aguardando_resposta" | "respondido" | "em_follow
 export function InboxClient(){
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [filtroTrafego, setFiltroTrafego] = useState(true)
+  // Filtro "Somente Tráfego Pago" ligado por padrão (base da IA), com a escolha
+  // persistida — conversas sem lead ficam ocultas com ele ativo (ver contador).
+  const [filtroTrafego, setFiltroTrafego] = useState(() => {
+    try { return localStorage.getItem("inbox-filtro-trafego") !== "off" } catch { return true }
+  })
+  const [ocultas, setOcultas] = useState(0)
   const selectedId = useInboxStore(s=>s.selectedId)
   const setSelected = useInboxStore(s=>s.setSelected)
   const setConversas = useInboxStore(s=>s.setConversas)
@@ -74,13 +79,16 @@ export function InboxClient(){
         const j = await r.json()
         const raw: any[] = j.conversas || []
         if(cancelled) return
-        let filtradas = raw.filter((c:any)=> !isTelefoneBloqueado(c.telefone || ""))
-        const leadIds = filtradas.filter(c=>c.leadId).map(c=>c.leadId)
+        // Bloqueados internos ficam ocultos — EXCETO quando há lead vinculado
+        // (lead criado manualmente = intenção explícita de acompanhar).
+        const aposBloqueio = raw.filter((c:any)=> c.leadId || !isTelefoneBloqueado(c.telefone || ""))
+        const leadIds = aposBloqueio.filter(c=>c.leadId).map(c=>c.leadId)
         let leadsMap = new Map<string, any>()
         if(leadIds.length>0){
           const { data: leads } = await supabase.from("leads").select("id,origem,status,referencias").in("id", leadIds)
           for(const l of leads||[]) leadsMap.set(l.id, l)
         }
+        let filtradas = aposBloqueio
         if(filtroTrafego){
           filtradas = filtradas.filter(c=>{
             if(!c.leadId) return false
@@ -90,6 +98,7 @@ export function InboxClient(){
             return true
           })
         }
+        if(!cancelled) setOcultas(Math.max(0, aposBloqueio.length - filtradas.length))
         // Nome do responsável vem da instância selecionada
         const respNome = inst.split("-")[0] || "Patricia"
         const conversas: InboxConversation[] = filtradas.map((c:any)=>({
@@ -123,7 +132,12 @@ export function InboxClient(){
       }catch{}
     }
     loadReal()
-    return()=>{cancelled=true}
+    // Atualização ao vivo: polling a cada 15s (pausa com aba oculta) + ao voltar o foco.
+    // Sem isso, mensagens novas só apareciam recarregando a página.
+    const iv = setInterval(()=>{ if(!document.hidden) void loadReal() }, 15000)
+    const aoFocar = () => { void loadReal() }
+    window.addEventListener("focus", aoFocar)
+    return()=>{ cancelled=true; clearInterval(iv); window.removeEventListener("focus", aoFocar) }
   }, [isGestorVendas, user, filtroTrafego, instanciaSelecionada, setConversas, setModoReal])
   if(loading){
     return (
@@ -139,10 +153,15 @@ export function InboxClient(){
       {isGestorVendas && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={filtroTrafego} onChange={e=>setFiltroTrafego(e.target.checked)} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
+            <input type="checkbox" checked={filtroTrafego} onChange={e=>{ const v=e.target.checked; setFiltroTrafego(v); try{ localStorage.setItem("inbox-filtro-trafego", v ? "on" : "off") }catch{} }} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
             <span className="font-medium text-slate-700 dark:text-slate-300">Somente Tráfego Pago</span>
           </label>
           <span className="hidden sm:inline text-slate-500">{filtroTrafego ? "filtrando base para IA" : "toda a base"}</span>
+          {filtroTrafego && ocultas>0 && (
+            <button onClick={()=>{ setFiltroTrafego(false); try{ localStorage.setItem("inbox-filtro-trafego","off") }catch{} }} className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 hover:bg-amber-500/20 dark:text-amber-400">
+              {ocultas} oculta(s) — mostrar todas
+            </button>
+          )}
           <span className="ml-auto flex items-center gap-2">Instância: <InstanceSelector /></span>
         </div>
       )}

@@ -34,35 +34,46 @@ export function ConversaView(){
 
   useEffect(()=>{ if(threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight }, [thread])
 
-  // Carrega mensagens reais da instância selecionada sob demanda
+  // Carrega mensagens reais da instância selecionada sob demanda + polling leve.
+// Só atualiza o thread quando chega mensagem nova (evita pular o scroll).
   useEffect(()=>{
     if(!modoReal || !selectedId || !conv) return
-    if(thread.length>0) return // já carregado
     const leadId = (conv as any).leadId
     const telefone = (conv as any).telefone
     if(!leadId && !telefone) return
-    setCarregandoReal(true)
     const inst = instanciaSelecionada || "patricia-6c2875b4"
     const params = leadId ? `leadId=${encodeURIComponent(leadId)}` : `telefone=${encodeURIComponent(telefone)}`
-    fetch(`/api/whatsapp/chat/mensagens?instanceName=${inst}&${params}`)
-      .then(r=>r.json())
-      .then(j=>{
+    const chave = selectedId
+    let cancelled = false
+    setCarregandoReal(true)
+    async function carregarThread(silencioso: boolean){
+      try{
+        const r = await fetch(`/api/whatsapp/chat/mensagens?instanceName=${inst}&${params}`)
+        const j = await r.json()
+        if(cancelled) return
         const msgs = (j.mensagens || []) as any[]
         // mapeia para InboxMessage
         const mapped = msgs.map((m:any)=>({
           id: m.id,
-          conversationId: selectedId!,
+          conversationId: chave,
           timestamp: m.criado_em,
           sender: m.de_mim ? "você" as const : "lead" as const,
           origem: m.de_mim ? "outbound" as const : "inbound" as const,
           content: m.corpo || (m.tipo_midia ? `[${m.tipo_midia}]` : ""),
         }))
-        if(mapped.length>0){
-          const store = useInboxStore.getState() as any
-          store.setMensagens({ ...store.mensagens, [selectedId!]: mapped })
+        const store = useInboxStore.getState() as any
+        const atual = (store.mensagens[chave] || []) as any[]
+        const ultimaAtual = atual.length ? atual[atual.length-1]?.id : null
+        const ultimaNova = mapped.length ? mapped[mapped.length-1]?.id : null
+        if(mapped.length !== atual.length || ultimaNova !== ultimaAtual){
+          store.setMensagens({ ...store.mensagens, [chave]: mapped })
         }
-      }).catch(()=>{})
-      .finally(()=>setCarregandoReal(false))
+      }catch{}
+      finally{ if(!silencioso) setCarregandoReal(false) }
+    }
+    void carregarThread(false)
+    const iv = setInterval(()=>{ if(!document.hidden) void carregarThread(true) }, 15000)
+    return ()=>{ cancelled = true; clearInterval(iv) }
   }, [selectedId, modoReal, conv])
 
   if(!conv){

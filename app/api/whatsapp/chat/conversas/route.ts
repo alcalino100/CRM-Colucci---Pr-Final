@@ -45,6 +45,9 @@ export async function GET(request: Request) {
     const existente = porConversa.get(chave)
     if (existente) {
       existente.total++
+      // Nome: a lista vem da mais recente p/ mais antiga e fromMe tem nome null —
+      // usa o pushName não-vazio mais recente em vez do telefone.
+      if (!existente.nomeContato && m.nome_contato) existente.nomeContato = m.nome_contato
     } else {
       porConversa.set(chave, {
         leadId: m.lead_id,
