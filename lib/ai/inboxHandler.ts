@@ -134,31 +134,8 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
 }): Promise<{ ok: boolean; erro?: string }> {
   const t0 = Date.now()
   try {
-    if (!ignorarLimite && rules.style.maxMessages > 0) {
-      const { count } = await db().from("messages_ia").select("id", { count: "exact", head: true }).eq("conversation_id", convId).eq("role", "ai")
-      if ((count ?? 0) >= rules.style.maxMessages) {
-        await registrarResumoConversa(convId, leadIdEfetivo, `atingiu o limite de ${rules.style.maxMessages} mensagens da IA`)
-        await db().from("conversations_ia").update({ ai_responding: false }).eq("id", convId)
-        try {
-          await db().from("automation_logs").insert({
-            lead_id: leadIdEfetivo ?? null,
-            event_type: "ia_limite_atingido",
-            event_title: "Limite de mensagens da IA atingido",
-            event_description: `Conversa ${convId} pausada após ${count} respostas da IA (máx. ${rules.style.maxMessages}).`,
-            actor_type: "ia",
-          })
-        } catch { /* log é best-effort */ }
-        return { ok: false, erro: "Limite de mensagens da IA atingido." }
-      }
-    }
-
-    if (rules.style.waitMs > 0) await sleep(Math.min(rules.style.waitMs, 15000))
-
-    const { data: historyFull } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", { ascending: true }).limit(50)
-    const history = (historyFull || []).slice(0, 10)
-
-    // A mensagem do lead é registrada ANTES da checagem: mesmo escalando, o gatilho
-    // fica no histórico (a resposta da IA é que não é gerada).
+    // 0) Registra a msg do lead primeiro: vale para todos os desfechos (resposta,
+    //    escalação ou limite) — o gatilho sempre fica no histórico.
     if (inserirUsuario) {
       await db().from("messages_ia").insert({ id: `msg_${Date.now()}`, conversation_id: convId, role: "user", content: userMessage })
       try {
@@ -168,7 +145,10 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
       }
     }
 
-    // Escalação automática: triggers do agente (keyword/sentimento/turnos). Se ativar,
+    const { data: historyFull } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", { ascending: true }).limit(50)
+    const history = (historyFull || []).slice(0, 10)
+
+    // 1) Escalação por triggers configurados (keyword/sentimento/max_turns). Se ativar,
     // NÃO gera resposta — pausa a IA, move o lead e audita (handoff para humano).
     try {
       const { detectEscalation } = await import("./escalationDetector")
@@ -195,6 +175,33 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
     } catch (e) {
       console.error("[IA] erro escalation check", e)
     }
+
+    // 2) Trava de limite (sem trigger configurado): pausa com motivo registrado.
+    if (!ignorarLimite && rules.style.maxMessages > 0) {
+      const { count } = await db().from("messages_ia").select("id", { count: "exact", head: true }).eq("conversation_id", convId).eq("role", "ai")
+      if ((count ?? 0) >= rules.style.maxMessages) {
+        const motivo = `Limite de ${rules.style.maxMessages} respostas da IA atingido`
+        await registrarResumoConversa(convId, leadIdEfetivo, `atingiu o limite de ${rules.style.maxMessages} mensagens da IA`)
+        try {
+          await db().from("conversations_ia").update({ ai_responding: false, status: "escalated", escalation_reason: motivo }).eq("id", convId)
+        } catch {
+          await db().from("conversations_ia").update({ ai_responding: false }).eq("id", convId)
+        }
+        try {
+          await db().from("automation_logs").insert({
+            lead_id: leadIdEfetivo ?? null,
+            event_type: "ia_limite_atingido",
+            event_title: "Limite de mensagens da IA atingido",
+            event_description: `Conversa ${convId} pausada após ${count} respostas da IA (máx. ${rules.style.maxMessages}).`,
+            actor_type: "ia",
+          })
+        } catch { /* log é best-effort */ }
+        await registrarAnalytics({ convId, aiId: AI_ID, ms: Date.now() - t0, tokens: 0, modelo: "", semEscalacao: false })
+        return { ok: false, erro: "Limite de mensagens da IA atingido." }
+      }
+    }
+
+    if (rules.style.waitMs > 0) await sleep(Math.min(rules.style.waitMs, 15000))
     const { message: aiResp, tokensUsed, model } = await generateAIResponse({
       aiId: AI_ID,
       userMessage,
