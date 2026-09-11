@@ -157,6 +157,17 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
     const { data: historyFull } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", { ascending: true }).limit(50)
     const history = (historyFull || []).slice(0, 10)
 
+    // A mensagem do lead é registrada ANTES da checagem: mesmo escalando, o gatilho
+    // fica no histórico (a resposta da IA é que não é gerada).
+    if (inserirUsuario) {
+      await db().from("messages_ia").insert({ id: `msg_${Date.now()}`, conversation_id: convId, role: "user", content: userMessage })
+      try {
+        await db().from("conversations_ia").update({ last_user_message_at: new Date().toISOString() }).eq("id", convId)
+      } catch {
+        /* coluna pode não existir em bancos antigos */
+      }
+    }
+
     // Escalação automática: triggers do agente (keyword/sentimento/turnos). Se ativar,
     // NÃO gera resposta — pausa a IA, move o lead e audita (handoff para humano).
     try {
@@ -184,15 +195,6 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
     } catch (e) {
       console.error("[IA] erro escalation check", e)
     }
-    if (inserirUsuario) {
-      await db().from("messages_ia").insert({ id: `msg_${Date.now()}`, conversation_id: convId, role: "user", content: userMessage })
-      try {
-        await db().from("conversations_ia").update({ last_user_message_at: new Date().toISOString() }).eq("id", convId)
-      } catch {
-        /* coluna pode não existir em bancos antigos */
-      }
-    }
-
     const { message: aiResp, tokensUsed, model } = await generateAIResponse({
       aiId: AI_ID,
       userMessage,
