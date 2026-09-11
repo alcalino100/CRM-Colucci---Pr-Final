@@ -38,12 +38,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { data: conv } = await db().from("conversations_ia").select("*").eq("id", id).single()
     if (!conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
 
-    const { data: history } = await db()
+const { data: historyDesc } = await db()
       .from("messages_ia")
       .select("role,content")
       .eq("conversation_id", id)
-      .order("created_at", { ascending: true })
-      .limit(20)
+      .order("created_at", { ascending: false })
+      .limit(30)
+    const history = [...(historyDesc || [])].reverse()
 
     const userMsg = await db()
       .from("messages_ia")

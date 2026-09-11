@@ -63,6 +63,46 @@ async function moverLeadPipeline(leadId: string, para: string): Promise<void> {
   } catch { /* best-effort */ }
 }
 
+// Janela de memória da conversa: ÚLTIMAS 30 mensagens (ordem cronológica).
+// 10 era pouco para qualificação (o lead repete dados e a IA "esquecia").
+// Custo: ~2-4k tokens extras por resposta (fração de centavo).
+const HISTORICO_LIMITE = 30
+
+// Metas ativas do agente injetadas no prompt (só tipos estruturados; legados
+// "goal" fragmentados são ignorados para não poluir o contexto).
+async function metasAtivasParaPrompt(aiId: string): Promise<string> {
+  try {
+    const { data } = await db()
+      .from("goals")
+      .select("name,type,description,questions,prompt,config")
+      .eq("ai_id", aiId)
+      .eq("is_active", true)
+      .in("type", ["qualification", "booking", "info", "custom"])
+      .order("created_at", { ascending: true })
+      .limit(10)
+    const goals = ((data ?? []) as {
+      name: string; type: string; description: string; questions: unknown; prompt: string;
+      config: { success_criteria?: unknown; next_step?: string; fallback?: string } | null;
+    }[])
+      .filter((g) => g.prompt && String(g.prompt).trim().length >= 10)
+      .slice(0, 6)
+    if (!goals.length) return ""
+    const linhas = goals.map((g, i) => {
+      const cfg = g.config ?? {}
+      const qs = Array.isArray(g.questions) && g.questions.length
+        ? ` Perguntas: ${(g.questions as string[]).join(" | ")}.`
+        : ""
+      const sc = cfg.success_criteria ? ` Sucesso: ${JSON.stringify(cfg.success_criteria)}.` : ""
+      const nx = cfg.next_step ? ` Depois: ${cfg.next_step}.` : ""
+      const fb = cfg.fallback ? ` Se falhar: ${cfg.fallback}.` : ""
+      return `${i + 1}. ${g.name} (${g.type}): ${g.description || ""} Conduta: ${String(g.prompt).trim()}.${qs}${sc}${nx}${fb}`
+    })
+    return ["[METAS ATIVAS — siga nesta ordem; conclua uma antes de avançar]", ...linhas].join("\n")
+  } catch {
+    return ""
+  }
+}
+
 // Chave da conversa IA de um contato: o lead vinculado quando existe, senão o
 // telefone. É o que IMPEDE cruzamento entre contatos — cada remetente tem sua
 // conversa, seu histórico e suas respostas. Nunca compartilhe/derive essa chave
@@ -149,6 +189,8 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
   userMessage: string; inserirUsuario: boolean; ignorarLimite: boolean;
 }): Promise<{ ok: boolean; erro?: string }> {
   const t0 = Date.now()
+  // Mensagem vazia (sticker/reaction sem texto): não aciona ciclo de IA.
+  if (!userMessage.trim()) return { ok: false, erro: "Mensagem vazia, nada a responder." }
   try {
     // 0) Registra a msg do lead primeiro: vale para todos os desfechos (resposta,
     //    escalação ou limite) — o gatilho sempre fica no histórico.
@@ -161,8 +203,10 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
       }
     }
 
-    const { data: historyFull } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", { ascending: true }).limit(50)
-    const history = (historyFull || []).slice(0, 10)
+    const { data: historyDesc } = await db().from("messages_ia").select("role,content").eq("conversation_id", convId).order("created_at", { ascending: false }).limit(HISTORICO_LIMITE)
+    // Últimas N em ordem cronológica (antes era: primeiras N — a IA "esquecia" tudo).
+    const historyFull = [...(historyDesc || [])].reverse()
+    const history = historyFull
 
     // 1) Escalação por triggers configurados (keyword/sentimento/max_turns). Se ativar,
     // NÃO gera resposta — pausa a IA, move o lead e audita (handoff para humano).
@@ -218,11 +262,13 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
     }
 
     if (rules.style.waitMs > 0) await sleep(Math.min(rules.style.waitMs, 15000))
+    const metas = await metasAtivasParaPrompt(AI_ID)
+    const suplemento = [regrasParaPrompt(rules, nomeApresentacao(agenteNome)), metas].filter(Boolean).join("\n\n")
     const { message: aiResp, tokensUsed, model } = await generateAIResponse({
       aiId: AI_ID,
       userMessage,
       conversationHistory: (history || []).map((m: any) => ({ role: m.role, content: m.content })),
-      regrasSuplementares: regrasParaPrompt(rules, nomeApresentacao(agenteNome)),
+      regrasSuplementares: suplemento,
     })
     await db().from("messages_ia").insert({ id: `msg_${Date.now() + 1}`, conversation_id: convId, role: "ai", content: aiResp })
 
