@@ -20,9 +20,17 @@ async function agenteParaInstancia(instanceName: string | undefined): Promise<an
 }
 
 // Acha o lead cujo telefone bate com o contato (mesmo corretor da instância quando possível).
+// Busca por variantes no BANCO (ilike) — varredura total quebra acima de 1000 leads.
 async function acharLeadVinculado(telefone: string | undefined, instanceName: string | undefined): Promise<any | null> {
   if (!telefone) return null
-  const { data: candidatos } = await db().from("leads").select("id, telefone, origem, status, corretor_id, referencias")
+  const digits = telefone.replace(/\D/g, "")
+  if (!digits) return null
+  const variantes = Array.from(new Set([digits, digits.startsWith("55") ? digits.slice(2) : `55${digits}`]))
+  const { data: candidatos } = await db()
+    .from("leads")
+    .select("id, telefone, origem, status, corretor_id, referencias")
+    .or(variantes.map((v) => `telefone.ilike.%${v}%`).join(","))
+    .limit(20)
   const instancia = instanceName
     ? (await db().from("whatsapp_instancias").select("corretor_id").eq("instance_name", instanceName).maybeSingle()).data
     : null

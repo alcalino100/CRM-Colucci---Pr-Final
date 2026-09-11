@@ -142,8 +142,17 @@ function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId:
 }
 
 // Acha o lead cujo telefone bate com o do contato (para vincular a mensagem ao registro do CRM).
+// Busca por variantes no BANCO (ilike) em vez de varrer a tabela inteira no JS —
+// com 1000+ leads o select sem filtro corta os mais novos (PostgREST pagina em 1000).
 async function encontrarLeadPorTelefone(telefone: string): Promise<string | null> {
-  const { data: candidatos } = await wsupabase.from("leads").select("id, telefone")
+  const digits = onlyDigits(telefone)
+  if (!digits) return null
+  const variantes = Array.from(new Set([digits, digits.startsWith("55") ? digits.slice(2) : `55${digits}`]))
+  const { data: candidatos } = await wsupabase
+    .from("leads")
+    .select("id, telefone")
+    .or(variantes.map((v) => `telefone.ilike.%${v}%`).join(","))
+    .limit(20)
   const lead = (candidatos ?? []).find((l) => normalizePhone(l.telefone) === normalizePhone(telefone))
   return lead?.id ?? null
 }
@@ -312,7 +321,13 @@ async function handleMessageUpsert(payload: any) {
     nomeConjunto = conjunto?.nome ?? null
   }
 
-  const { data: candidatos } = await wsupabase.from("leads").select("id, telefone, corretor_id, status")
+  const digitsTel = onlyDigits(telefone)
+  const variantesTel = Array.from(new Set([digitsTel, digitsTel.startsWith("55") ? digitsTel.slice(2) : `55${digitsTel}`]))
+  const { data: candidatos } = await wsupabase
+    .from("leads")
+    .select("id, telefone, corretor_id, status")
+    .or(variantesTel.map((v) => `telefone.ilike.%${v}%`).join(","))
+    .limit(20)
   const existente = (candidatos ?? []).find((l) => normalizePhone(l.telefone) === normalizePhone(telefone))
 
   // Nome do corretor da instância (para as notificações)
@@ -387,7 +402,11 @@ async function handleMessageUpsert(payload: any) {
     }
     if (error) {
       // Corrida: telefone inserido em paralelo — trata como existente
-      const { data: candidatos2 } = await wsupabase.from("leads").select("id, telefone, corretor_id, status")
+      const { data: candidatos2 } = await wsupabase
+        .from("leads")
+        .select("id, telefone, corretor_id, status")
+        .or(variantesTel.map((v) => `telefone.ilike.%${v}%`).join(","))
+        .limit(20)
       const again = (candidatos2 ?? []).find((l) => normalizePhone(l.telefone) === normalizePhone(telefone))
       leadId = again?.id ?? null
       if (again && again.corretor_id && again.corretor_id !== corretorId) {
