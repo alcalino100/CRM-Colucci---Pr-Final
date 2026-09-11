@@ -11,6 +11,24 @@ function db() {
   return createClient(SUPABASE_URL, SUPABASE_KEY)
 }
 
+// Lista mensagens da conversa (usado por telas de auditoria/teste).
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params
+    if (!id) return NextResponse.json({ error: "id é obrigatório" }, { status: 400 })
+    const { data, error } = await db()
+      .from("messages_ia")
+      .select("id,role,content,metadata,created_at,conversation_id")
+      .eq("conversation_id", id)
+      .order("created_at", { ascending: true })
+      .limit(100)
+    if (error) throw error
+    return NextResponse.json({ ok: true, messages: data ?? [] })
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const t0 = Date.now()
   const { id } = await params

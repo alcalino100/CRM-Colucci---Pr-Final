@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives"
 import { Badge } from "@/components/ui/primitives"
 import { ShieldCheck, Coins, Clock } from "lucide-react"
@@ -9,6 +9,7 @@ export function ApiAudit({ id }: { id: string }){
   const [total, setTotal] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [modoTotal, setModoTotal] = useState(true)
+  const fallbackJaRodou = useRef(false)
 
   useEffect(()=>{
     const url = modoTotal ? `/api/ai/${id}/audit?total=1` : `/api/ai/${id}/audit`
@@ -22,15 +23,16 @@ export function ApiAudit({ id }: { id: string }){
     }).catch(()=>{}).finally(()=>setLoading(false))
   },[id, modoTotal])
 
-  // Fallback: busca conversas e mensagens para estimar tokens se audit não existir
+  // Fallback (uma única vez): busca conversas e mensagens para estimar tokens se audit não existir
   useEffect(()=>{
-    if(logs.length>0 || !loading) return
+    if(logs.length>0 || !loading || fallbackJaRodou.current) return
+    fallbackJaRodou.current = true
     fetch(`/api/conversations?aiId=${id}`).then(r=>r.json()).then(async (convs:any[])=>{
       if(!Array.isArray(convs) || convs.length===0) return
       const all:any[] = []
-      for(const c of convs.slice(0,10)){
+      for(const c of convs.slice(0,5)){
         const r = await fetch(`/api/conversations/${c.id}/messages`).then(x=>x.json()).catch(()=>null)
-        const msgs = r?.messages || r || []
+        const msgs = r?.messages || []
         if(Array.isArray(msgs)) all.push(...msgs.map((m:any)=> ({ ...m, conversation_id: c.id })))
       }
       // transforma em logs

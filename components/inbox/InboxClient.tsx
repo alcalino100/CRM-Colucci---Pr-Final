@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { InboxList, InboxSkeleton } from "./InboxList"
 import { ConversaView, ConversaSkeleton } from "./ConversaView"
 import { WidgetPanel } from "./WidgetPanel"
+import { PanelBoundary } from "./PanelBoundary"
 import { useInboxStore } from "@/lib/inbox-store"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
@@ -168,14 +169,14 @@ export function InboxClient(){
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-11rem)] lg:flex-row">
       {/* Desktop: 3 colunas | Mobile: drawer Inbox quando conversa aberta */}
       <div className={`${selectedId ? "hidden md:flex" : "flex"} w-full md:w-[280px] shrink-0`}>
-        <InboxList />
+        <PanelBoundary nome="da lista"><InboxList /></PanelBoundary>
       </div>
       <div className={`${!selectedId ? "hidden md:flex" : "flex"} min-w-0 flex-1`}>
-        <ConversaView />
+        <PanelBoundary nome="da conversa"><ConversaView /></PanelBoundary>
       </div>
       {/* Widget: esconde em mobile quando conversa aberta, mostra em desktop sempre */}
       <div className={`${selectedId ? "hidden lg:flex" : "flex"} w-full lg:w-[240px] shrink-0`}>
-        <WidgetPanel />
+        <PanelBoundary nome="lateral"><WidgetPanel /></PanelBoundary>
       </div>
       {/* Botão voltar mobile quando conversa selecionada */}
       {selectedId && (
