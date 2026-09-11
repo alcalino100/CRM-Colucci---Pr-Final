@@ -46,6 +46,32 @@ export function ControlCenter({ id }: { id: string }) {
   const [rules, setRules] = useState<AgentRules>(DEFAULTS)
   const [saving, setSaving] = useState(false)
   const [dias, setDias] = useState(7)
+  const [novoNumero, setNovoNumero] = useState("")
+
+  const soDigitos = (v: string) => (v || "").replace(/\D/g, "")
+  const normalizaNumero = (v: string) => {
+    const d = soDigitos(v)
+    return d.length > 11 && d.startsWith("55") ? d.slice(2) : d
+  }
+
+  function addNumeroTeste() {
+    const d = soDigitos(novoNumero)
+    if (d.length < 10 || d.length > 13) {
+      toast("Número inválido — use DDD + número (ex.: 18991976332).", "error")
+      return
+    }
+    const norm = normalizaNumero(d)
+    if (rules.target.numeroTeste.some((n) => normalizaNumero(n) === norm)) {
+      toast("Esse número já está na lista.", "error")
+      return
+    }
+    setRules({ ...rules, target: { ...rules.target, numeroTeste: [...rules.target.numeroTeste, d] } })
+    setNovoNumero("")
+  }
+
+  function removerNumeroTeste(n: string) {
+    setRules({ ...rules, target: { ...rules.target, numeroTeste: rules.target.numeroTeste.filter((x) => x !== n) } })
+  }
 
   useEffect(() => { carregar(dias) }, [id])
   useEffect(() => { carregarInstancias(); carregarContexto() }, [])
@@ -259,8 +285,24 @@ export function ControlCenter({ id }: { id: string }) {
                 </div>
               </div>
               <div className="grid gap-1.5">
-                <Label>Números de teste (sempre respondem, mesmo sem lead)</Label>
-                <Input value={rules.target.numeroTeste.join(", ")} onChange={e=>setRules({...rules, target:{...rules.target, numeroTeste: e.target.value.split(",").map(s=>s.trim()).filter(Boolean)}})} />
+                <Label>Números de teste — vários ao mesmo tempo ({rules.target.numeroTeste.length})</Label>
+                <p className="text-xs text-muted-foreground">Cada número tem conversa e resposta próprias (sem cruzamento). Vale com ou sem 55. Não esqueça de Salvar.</p>
+                {rules.target.numeroTeste.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {rules.target.numeroTeste.map((n) => (
+                      <span key={n} className="flex items-center gap-1.5 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1 font-mono text-[11px] text-cyan-700 dark:text-cyan-300">
+                        {n}
+                        <button type="button" onClick={() => removerNumeroTeste(n)} aria-label={`Remover ${n}`} className="font-bold hover:text-red-500">×</button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Nenhum número — só leads aptos recebem resposta.</p>
+                )}
+                <div className="flex gap-2">
+                  <Input value={novoNumero} onChange={(e) => setNovoNumero(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addNumeroTeste() }} placeholder="Ex.: 18991976332" inputMode="tel" className="font-mono" />
+                  <button type="button" onClick={addNumeroTeste} className={cn("shrink-0 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-600")}>+ Adicionar</button>
+                </div>
               </div>
               <div className="grid gap-1.5">
                 <Label>Status de lead que a IA NUNCA responde</Label>

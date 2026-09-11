@@ -63,6 +63,14 @@ async function moverLeadPipeline(leadId: string, para: string): Promise<void> {
   } catch { /* best-effort */ }
 }
 
+// Chave da conversa IA de um contato: o lead vinculado quando existe, senão o
+// telefone. É o que IMPEDE cruzamento entre contatos — cada remetente tem sua
+// conversa, seu histórico e suas respostas. Nunca compartilhe/derive essa chave
+// de outro dado (instância, agente, etc).
+export function chaveConversa(leadIdEfetivo: string | undefined, telefone: string): string {
+  return leadIdEfetivo || telefone
+}
+
 // STOP automático: gestor/corretor enviou mensagem manualmente na instância. A conversa
 // IA daquele contato é PAUSADA (ai_responding=false), leva o lead para em_atendimento e
 // registra o resumo nas observações — o atendimento passa a ser manual.
@@ -72,7 +80,7 @@ export async function pausarIaMensagemManual({ telefone, instanceName, textoOutb
     const agente = (agentes ?? []).find((a: any) => getBoundInstances(a.config).includes(instanceName || ""))
     if (!telefone) return
     const lead = await acharLeadVinculado(telefone, instanceName)
-    const key = lead?.id ?? telefone
+    const key = chaveConversa(lead?.id, telefone)
     if (agente) {
       const { data: conv } = await db().from("conversations_ia").select("id,ai_responding").eq("ai_id", agente.id).eq("contact_id", key).maybeSingle()
       if (conv?.id) {
@@ -267,7 +275,7 @@ export async function dispararRespostaIA({ telefone, instanceName }: { telefone:
     const AI_ID = agente.id as string
     const rules = getRules(agente.config, agente)
     const lead = await acharLeadVinculado(telefone, instanceName)
-    const key = lead?.id ?? telefone
+    const key = chaveConversa(lead?.id, telefone)
     const { data: conv } = await db().from("conversations_ia").select("id,ai_responding").eq("ai_id", AI_ID).eq("contact_id", key).maybeSingle()
     if (!conv?.id) return { ok: false, erro: "Este contato ainda não tem conversa IA registrada. Quando chegar a próxima mensagem, a IA responderá sozinha." }
     if (!conv.ai_responding) await db().from("conversations_ia").update({ ai_responding: true }).eq("id", conv.id)
@@ -339,7 +347,7 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
 
     // 5) Busca ou cria conversa IA para este contato
     let convId: string
-    const key = leadIdEfetivo || telefone
+    const key = chaveConversa(leadIdEfetivo, telefone)
     const { data: existing } = await db().from("conversations_ia").select("id,ai_responding,last_message_at,last_user_message_at").eq("ai_id", AI_ID).eq("contact_id", key).maybeSingle()
     if(existing?.id) convId = existing.id
     else {
