@@ -105,6 +105,32 @@ describe("avaliarTriggers — max_turns", () => {
   })
 })
 
+describe("avaliarTriggers — bateria da spec (casos exatos)", () => {
+  const bateria = () => [
+    trig({ condition: "keyword", name: "Bateria", detection_keywords: ["cancelar", "reembolso", "humano"] }),
+    trig({ condition: "sentiment", name: "BateriaSent" }),
+  ]
+  const cases: { msg: string; should: boolean }[] = [
+    { msg: "cancelar", should: true },
+    { msg: "Quero cancelar meu contrato", should: true },
+    { msg: "reembolso", should: true },
+    { msg: "RAIVA!!!", should: true },
+    { msg: "ESTOU FURIOSA!!!", should: true },
+    { msg: "qual é o preço?", should: false },
+    { msg: "ok obrigado", should: false },
+    { msg: "Oi, tudo bem?", should: false },
+  ]
+  for (const c of cases) {
+    it(`"${c.msg}" → ${c.should ? "escala" : "não escala"}`, () => {
+      expect(avaliarTriggers(bateria(), c.msg, [], 10).shouldEscalate).toBe(c.should)
+    })
+  }
+  it("message #11 com teto 10 escala", () => {
+    const h = Array.from({ length: 10 }, (_, i) => ({ role: "ia", content: `r${i}` }))
+    expect(avaliarTriggers([TURNS()], "mais uma", h, 10).shouldEscalate).toBe(true)
+  })
+})
+
 describe("avaliarTriggers — geral", () => {
   it("sem triggers não escala", () => {
     const r = avaliarTriggers([], "QUERO HUMANO!!!", [], 10)

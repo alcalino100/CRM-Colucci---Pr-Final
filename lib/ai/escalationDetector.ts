@@ -2,6 +2,11 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import type { EscalationCheck, EscalationTrigger } from "./types"
 
+// Re-export de compatibilidade: o handoff vive em handoffNotifications.ts,
+// mas testes/scripts podem importar tudo daqui.
+export { notificarEscalacao } from "./handoffNotifications"
+export type { HandoffParams } from "./handoffNotifications"
+
 function db() {
   return createClient(SUPABASE_URL, SUPABASE_KEY)
 }
