@@ -157,6 +157,24 @@ async function encontrarLeadPorTelefone(telefone: string): Promise<string | null
   return lead?.id ?? null
 }
 
+// Baixa mídia com retry (a Evolution pode levar segundos para sincronizar o
+// arquivo após o upsert — a 1ª tentativa imediata costuma falhar).
+async function baixarMidiaComRetry(instanceName: string, mensagemId: string | null, tentativas = 3) {
+  const { obterAudioBase64 } = await import("@/lib/whatsapp/server")
+  for (let i = 0; i < tentativas; i++) {
+    const b = await obterAudioBase64(instanceName, mensagemId).catch(() => null)
+    if (b) return b
+    if (i < tentativas - 1) await new Promise((r) => setTimeout(r, 3000))
+  }
+  return null
+}
+
+async function auditarMidia(evento: "ia_midia_download_falhou" | "ia_audio_transcrito" | "ia_imagem_descrita", titulo: string, descricao: string) {
+  try {
+    await wsupabase.from("automation_logs").insert({ event_type: evento, event_title: titulo, event_description: descricao, actor_type: "ia" })
+  } catch { /* best-effort */ }
+}
+
 // Colunas de mídia para o insert (a URL entra depois, quando o arquivo termina de baixar).
 function camposMidia(midia: MidiaDetectada | null) {
   if (!midia) return {}
@@ -210,23 +228,27 @@ async function handleMessageUpsert(payload: any) {
   // fluxo NORMAL (vínculo, regras, IA, escalação, auditoria).
   // Pula bloqueados (sem lead/teste não há quem consuma a transcrição).
   if (midia?.tipo === "audio" && !corpo.trim() && mensagemId && (!bloqueado || msg?.key?.fromMe === true)) {
-    try {
-      const { obterAudioBase64 } = await import("@/lib/whatsapp/server")
-      const { transcreverAudioSmart } = await import("@/lib/ai/midia")
-      const b64 = await obterAudioBase64(instanceName, mensagemId)
-      if (b64) {
-        const t = await transcreverAudioSmart(instanceName, b64.base64, b64.mimeType ?? midia.mimeType)
-        if (t.texto.trim()) corpo = t.texto.trim()
-      }
-    } catch (e: unknown) {
+    const b64 = await baixarMidiaComRetry(instanceName, mensagemId)
+    if (!b64) {
+      await auditarMidia("ia_midia_download_falhou", "Áudio não baixado", `Áudio de ${telefone} (${instanceName}) após 3 tentativas — registrado sem transcrição.`)
+    } else {
       try {
-        await wsupabase.from("automation_logs").insert({
-          event_type: "ia_audio_nao_transcrito",
-          event_title: "Áudio não transcrito",
-          event_description: `Áudio de ${telefone} (${instanceName}) registrado sem transcrição: ${e instanceof Error ? e.message : String(e)}.`,
-          actor_type: "ia",
-        })
-      } catch { /* log é best-effort */ }
+        const { transcreverAudioSmart } = await import("@/lib/ai/midia")
+        const t = await transcreverAudioSmart(instanceName, b64.base64, b64.mimeType ?? midia.mimeType)
+        if (t.texto.trim()) {
+          corpo = t.texto.trim()
+          await auditarMidia("ia_audio_transcrito", "Áudio transcrito", `Áudio de ${telefone} (${instanceName}) via ${t.provedor}/${t.modelo} (${t.texto.length} chars).`)
+        }
+      } catch (e: unknown) {
+        try {
+          await wsupabase.from("automation_logs").insert({
+            event_type: "ia_audio_nao_transcrito",
+            event_title: "Áudio não transcrito",
+            event_description: `Áudio de ${telefone} (${instanceName}) registrado sem transcrição: ${e instanceof Error ? e.message : String(e)}.`,
+            actor_type: "ia",
+          })
+        } catch { /* log é best-effort */ }
+      }
     }
   }
 
@@ -234,23 +256,27 @@ async function handleMessageUpsert(payload: any) {
   // Inbox entenderem o conteúdo. Com legenda, mantém a legenda (sem custo extra).
   // Pula bloqueados pelo mesmo motivo do áudio acima.
   if (midia?.tipo === "image" && !corpo.trim() && mensagemId && (!bloqueado || msg?.key?.fromMe === true)) {
-    try {
-      const { obterAudioBase64 } = await import("@/lib/whatsapp/server")
-      const { descreverImagemSmart } = await import("@/lib/ai/midia")
-      const b64 = await obterAudioBase64(instanceName, mensagemId)
-      if (b64) {
-        const d = await descreverImagemSmart(instanceName, b64.base64, b64.mimeType ?? midia.mimeType)
-        if (d.texto.trim()) corpo = `📷 ${d.texto.trim()}`
-      }
-    } catch (e: unknown) {
+    const b64 = await baixarMidiaComRetry(instanceName, mensagemId)
+    if (!b64) {
+      await auditarMidia("ia_midia_download_falhou", "Imagem não baixada", `Imagem de ${telefone} (${instanceName}) após 3 tentativas — registrada sem descrição.`)
+    } else {
       try {
-        await wsupabase.from("automation_logs").insert({
-          event_type: "ia_imagem_nao_descrita",
-          event_title: "Imagem não descrita",
-          event_description: `Imagem de ${telefone} (${instanceName}) registrada sem descrição: ${e instanceof Error ? e.message : String(e)}.`,
-          actor_type: "ia",
-        })
-      } catch { /* log é best-effort */ }
+        const { descreverImagemSmart } = await import("@/lib/ai/midia")
+        const d = await descreverImagemSmart(instanceName, b64.base64, b64.mimeType ?? midia.mimeType)
+        if (d.texto.trim()) {
+          corpo = `📷 ${d.texto.trim()}`
+          await auditarMidia("ia_imagem_descrita", "Imagem descrita", `Imagem de ${telefone} (${instanceName}) via ${d.provedor}/${d.modelo}.`)
+        }
+      } catch (e: unknown) {
+        try {
+          await wsupabase.from("automation_logs").insert({
+            event_type: "ia_imagem_nao_descrita",
+            event_title: "Imagem não descrita",
+            event_description: `Imagem de ${telefone} (${instanceName}) registrada sem descrição: ${e instanceof Error ? e.message : String(e)}.`,
+            actor_type: "ia",
+          })
+        } catch { /* log é best-effort */ }
+      }
     }
   }
 
@@ -364,7 +390,9 @@ async function handleMessageUpsert(payload: any) {
       // Aguardado de propósito: fire-and-forget (void) pode ser congelado pela
       // Vercel ao retornar a resposta — a IA "morre" no meio do caminho sem rastro.
       // Com idempotência por mensagem_id acima, retry da Evolution é seguro.
-      await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadIdExistente || undefined, instanceName }).catch(() => {})
+      // mensagemId + recebidaEm alimentam o debounce (rajada vira 1 resposta).
+      const recebidaEm = new Date().toISOString()
+      await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadIdExistente || undefined, instanceName, mensagemId: mensagemId || undefined, recebidaEm }).catch(() => {})
     }
     return
   }
@@ -586,7 +614,8 @@ async function handleMessageUpsert(payload: any) {
   // IA: dispara resposta automática (Patrícia ou Guilherme - teste). Aguardado pelo
   // mesmo motivo acima (nada de void): sem await, a resposta pode morrer sem rastro.
   if (!msg?.key?.fromMe) {
-    await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadId || leadIdExistente || undefined, instanceName }).catch(() => {})
+    const recebidaEm = new Date().toISOString()
+    await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadId || leadIdExistente || undefined, instanceName, mensagemId: mensagemId || undefined, recebidaEm }).catch(() => {})
   }
 }
 

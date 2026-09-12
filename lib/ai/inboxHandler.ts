@@ -385,7 +385,20 @@ export async function isNumeroTesteIA(telefone: string | undefined): Promise<boo
   }
 }
 
-export async function handlePatriciaInbound({ telefone, texto, leadId, instanceName }: { telefone: string; texto: string; leadId?: string; instanceName?: string }){
+// Junta textos de uma rajada num bloco único (uma resposta só). Puro/testável.
+export function juntarRajada(corpos: (string | null | undefined)[]): string {
+  return corpos
+    .map((c) => (c || "").trim())
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 2000)
+}
+
+// Janela de debounce: rajadas (textos + áudios + fotos seguidos) viram 1 resposta.
+// Também dá o atraso humano natural (~5s + processamento).
+const DEBOUNCE_MS = 5000
+
+export async function handlePatriciaInbound({ telefone, texto, leadId, instanceName, mensagemId, recebidaEm }: { telefone: string; texto: string; leadId?: string; instanceName?: string; mensagemId?: string; recebidaEm?: string }){
   try{
     // 1) REGRA DE OURO: instância vinculada a IA ativa + regras habilitadas
     const agente = await agenteParaInstancia(instanceName)
@@ -475,11 +488,61 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       return
     }
 
-    // 5d) Gera, registra e envia (com espera anti-robô, limite de mensagens e auditoria)
+    // 5d) Debounce + rajada (só no fluxo automático com mensagem identificada):
+    // espera a sequência, e se chegar mensagem mais nova, esta instância sai —
+    // a mais nova assume e junta TUDO num bloco único (uma resposta só).
+    let textoEfetivo = texto
+    if (mensagemId && instanceName) {
+      await sleep(DEBOUNCE_MS)
+      const buscarUltima = async () =>
+        (
+          await db()
+            .from("whatsapp_mensagens")
+            .select("mensagem_id,criado_em")
+            .eq("instance_name", instanceName)
+            .eq("telefone", telefone)
+            .eq("de_mim", false)
+            .order("criado_em", { ascending: false })
+            .limit(1)
+        ).data?.[0] as { mensagem_id: string; criado_em: string } | undefined
+      const refTs = new Date(recebidaEm || Date.now()).getTime()
+      const u1 = await buscarUltima().catch(() => undefined)
+      if (u1 && u1.mensagem_id !== mensagemId && new Date(u1.criado_em).getTime() > refTs) return
+      await sleep(700)
+      const u2 = await buscarUltima().catch(() => undefined)
+      if (u2 && u2.mensagem_id !== mensagemId && new Date(u2.criado_em).getTime() > refTs) return
+      try {
+        const { data: ultimaIA } = await db()
+          .from("messages_ia")
+          .select("created_at")
+          .eq("conversation_id", convId)
+          .eq("role", "ai")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        const desde = (ultimaIA as { created_at?: string } | null)?.created_at ?? new Date(Date.now() - 60000).toISOString()
+        const { data: rajada } = await db()
+          .from("whatsapp_mensagens")
+          .select("corpo,criado_em")
+          .eq("instance_name", instanceName)
+          .eq("telefone", telefone)
+          .eq("de_mim", false)
+          .gt("criado_em", desde)
+          .order("criado_em", { ascending: true })
+          .limit(10)
+        const bloco = juntarRajada(((rajada ?? []) as { corpo: string }[]).map((r) => r.corpo))
+        if (bloco) textoEfetivo = bloco
+        else return
+      } catch (e) {
+        console.error("[IA] erro rajada, segue com texto único", e)
+      }
+    }
+
+    // 5e) Gera, registra e envia (com espera anti-robô, limite de mensagens e auditoria)
     await responderConversaIa({
       convId, AI_ID, agenteNome: agente.name, rules,
       leadIdEfetivo, telefone, instanceName,
-      userMessage: texto, inserirUsuario: true, ignorarLimite: false,
+      userMessage: textoEfetivo, inserirUsuario: true, ignorarLimite: false,
     })
   }catch(e){
     console.error("[IA] erro inbox", e)
