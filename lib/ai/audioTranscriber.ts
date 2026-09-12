@@ -1,9 +1,12 @@
-// Transcrição de áudios do WhatsApp via Gemini multimodal (áudio nativo —
-// sem Whisper/serviço extra). O texto transcrito volta para o fluxo NORMAL
-// (vínculo de lead, regras, escalação, auditoria) — nada de pipeline paralela.
+// Transcrição de áudios do WhatsApp para o fluxo NORMAL (vínculo de lead, regras,
+// escalação, auditoria) — nada de pipeline paralela. Estratégia:
+//   1. OpenAI Whisper (se OPENAI_API_KEY configurada) — melhor fidelidade e custo.
+//   2. Gemini multimodal (áudio nativo) — fallback, sem serviço extra.
+// A API da Anthropic (Claude) NÃO aceita entrada de áudio — apenas text/image/pdf/
+// document — então não há tentativa de transcrição por Claude aqui.
 export type TranscricaoOut = { texto: string; modelo: string }
 
-// Mime que o Gemini aceita para áudio (corta ";codecs=..." do WhatsApp).
+// Mime que os provedores aceitam para áudio (corta ";codecs=..." do WhatsApp).
 export function normalizarMimeAudio(mime: string | null | undefined): string {
   const base = String(mime || "").split(";")[0].trim().toLowerCase()
   if (base === "audio/ogg" || base === "audio/opus") return "audio/ogg"
@@ -16,9 +19,42 @@ export function normalizarMimeAudio(mime: string | null | undefined): string {
   return base || "audio/ogg"
 }
 
-const MODELOS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-1.5-flash"]
+function extPorMime(mime: string): string {
+  if (mime === "audio/mpeg" || mime === "audio/mp3") return "mp3"
+  if (mime === "audio/mp4" || mime === "audio/x-m4a" || mime === "audio/aac") return "m4a"
+  if (mime === "audio/wav" || mime === "audio/x-wav") return "wav"
+  if (mime === "audio/webm") return "webm"
+  if (mime === "audio/flac") return "flac"
+  if (mime === "audio/amr") return "amr"
+  return "ogg"
+}
 
-export async function transcreverAudio(base64: string, mimeType: string | null): Promise<TranscricaoOut> {
+// Whisper via API REST (FormData/Blob globais do Node runtime).
+export async function transcreverAudioWhisper(base64: string, mimeType: string | null): Promise<TranscricaoOut> {
+  const key = process.env.OPENAI_API_KEY
+  if (!key) throw new Error("OPENAI_API_KEY ausente")
+  if (!base64) throw new Error("Áudio vazio")
+  const mime = normalizarMimeAudio(mimeType)
+  const buf = Buffer.from(base64, "base64")
+  const form = new FormData()
+  form.append("file", new Blob([buf], { type: mime }), `audio.${extPorMime(mime)}`)
+  form.append("model", "whisper-1")
+  form.append("language", "pt")
+  const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}` },
+    body: form,
+  })
+  const j = await r.json().catch(() => null)
+  if (!r.ok) throw new Error(`Whisper: HTTP ${r.status} (${j?.error?.message || "sem detalhe"})`)
+  const texto = String(j?.text || "").trim()
+  if (!texto) throw new Error("Whisper: transcrição vazia")
+  return { texto, modelo: "whisper-1" }
+}
+
+const MODELOS = ["gemini-2.5-flash", "gemini-flash-latest"]
+
+export async function transcreverAudioGemini(base64: string, mimeType: string | null): Promise<TranscricaoOut> {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
   if (!key) throw new Error("GEMINI_API_KEY ausente no ambiente")
   if (!base64) throw new Error("Áudio vazio")

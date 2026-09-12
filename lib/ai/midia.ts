@@ -1,9 +1,9 @@
 import { decryptToken } from "@/lib/encryption"
 import { providerFromModel } from "./generateResponse"
 import { agenteParaInstancia } from "./inboxHandler"
-import { transcreverAudio as transcreverAudioGemini } from "./audioTranscriber"
+import { transcreverAudioGemini, transcreverAudioWhisper } from "./audioTranscriber"
 
-export type ProvedorMidia = "claude" | "gemini"
+export type ProvedorMidia = "claude" | "gemini" | "openai"
 
 // Chave Claude do agente (token próprio descriptografado ou env), como em generateResponse.
 function chaveClaude(agente: { api_token?: string }): string {
@@ -82,46 +82,25 @@ async function descreverGemini(base64: string, mime: string): Promise<string> {
   throw new Error(`Gemini visão falhou: ${ultimo}`)
 }
 
-// Transcreve áudio: Claude do agente primeiro (quando configurado), Gemini como fallback.
-// Retorna o texto + qual provedor funcionou (vai para a auditoria).
+// Transcreve áudio: Whisper (se OPENAI_API_KEY) primeiro, Gemini como fallback.
+// A API do Claude NÃO aceita entrada de áudio (só text/image/pdf/document), então
+// não há caminho Claude aqui — ver audioTranscriber.ts. O provedor que funcionou
+// vai para a auditoria.
 export async function transcreverAudioSmart(
   instanceName: string | undefined,
   base64: string,
   mimeType: string | null,
 ): Promise<{ texto: string; provedor: ProvedorMidia; modelo: string }> {
-  const ctx = await provedorDoAgente(instanceName)
-  let erroClaude: string | null = null
-  if (ctx && ctx.provedor === "claude") {
-    const key = chaveClaude(ctx.agente)
-    const model = ctx.agente.model_name || "claude-haiku-4-5"
-    if (key) {
-      try {
-        const mime = String(mimeType || "audio/ogg").split(";")[0].trim() || "audio/ogg"
-        const texto = await chamarClaudeMidia({
-          apiKey: key,
-          model,
-          blocoMidia: { type: "audio", source: { type: "base64", media_type: mime, data: base64 } },
-          instrucao: "Transcreva este áudio em português brasileiro, fiel ao que foi dito, sem comentários. Retorne SÓ a transcrição.",
-          maxTokens: 1000,
-        })
-        return { texto, provedor: "claude", modelo: model }
-      } catch (e: unknown) {
-        erroClaude = e instanceof Error ? e.message : String(e)
-        console.error("[mídia] Claude áudio falhou, caindo para Gemini:", erroClaude)
-      }
-    } else {
-      erroClaude = "sem chave Claude resolvida"
-    }
-  } else {
-    erroClaude = "agente sem provedor Claude"
-  }
   try {
-    const g = await transcreverAudioGemini(base64, mimeType)
-    return { texto: g.texto, provedor: "gemini", modelo: g.modelo }
+    const t = await transcreverAudioWhisper(base64, mimeType)
+    return { texto: t.texto, provedor: "openai", modelo: t.modelo }
   } catch (e: unknown) {
-    const erroGemini = e instanceof Error ? e.message : String(e)
-    throw new Error(`Claude: ${erroClaude} | Gemini: ${erroGemini}`)
+    if (process.env.OPENAI_API_KEY) {
+      console.error("[mídia] Whisper falhou, caindo para Gemini:", e instanceof Error ? e.message : String(e))
+    }
   }
+  const g = await transcreverAudioGemini(base64, mimeType)
+  return { texto: g.texto, provedor: "gemini", modelo: g.modelo }
 }
 
 // Descreve imagem (Claude vision primeiro, Gemini fallback).

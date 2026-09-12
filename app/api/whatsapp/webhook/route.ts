@@ -4,7 +4,7 @@ import { baixarEArmazenarMidia, detectarMidia, mapConnectionState, notifyDisconn
 import { registrarRespostaDeLead, registrarStatusEntrega } from "@/lib/automation-services"
 import { enviarLeadCapi } from "@/lib/meta/capi"
 import { TELEFONES_BLOQUEADOS, isTelefoneBloqueado as isBlockedCentral } from "@/lib/telefones-bloqueados"
-import { handlePatriciaInbound, isNumeroTesteIA, pausarIaMensagemManual } from "@/lib/ai/inboxHandler"
+import { agenteParaInstancia, handlePatriciaInbound, isNumeroTesteIA, pausarIaMensagemManual } from "@/lib/ai/inboxHandler"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -217,6 +217,13 @@ async function handleMessageUpsert(payload: any) {
     if (jaProcessada) return
   }
   const midia = detectarMidia(msg?.message)
+  // Transcrição/descrição de mídia só roda quando alguém vai consumir (agente de IA
+  // ativo na instância ou número de teste). Instâncias sem agente (ex.: corretores)
+  // apenas registram a mídia, sem gastar cota de IA.
+  const deveProcessarMidiaIA =
+    !!midia &&
+    msg?.key?.fromMe !== true &&
+    ((await agenteParaInstancia(instanceName)) !== null || (await isNumeroTesteIA(telefone)))
   // Corpo: texto puro, ou a legenda da mídia (imagem/vídeo/documento podem ter legenda).
   // Sem mídia e sem texto, mantém o rótulo antigo por segurança.
   let corpo =
@@ -227,7 +234,7 @@ async function handleMessageUpsert(payload: any) {
   // ÁUDIO: transcreve (Claude do agente primeiro, Gemini como fallback) e segue o
   // fluxo NORMAL (vínculo, regras, IA, escalação, auditoria).
   // Pula bloqueados (sem lead/teste não há quem consuma a transcrição).
-  if (midia?.tipo === "audio" && !corpo.trim() && mensagemId && (!bloqueado || msg?.key?.fromMe === true)) {
+  if (midia?.tipo === "audio" && !corpo.trim() && mensagemId && deveProcessarMidiaIA) {
     const b64 = await baixarMidiaComRetry(instanceName, mensagemId)
     if (!b64) {
       await auditarMidia("ia_midia_download_falhou", "Áudio não baixado", `Áudio de ${telefone} (${instanceName}) após 3 tentativas — registrado sem transcrição.`)
@@ -255,7 +262,7 @@ async function handleMessageUpsert(payload: any) {
   // IMAGEM sem legenda: descreve via IA (Claude vision primeiro) para a IA e o
   // Inbox entenderem o conteúdo. Com legenda, mantém a legenda (sem custo extra).
   // Pula bloqueados pelo mesmo motivo do áudio acima.
-  if (midia?.tipo === "image" && !corpo.trim() && mensagemId && (!bloqueado || msg?.key?.fromMe === true)) {
+  if (midia?.tipo === "image" && !corpo.trim() && mensagemId && deveProcessarMidiaIA) {
     const b64 = await baixarMidiaComRetry(instanceName, mensagemId)
     if (!b64) {
       await auditarMidia("ia_midia_download_falhou", "Imagem não baixada", `Imagem de ${telefone} (${instanceName}) após 3 tentativas — registrada sem descrição.`)

@@ -62,7 +62,7 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
 
   if(!apiKey) throw new Error(`API key não configurada para ${provider}`)
 
-  const model = (ai as any).model_name || (provider==="gemini" ? "gemini-1.5-flash" : provider==="claude" ? "claude-3-5-sonnet" : "gpt-4o-mini")
+  const model = (ai as any).model_name || (provider==="gemini" ? "gemini-2.5-flash" : provider==="claude" ? "claude-3-5-sonnet" : "gpt-4o-mini")
   const endpoint = (ai as any).api_endpoint || ""
 
   // Gemini - auditoria: lista modelos disponíveis para a key e tenta em ordem (com fallback para alta demanda)

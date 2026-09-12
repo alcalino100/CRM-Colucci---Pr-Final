@@ -13,7 +13,7 @@ const normalize = (v: string) => (v || "").toLowerCase().trim()
 // estar ATIVO (is_active) com regras habilitadas (rules.enable). Sem isso, não responde NUNCA.
 export async function agenteParaInstancia(instanceName: string | undefined): Promise<any | null> {
   if (!instanceName) return null
-  const { data: agentes, error } = await db().from("ai_agents").select("id,name,is_active,config,wait_time_ms,message_cap,response_mode")
+  const { data: agentes, error } = await db().from("ai_agents").select("*")
   if (error || !agentes?.length) return null
   const ativos = (agentes as any[]).filter((a) => a.is_active && getRules(a.config).enable)
   return ativos.find((a) => getBoundInstances(a.config).includes(instanceName)) || null
