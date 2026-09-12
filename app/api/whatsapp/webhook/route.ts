@@ -206,15 +206,15 @@ async function handleMessageUpsert(payload: any) {
     msg?.message?.extendedTextMessage?.text ??
     (midia ? (midia.legenda ?? "") : "[mídia]")
 
-  // ÁUDIO: transcreve para texto e segue o fluxo NORMAL (vínculo, regras, IA,
-  // escalação, auditoria). Antes o áudio era só registrado e ignorado.
+  // ÁUDIO: transcreve (Claude do agente primeiro, Gemini como fallback) e segue o
+  // fluxo NORMAL (vínculo, regras, IA, escalação, auditoria).
   if (midia?.tipo === "audio" && !corpo.trim() && mensagemId) {
     try {
       const { obterAudioBase64 } = await import("@/lib/whatsapp/server")
-      const { transcreverAudio } = await import("@/lib/ai/audioTranscriber")
+      const { transcreverAudioSmart } = await import("@/lib/ai/midia")
       const b64 = await obterAudioBase64(instanceName, mensagemId)
       if (b64) {
-        const t = await transcreverAudio(b64.base64, b64.mimeType ?? midia.mimeType)
+        const t = await transcreverAudioSmart(instanceName, b64.base64, b64.mimeType ?? midia.mimeType)
         if (t.texto.trim()) corpo = t.texto.trim()
       }
     } catch (e: unknown) {
@@ -223,6 +223,29 @@ async function handleMessageUpsert(payload: any) {
           event_type: "ia_audio_nao_transcrito",
           event_title: "Áudio não transcrito",
           event_description: `Áudio de ${telefone} (${instanceName}) registrado sem transcrição: ${e instanceof Error ? e.message : String(e)}.`,
+          actor_type: "ia",
+        })
+      } catch { /* log é best-effort */ }
+    }
+  }
+
+  // IMAGEM sem legenda: descreve via IA (Claude vision primeiro) para a IA e o
+  // Inbox entenderem o conteúdo. Com legenda, mantém a legenda (sem custo extra).
+  if (midia?.tipo === "image" && !corpo.trim() && mensagemId) {
+    try {
+      const { obterAudioBase64 } = await import("@/lib/whatsapp/server")
+      const { descreverImagemSmart } = await import("@/lib/ai/midia")
+      const b64 = await obterAudioBase64(instanceName, mensagemId)
+      if (b64) {
+        const d = await descreverImagemSmart(instanceName, b64.base64, b64.mimeType ?? midia.mimeType)
+        if (d.texto.trim()) corpo = `📷 ${d.texto.trim()}`
+      }
+    } catch (e: unknown) {
+      try {
+        await wsupabase.from("automation_logs").insert({
+          event_type: "ia_imagem_nao_descrita",
+          event_title: "Imagem não descrita",
+          event_description: `Imagem de ${telefone} (${instanceName}) registrada sem descrição: ${e instanceof Error ? e.message : String(e)}.`,
           actor_type: "ia",
         })
       } catch { /* log é best-effort */ }

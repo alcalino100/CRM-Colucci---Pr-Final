@@ -12,7 +12,7 @@ type Input = {
   regrasSuplementares?: string
 }
 
-function providerFromModel(model?: string){
+export function providerFromModel(model?: string){
   const m = (model||"").toLowerCase()
   if(m.includes("gemini")) return "gemini"
   if(m.includes("claude")) return "claude"

@@ -25,6 +25,42 @@ export async function POST(request: Request) {
       .update({ ai_responding: false })
       .eq("external_id", telefone)
     if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
+    // Handoff completo: a pausa manual transfere ao humano — resumo de qualificação,
+    // etapa Atendimento Humano e aviso ao responsável (não só o flag).
+    try {
+      const digits = telefone.replace(/\D/g, "")
+      const variantes = Array.from(new Set([digits, digits.startsWith("55") ? digits.slice(2) : `55${digits}`]))
+      const { data: leads } = await wsupabase
+        .from("leads")
+        .select("id, telefone")
+        .or(variantes.map((v) => `telefone.ilike.%${v}%`).join(","))
+        .limit(10)
+      const norm = (v: string) => {
+        const d = (v || "").replace(/\D/g, "")
+        return d.length > 11 && d.startsWith("55") ? d.slice(2) : d
+      }
+      const lead = (leads ?? []).find((l: { telefone: string }) => norm(l.telefone) === norm(telefone)) as { id: string } | undefined
+      if (lead?.id) {
+        const { data: conv } = await wsupabase
+          .from("conversations_ia")
+          .select("id,ai_id")
+          .eq("external_id", telefone)
+          .order("last_message_at", { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle()
+        if (conv?.id) {
+          const { finalizarParaHumano } = await import("@/lib/ai/qualificacao")
+          await finalizarParaHumano({
+            leadId: lead.id,
+            convId: (conv as { id: string }).id,
+            aiId: (conv as { ai_id: string }).ai_id,
+            motivo: "IA pausada manualmente no Inbox",
+            telefone,
+            instanceName: body.instanceName,
+          })
+        }
+      }
+    } catch { /* handoff é best-effort */ }
     try {
       await wsupabase.from("automation_logs").insert({
         event_type: "ia_pausa_manual",

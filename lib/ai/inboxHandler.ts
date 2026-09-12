@@ -11,7 +11,7 @@ const normalize = (v: string) => (v || "").toLowerCase().trim()
 // Resolve a IA que responde numa instância. REGRA DE OURO: a instância precisa estar
 // vinculada a um agente (config.testInstance ou whitelistInstances) E o agente precisa
 // estar ATIVO (is_active) com regras habilitadas (rules.enable). Sem isso, não responde NUNCA.
-async function agenteParaInstancia(instanceName: string | undefined): Promise<any | null> {
+export async function agenteParaInstancia(instanceName: string | undefined): Promise<any | null> {
   if (!instanceName) return null
   const { data: agentes, error } = await db().from("ai_agents").select("id,name,is_active,config,wait_time_ms,message_cap,response_mode")
   if (error || !agentes?.length) return null

@@ -88,10 +88,24 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       )
       return { mensagens: { ...s.mensagens, [conversationId]: lista }, conversas }
     }),
-  assumirConversa: (id) =>
+  assumirConversa: (id) => {
+    // Pausa a IA no servidor (vira handoff completo: resumo + etapa + aviso) e
+    // reflete na UI. Antes era só visual — a IA continuava respondendo.
+    try {
+      const st = get()
+      const conv = st.conversas.find((c) => c.id === id) as { telefone?: string } | undefined
+      if (conv?.telefone) {
+        void fetch("/api/whatsapp/chat/ia-pause", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ telefone: conv.telefone, instanceName: st.instanciaSelecionada, pausado: true }),
+        }).catch(() => {})
+      }
+    } catch { /* UI atualiza de todo jeito */ }
     set((s) => ({
       conversas: s.conversas.map((c) => (c.id === id ? { ...c, status: "respondido" as const, followUpAtivo: false, unread: 0 } : c)),
-    })),
+    }))
+  },
   cancelarFollowUp: (id) =>
     set((s) => ({
       conversas: s.conversas.map((c) => (c.id === id ? { ...c, followUpAtivo: false, status: "aguardando_resposta" as const } : c)),
