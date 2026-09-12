@@ -93,7 +93,9 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
       }
       lastErr = j.error?.message || "Gemini falhou"
       const isModelErr = String(lastErr).toLowerCase().includes("not found") || String(lastErr).toLowerCase().includes("no longer available") || String(lastErr).toLowerCase().includes("not supported") || String(lastErr).toLowerCase().includes("not found for api version")
-      if(!isModelErr) break
+      const isQuotaErr = r.status === 429 || String(lastErr).toLowerCase().includes("quota")
+      // 429 (cota) tenta o próximo modelo (cotas separadas); demais erros param.
+      if(!isModelErr && !isQuotaErr) break
     }
     throw new Error(lastErr || "Gemini falhou - nenhum modelo disponível para esta key. Verifique em https://aistudio.google.com/app/apikey e billing.")
   }

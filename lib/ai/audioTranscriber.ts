@@ -55,7 +55,8 @@ export async function transcreverAudio(base64: string, mimeType: string | null):
       continue
     }
     ultimoErro = `HTTP ${r.status} (${j?.error?.message || "sem detalhe"})`
-    if (!/not found|not supported|no longer/i.test(ultimoErro)) break
+    // 429 (cota) NÃO interrompe: outro modelo pode ter cota livre. Demais erros sim.
+    if (!/not found|not supported|no longer/i.test(ultimoErro) && !/HTTP 429/.test(ultimoErro)) break
   }
   throw new Error(`Transcrição falhou: ${ultimoErro}`)
 }
