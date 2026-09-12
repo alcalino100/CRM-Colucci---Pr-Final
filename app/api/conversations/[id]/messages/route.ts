@@ -37,6 +37,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const { data: conv } = await db().from("conversations_ia").select("*").eq("id", id).single()
     if (!conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+    // Lead vinculado (contact_id pode ser UUID de lead) para handoff completo.
+    let leadIdEfetivo: string | undefined
+    try {
+      const cid = String((conv as { contact_id?: string }).contact_id || "")
+      if (/^[0-9a-f-]{36}$/i.test(cid)) {
+        const { data: l } = await db().from("leads").select("id").eq("id", cid).maybeSingle()
+        if (l) leadIdEfetivo = (l as { id: string }).id
+      }
+    } catch { /* sem lead: handoff parcial */ }
 
 const { data: historyDesc } = await db()
       .from("messages_ia")
@@ -74,6 +83,7 @@ const { data: historyDesc } = await db()
       const { notificarEscalacao } = await import("@/lib/ai/handoffNotifications")
       await notificarEscalacao({
         conversationId: id,
+        leadId: leadIdEfetivo,
         aiId,
         reason: esc.reason,
         triggerName: esc.triggerName,
