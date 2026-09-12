@@ -208,7 +208,8 @@ async function handleMessageUpsert(payload: any) {
 
   // ÁUDIO: transcreve (Claude do agente primeiro, Gemini como fallback) e segue o
   // fluxo NORMAL (vínculo, regras, IA, escalação, auditoria).
-  if (midia?.tipo === "audio" && !corpo.trim() && mensagemId) {
+  // Pula bloqueados (sem lead/teste não há quem consuma a transcrição).
+  if (midia?.tipo === "audio" && !corpo.trim() && mensagemId && (!bloqueado || msg?.key?.fromMe === true)) {
     try {
       const { obterAudioBase64 } = await import("@/lib/whatsapp/server")
       const { transcreverAudioSmart } = await import("@/lib/ai/midia")
@@ -231,7 +232,8 @@ async function handleMessageUpsert(payload: any) {
 
   // IMAGEM sem legenda: descreve via IA (Claude vision primeiro) para a IA e o
   // Inbox entenderem o conteúdo. Com legenda, mantém a legenda (sem custo extra).
-  if (midia?.tipo === "image" && !corpo.trim() && mensagemId) {
+  // Pula bloqueados pelo mesmo motivo do áudio acima.
+  if (midia?.tipo === "image" && !corpo.trim() && mensagemId && (!bloqueado || msg?.key?.fromMe === true)) {
     try {
       const { obterAudioBase64 } = await import("@/lib/whatsapp/server")
       const { descreverImagemSmart } = await import("@/lib/ai/midia")
