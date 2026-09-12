@@ -94,7 +94,7 @@ async function embeddingGemini(text: string): Promise<EmbeddingOut> {
         .filter(Boolean)
     }
   } catch { /* segue para a lista fixa */ }
-  const preferidos = ["text-embedding-005", "gemini-embedding-001", "text-embedding-004", "embedding-001"]
+  const preferidos = ["text-embedding-005", "gemini-embedding-001"]
   const ordem = Array.from(new Set([...preferidos.filter((m) => !candidatos.length || candidatos.includes(m)), ...candidatos])).slice(0, 5)
   if (!ordem.length) throw new Error("Gemini: nenhum modelo com suporte a embedContent")
   let ultimoErro = ""

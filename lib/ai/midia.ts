@@ -54,7 +54,7 @@ async function chamarClaudeMidia(params: {
 async function descreverGemini(base64: string, mime: string): Promise<string> {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
   if (!key) throw new Error("GEMINI_API_KEY ausente")
-  const modelos = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-1.5-flash"]
+  const modelos = ["gemini-2.5-flash", "gemini-flash-latest"]
   let ultimo = ""
   for (const m of modelos) {
     try {
@@ -90,6 +90,7 @@ export async function transcreverAudioSmart(
   mimeType: string | null,
 ): Promise<{ texto: string; provedor: ProvedorMidia; modelo: string }> {
   const ctx = await provedorDoAgente(instanceName)
+  let erroClaude: string | null = null
   if (ctx && ctx.provedor === "claude") {
     const key = chaveClaude(ctx.agente)
     const model = ctx.agente.model_name || "claude-haiku-4-5"
@@ -105,12 +106,22 @@ export async function transcreverAudioSmart(
         })
         return { texto, provedor: "claude", modelo: model }
       } catch (e: unknown) {
-        console.error("[mídia] Claude áudio falhou, caindo para Gemini:", e instanceof Error ? e.message : String(e))
+        erroClaude = e instanceof Error ? e.message : String(e)
+        console.error("[mídia] Claude áudio falhou, caindo para Gemini:", erroClaude)
       }
+    } else {
+      erroClaude = "sem chave Claude resolvida"
     }
+  } else {
+    erroClaude = "agente sem provedor Claude"
   }
-  const g = await transcreverAudioGemini(base64, mimeType)
-  return { texto: g.texto, provedor: "gemini", modelo: g.modelo }
+  try {
+    const g = await transcreverAudioGemini(base64, mimeType)
+    return { texto: g.texto, provedor: "gemini", modelo: g.modelo }
+  } catch (e: unknown) {
+    const erroGemini = e instanceof Error ? e.message : String(e)
+    throw new Error(`Claude: ${erroClaude} | Gemini: ${erroGemini}`)
+  }
 }
 
 // Descreve imagem (Claude vision primeiro, Gemini fallback).
@@ -121,6 +132,7 @@ export async function descreverImagemSmart(
 ): Promise<{ texto: string; provedor: ProvedorMidia; modelo: string }> {
   const mime = String(mimeType || "image/jpeg").split(";")[0].trim() || "image/jpeg"
   const ctx = await provedorDoAgente(instanceName)
+  let erroClaude: string | null = null
   if (ctx && ctx.provedor === "claude") {
     const key = chaveClaude(ctx.agente)
     const model = ctx.agente.model_name || "claude-haiku-4-5"
@@ -135,10 +147,20 @@ export async function descreverImagemSmart(
         })
         return { texto, provedor: "claude", modelo: model }
       } catch (e: unknown) {
-        console.error("[mídia] Claude visão falhou, caindo para Gemini:", e instanceof Error ? e.message : String(e))
+        erroClaude = e instanceof Error ? e.message : String(e)
+        console.error("[mídia] Claude visão falhou, caindo para Gemini:", erroClaude)
       }
+    } else {
+      erroClaude = "sem chave Claude resolvida"
     }
+  } else {
+    erroClaude = "agente sem provedor Claude"
   }
-  const texto = await descreverGemini(base64, mime)
-  return { texto, provedor: "gemini", modelo: "gemini-2.5-flash" }
+  try {
+    const texto = await descreverGemini(base64, mime)
+    return { texto, provedor: "gemini", modelo: "gemini-2.5-flash" }
+  } catch (e: unknown) {
+    const erroGemini = e instanceof Error ? e.message : String(e)
+    throw new Error(`Claude: ${erroClaude} | Gemini: ${erroGemini}`)
+  }
 }
