@@ -50,6 +50,15 @@ export function ApiAudit({ id }: { id: string }){
 
   const totalTokens = logs.reduce((a,b)=> a + (b.tokens||0), 0)
   const avgTokens = logs.length ? Math.round(totalTokens / logs.length) : 0
+  // Histórico exibe SOMENTE o que envolve a IA (messages_ia: user/ia/assistant).
+  // Linhas puras do WhatsApp ("lead (WA)"/"você (WA)") ficam de fora — o contador
+  // "Msgs WhatsApp" acima continua mostrando o volume total como contexto.
+  const soIA = (l: any) => {
+    const r = String(l?.role || "")
+    if (r.includes("+ IA")) return true
+    return !r.includes("(WA)")
+  }
+  const logsIA = logs.filter(soIA)
 
   return (
     <div className="grid gap-6">
@@ -64,7 +73,7 @@ export function ApiAudit({ id }: { id: string }){
         <div className="grid grid-cols-3 gap-2 text-center text-xs">
           <div className="rounded-lg border border-border bg-card p-2"><p className="text-lg font-bold">{total.conversations?.length||0}</p><p className="text-muted-foreground">Conversas IA</p></div>
           <div className="rounded-lg border border-border bg-card p-2"><p className="text-lg font-bold">{total.whatsapp?.length||0}</p><p className="text-muted-foreground">Msgs WhatsApp</p></div>
-          <div className="rounded-lg border border-border bg-card p-2"><p className="text-lg font-bold">{logs.length}</p><p className="text-muted-foreground">Total logs</p></div>
+          <div className="rounded-lg border border-border bg-card p-2"><p className="text-lg font-bold">{logsIA.length}</p><p className="text-muted-foreground">Total logs (IA)</p></div>
         </div>
       )}
 
@@ -75,14 +84,14 @@ export function ApiAudit({ id }: { id: string }){
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><Clock className="size-4" /> Histórico de Chamadas</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><Clock className="size-4" /> Histórico de Chamadas da IA</CardTitle></CardHeader>
         <CardContent>
-          {loading ? <p className="py-6 text-center text-sm text-muted-foreground">Carregando...</p> : logs.length===0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma chamada ainda. Faça um teste em Testing.</p> : (
+          {loading ? <p className="py-6 text-center text-sm text-muted-foreground">Carregando...</p> : logsIA.length===0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma chamada da IA ainda. Faça um teste em Testing.</p> : (
             <div className="max-h-[400px] overflow-y-auto rounded-lg border border-border">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted"><tr><th className="px-2 py-1.5 text-left">Quando</th><th className="px-2 py-1.5 text-left">Role</th><th className="px-2 py-1.5 text-left">Conteúdo</th><th className="px-2 py-1.5 text-right">Tokens</th></tr></thead>
                 <tbody>
-                  {logs.slice(0,50).map((l:any)=>(
+                  {logsIA.slice(0,50).map((l:any)=>(
                     <tr key={l.id} className="border-t border-border/50">
                       <td className="px-2 py-1.5 font-mono text-[11px]">{new Date(l.created_at).toLocaleString("pt-BR")}</td>
                       <td className="px-2 py-1.5"><Badge variant={l.role==="ai"?"default":"outline"}>{l.role}</Badge></td>
