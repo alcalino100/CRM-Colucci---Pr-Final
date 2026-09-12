@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { finalizarParaHumano } from "./qualificacao"
 
 function db() {
   return createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -72,6 +73,19 @@ export async function notificarEscalacao(params: HandoffParams): Promise<void> {
       })
     } catch {
       /* log é best-effort */
+    }
+
+    // Handoff rico: resumo de qualificação + etapa Atendimento Humano + aviso.
+    if (params.leadId) {
+      await finalizarParaHumano({
+        leadId: params.leadId,
+        convId: params.conversationId,
+        aiId: params.aiId,
+        motivo: params.reason,
+        triggerName: params.triggerName,
+        telefone: params.telefone,
+        instanceName: params.instanceName,
+      })
     }
 
     // TODO: notificações reais por canal do trigger (whatsapp/slack/email).

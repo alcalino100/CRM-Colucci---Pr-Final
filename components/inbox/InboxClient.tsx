@@ -43,7 +43,7 @@ const PATRICIA_INSTANCE = "patricia-6c2875b4"
 function mapStatus(s: string): "aguardando_resposta" | "respondido" | "em_follow_up" | "escalated" {
   if(s==="escalated" || s==="escalado") return "escalated" as any
   if(s==="em_followup" || s==="em_follow_up") return "em_follow_up"
-  if(s==="novo" || s==="em_atendimento" || s==="aguardando") return "aguardando_resposta"
+  if(s==="novo" || s==="em_atendimento" || s==="atendimento_humano" || s==="aguardando") return "aguardando_resposta"
   return "respondido"
 }
 

@@ -121,6 +121,7 @@ export async function pausarIaMensagemManual({ telefone, instanceName, textoOutb
     if (!telefone) return
     const lead = await acharLeadVinculado(telefone, instanceName)
     const key = chaveConversa(lead?.id, telefone)
+    let convHandoff: string | undefined
     if (agente) {
       const { data: conv } = await db().from("conversations_ia").select("id,ai_responding").eq("ai_id", agente.id).eq("contact_id", key).maybeSingle()
       if (conv?.id) {
@@ -135,9 +136,25 @@ export async function pausarIaMensagemManual({ telefone, instanceName, textoOutb
         }
         if (conv.ai_responding) await registrarResumoConversa(conv.id, lead?.id, "pausada — atendimento manual pelo corretor")
         await db().from("conversations_ia").update({ ai_responding: false }).eq("id", conv.id)
+        convHandoff = conv.id
       }
     }
-    if (lead) await moverLeadPipeline(lead.id, "em_atendimento")
+    if (lead) {
+      if (convHandoff) {
+        // Assumiu com histórico IA: qualificação + etapa + aviso ao responsável.
+        const { finalizarParaHumano } = await import("./qualificacao")
+        await finalizarParaHumano({
+          leadId: lead.id,
+          convId: convHandoff,
+          aiId: (agente as { id: string }).id,
+          motivo: "atendimento manual pelo corretor",
+          telefone,
+          instanceName,
+        })
+      } else {
+        await moverLeadPipeline(lead.id, "em_atendimento")
+      }
+    }
     try {
       await db().from("automation_logs").insert({
         lead_id: lead?.id ?? null,
@@ -256,6 +273,17 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
             actor_type: "ia",
           })
         } catch { /* log é best-effort */ }
+        if (leadIdEfetivo) {
+          const { finalizarParaHumano } = await import("./qualificacao")
+          await finalizarParaHumano({
+            leadId: leadIdEfetivo,
+            convId,
+            aiId: AI_ID,
+            motivo: motivo,
+            telefone,
+            instanceName,
+          })
+        }
         await registrarAnalytics({ convId, aiId: AI_ID, ms: Date.now() - t0, tokens: 0, modelo: "", semEscalacao: false })
         return { ok: false, erro: "Limite de mensagens da IA atingido." }
       }

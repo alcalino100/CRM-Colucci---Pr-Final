@@ -36,6 +36,7 @@ export function Badge({ className, variant = "default", ...p }: React.ComponentP
     slateblue: "bg-slate-200 text-slate-600",
     gray: "bg-muted text-muted-foreground",
     indigo: "bg-indigo-100 text-indigo-700",
+    violet: "bg-violet-100 text-violet-700",
     purple: "bg-purple-100 text-purple-700",
     sky: "bg-sky-100 text-sky-700",
   }
