@@ -52,7 +52,7 @@ async function chamarClaudeMidia(params: {
 }
 
 // Descreve imagem: SOMENTE Claude. Áudio: OpenAI Whisper com fallback Gemini
-// (áutidos não têm suporte na Messages API da Anthropic). Para garantir robustez,
+// (áudios não têm suporte na Messages API da Anthropic). Para garantir robustez,
 // o Gemini só aparece se o Whisper falhar — registrado na auditoria via provedor.
 export async function descreverImagemSmart(
   instanceName: string | undefined,
@@ -94,45 +94,4 @@ export async function transcreverAudioSmart(
   }
   const g = await transcreverAudioGemini(base64, mimeType)
   return { texto: g.texto, provedor: "gemini", modelo: g.modelo }
-}
-
-// Descreve imagem (Claude vision primeiro, Gemini fallback).
-export async function descreverImagemSmart(
-  instanceName: string | undefined,
-  base64: string,
-  mimeType: string | null,
-): Promise<{ texto: string; provedor: ProvedorMidia; modelo: string }> {
-  const mime = String(mimeType || "image/jpeg").split(";")[0].trim() || "image/jpeg"
-  const ctx = await provedorDoAgente(instanceName)
-  let erroClaude: string | null = null
-  if (ctx && ctx.provedor === "claude") {
-    const key = chaveClaude(ctx.agente)
-    const model = ctx.agente.model_name || "claude-haiku-4-5"
-    if (key) {
-      try {
-        const texto = await chamarClaudeMidia({
-          apiKey: key,
-          model,
-          blocoMidia: { type: "image", source: { type: "base64", media_type: mime, data: base64 } },
-          instrucao: "Descreva esta imagem em português brasileiro, objetiva e fielmente, em até 3 linhas. Se houver texto visível, transcreva-o.",
-          maxTokens: 500,
-        })
-        return { texto, provedor: "claude", modelo: model }
-      } catch (e: unknown) {
-        erroClaude = e instanceof Error ? e.message : String(e)
-        console.error("[mídia] Claude visão falhou, caindo para Gemini:", erroClaude)
-      }
-    } else {
-      erroClaude = "sem chave Claude resolvida"
-    }
-  } else {
-    erroClaude = "agente sem provedor Claude"
-  }
-  try {
-    const texto = await descreverGemini(base64, mime)
-    return { texto, provedor: "gemini", modelo: "gemini-2.5-flash" }
-  } catch (e: unknown) {
-    const erroGemini = e instanceof Error ? e.message : String(e)
-    throw new Error(`Claude: ${erroClaude} | Gemini: ${erroGemini}`)
-  }
 }
