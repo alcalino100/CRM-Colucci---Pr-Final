@@ -186,11 +186,11 @@ async function handleMessageUpsert(payload: any) {
   if (remoteJid.includes("@g.us") || remoteJid.includes("broadcast")) return
   const telefone = onlyDigits(remoteJid.split("@")[0])
   if (!telefone) return
-  // Números internos bloqueados: ignora completamente — EXCETO números de teste
-  // configurados num agente IA ativo: sem esse bypass, testar o
-  // bot com o próprio time (ex.: corretor na lista de bloqueio) é impossível, pois o "oi"
-  // de teste é descartado antes de chegar à IA.
-  if (isBlocked(telefone) && !(await isNumeroTesteIA(telefone))) return
+  // Números internos bloqueados: NÃO descarta mais — registra para o Inbox refletir
+  // o Evolution de verdade, mas sem vincular lead, sem criar lead e sem acionar IA
+  // (a menos que seja número de teste de IA ativa, que segue o fluxo completo).
+  // Sem esse registro, contatos bloqueados "não existiam" no CRM.
+  const bloqueado = isBlocked(telefone) && !(await isNumeroTesteIA(telefone))
   const mensagemId: string | null = msg?.key?.id ?? null
   // Idempotência: Evolution reentrega o mesmo evento em retry/timeout. Sem esse
   // guarda, a mesma mensagem geraria 2 linhas + 2 respostas da IA.
@@ -229,6 +229,23 @@ async function handleMessageUpsert(payload: any) {
     }
   }
 
+  // Bloqueado (e não é teste): só registra para fidelidade com o Evolution.
+  // Não vincula lead, não detecta anúncio, não cria lead, não aciona IA.
+  if (bloqueado && msg?.key?.fromMe !== true) {
+    await wsupabase.from("whatsapp_mensagens").insert({
+      instance_name: instanceName,
+      telefone,
+      nome_contato: msg?.pushName || telefone,
+      corpo,
+      lead_id: null,
+      veio_de_anuncio: false,
+      mensagem_id: mensagemId,
+      ...camposMidia(midia),
+    })
+    await preencherMidiaUrl(instanceName, mensagemId, midia)
+    return
+  }
+
   // Mensagem enviada pelo corretor (pelo CRM ou pelo próprio celular): só registra para
   // aparecer no chat do gestor, ligada ao lead quando o telefone bate. Não passa pela
   // detecção de anúncio nem cria lead — essa lógica é só para mensagens recebidas.
@@ -259,8 +276,21 @@ async function handleMessageUpsert(payload: any) {
   }
 
   const nome = msg?.pushName || telefone
-  // Nomes internos (esposa/parentes de corretores): ignora completamente — sem lead, sem mensagem, sem notificação
-  if (isBlockedName(nome)) return
+  // Nomes internos (familiares): registra para fidelidade, mas sem lead/IA (como acima).
+  if (isBlockedName(nome)) {
+    await wsupabase.from("whatsapp_mensagens").insert({
+      instance_name: instanceName,
+      telefone,
+      nome_contato: nome,
+      corpo,
+      lead_id: null,
+      veio_de_anuncio: false,
+      mensagem_id: mensagemId,
+      ...camposMidia(midia),
+    })
+    await preencherMidiaUrl(instanceName, mensagemId, midia)
+    return
+  }
 
   // Este contato já é um lead? Se sim e houver automação enviada a ele, ESTA mensagem é a
   // resposta — liga a resposta ao job. Resolvido uma única vez e reaproveitado no insert abaixo.

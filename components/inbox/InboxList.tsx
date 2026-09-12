@@ -123,6 +123,7 @@ export function InboxList() {
                   <span className="truncate text-xs text-slate-600 dark:text-slate-400">{c.ultimaMensagem}</span>
                   <span className="flex flex-wrap gap-1">
                     <span className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", badgeStyles[c.status])}>{badgeLabel[c.status]}</span>
+                    {c.ia && <span title={c.ia.responde ? `IA responde: ${c.ia.motivo}` : `IA não responde: ${c.ia.motivo}`} className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", c.ia.responde ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-slate-500/30 bg-slate-500/10 text-slate-400")}>{c.ia.responde ? "🤖 IA" : "sem IA"}</span>}
 {(c.tags||[]).map((t:any)=> { const nome = typeof t === "string" ? t : (t?.ref ?? ""); if(!nome) return null; return <span key={nome} className="w-fit rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">#{nome.toLowerCase()}</span> })}
                   </span>
                 </button>
@@ -140,6 +141,7 @@ export function InboxList() {
             <span className="truncate text-xs text-slate-600 dark:text-slate-400">{c.ultimaMensagem}</span>
             <span className="flex flex-wrap gap-1">
               <span className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", badgeStyles[c.status])}>{badgeLabel[c.status]}</span>
+                    {c.ia && <span title={c.ia.responde ? `IA responde: ${c.ia.motivo}` : `IA não responde: ${c.ia.motivo}`} className={cn("w-fit rounded-full border px-2 py-0.5 text-[10px] font-medium", c.ia.responde ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-slate-500/30 bg-slate-500/10 text-slate-400")}>{c.ia.responde ? "🤖 IA" : "sem IA"}</span>}
               {(c.tags||[]).map((t:any)=> { const nome = typeof t === "string" ? t : (t?.ref ?? ""); if(!nome) return null; return <span key={nome} className="w-fit rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">#{nome.toLowerCase()}</span> })}
             </span>
           </button>

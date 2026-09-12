@@ -56,6 +56,10 @@ export function InboxClient(){
     try { return localStorage.getItem("inbox-filtro-trafego") !== "off" } catch { return true }
   })
   const [ocultas, setOcultas] = useState(0)
+  const [ocultasBloq, setOcultasBloq] = useState(0)
+  const [mostrarBloqueados, setMostrarBloqueados] = useState(() => {
+    try { return localStorage.getItem("inbox-mostrar-bloqueados") === "on" } catch { return false }
+  })
   const selectedId = useInboxStore(s=>s.selectedId)
   const setSelected = useInboxStore(s=>s.setSelected)
   const setConversas = useInboxStore(s=>s.setConversas)
@@ -81,8 +85,14 @@ export function InboxClient(){
         const raw: any[] = j.conversas || []
         if(cancelled) return
         // Bloqueados internos ficam ocultos — EXCETO quando há lead vinculado
-        // (lead criado manualmente = intenção explícita de acompanhar).
-        const aposBloqueio = raw.filter((c:any)=> c.leadId || !isTelefoneBloqueado(c.telefone || ""))
+        // (lead criado manualmente = intenção explícita de acompanhar) ou quando
+        // o gestor ativa "Mostrar bloqueados".
+        const aposBloqueio = mostrarBloqueados
+          ? raw
+          : raw.filter((c:any)=> c.leadId || !isTelefoneBloqueado(c.telefone || ""))
+        if(!cancelled){
+          setOcultasBloq(mostrarBloqueados ? 0 : raw.filter((c:any)=> !c.leadId && isTelefoneBloqueado(c.telefone || "")).length)
+        }
         const leadIds = aposBloqueio.filter(c=>c.leadId).map(c=>c.leadId)
         let leadsMap = new Map<string, any>()
         if(leadIds.length>0){
@@ -99,7 +109,7 @@ export function InboxClient(){
             return true
           })
         }
-        if(!cancelled) setOcultas(Math.max(0, aposBloqueio.length - filtradas.length))
+        if(!cancelled) setOcultas(Math.max(0, raw.length - filtradas.length))
         // Nome do responsável vem da instância selecionada
         const respNome = inst.split("-")[0] || "Patricia"
         const conversas: InboxConversation[] = filtradas.map((c:any)=>({
@@ -120,6 +130,7 @@ export function InboxClient(){
           origem: "WhatsApp" as const,
           iaRespondendo: c.iaRespondendo,
           tags: c.tags || [],
+          ia: c.ia && typeof c.ia.responde === "boolean" ? { responde: c.ia.responde, motivo: String(c.ia.motivo || "") } : undefined,
         }))
         if(!cancelled){
           if(conversas.length>0){
@@ -139,7 +150,7 @@ export function InboxClient(){
     const aoFocar = () => { void loadReal() }
     window.addEventListener("focus", aoFocar)
     return()=>{ cancelled=true; clearInterval(iv); window.removeEventListener("focus", aoFocar) }
-  }, [isGestorVendas, user, filtroTrafego, instanciaSelecionada, setConversas, setModoReal])
+  }, [isGestorVendas, user, filtroTrafego, mostrarBloqueados, instanciaSelecionada, setConversas, setModoReal])
   if(loading){
     return (
       <div className="flex flex-col gap-4 lg:h-[calc(100vh-11rem)] lg:flex-row">
@@ -158,11 +169,22 @@ export function InboxClient(){
             <span className="font-medium text-slate-700 dark:text-slate-300">Somente Tráfego Pago</span>
           </label>
           <span className="hidden sm:inline text-slate-500">{filtroTrafego ? "filtrando base para IA" : "toda a base"}</span>
-          {filtroTrafego && ocultas>0 && (
-            <button onClick={()=>{ setFiltroTrafego(false); try{ localStorage.setItem("inbox-filtro-trafego","off") }catch{} }} className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 hover:bg-amber-500/20 dark:text-amber-400">
-              {ocultas} oculta(s) — mostrar todas
-            </button>
-          )}
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={mostrarBloqueados} onChange={e=>{ const v=e.target.checked; setMostrarBloqueados(v); try{ localStorage.setItem("inbox-mostrar-bloqueados", v ? "on" : "off") }catch{} }} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
+            <span className="font-medium text-slate-700 dark:text-slate-300">Bloqueados{ocultasBloq>0 ? ` (${ocultasBloq})` : ""}</span>
+          </label>
+          {(() => {
+            const mostrarTodas = () => {
+              setFiltroTrafego(false)
+              setMostrarBloqueados(true)
+              try{ localStorage.setItem("inbox-filtro-trafego","off"); localStorage.setItem("inbox-mostrar-bloqueados","on") }catch{}
+            }
+            return ocultas>0 ? (
+              <button onClick={mostrarTodas} className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 hover:bg-amber-500/20 dark:text-amber-400">
+                {ocultas} oculta(s) — mostrar todas
+              </button>
+            ) : null
+          })()}
           <span className="ml-auto flex items-center gap-2">Instância: <InstanceSelector /></span>
         </div>
       )}
