@@ -51,41 +51,34 @@ async function chamarClaudeMidia(params: {
   return texto
 }
 
-async function descreverGemini(base64: string, mime: string): Promise<string> {
-  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
-  if (!key) throw new Error("GEMINI_API_KEY ausente")
-  const modelos = ["gemini-2.5-flash", "gemini-flash-latest"]
-  let ultimo = ""
-  for (const m of modelos) {
-    try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ inline_data: { mime_type: mime, data: base64 } }, { text: "Descreva esta imagem em português brasileiro, objetiva e fielmente, em até 3 linhas. Se houver texto visível, transcreva-o." }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 500 },
-        }),
-      })
-      const j = await r.json().catch(() => null)
-      if (!r.ok) {
-        ultimo = `HTTP ${r.status}`
-        if (!/not found|not supported|no longer/i.test(String(j?.error?.message || ""))) break
-        continue
-      }
-      const t = String(j?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim()
-      if (t) return t
-      ultimo = "vazio"
-    } catch (e: unknown) {
-      ultimo = e instanceof Error ? e.message : String(e)
-    }
+// Descreve imagem: SOMENTE Claude. Áudio: OpenAI Whisper com fallback Gemini
+// (áutidos não têm suporte na Messages API da Anthropic). Para garantir robustez,
+// o Gemini só aparece se o Whisper falhar — registrado na auditoria via provedor.
+export async function descreverImagemSmart(
+  instanceName: string | undefined,
+  base64: string,
+  mimeType: string | null,
+): Promise<{ texto: string; provedor: ProvedorMidia; modelo: string }> {
+  const mime = String(mimeType || "image/jpeg").split(";")[0].trim() || "image/jpeg"
+  const ctx = await provedorDoAgente(instanceName)
+  if (!ctx || ctx.provedor !== "claude") {
+    throw new Error("Agente da instância não é Claude (verifique model_name do agente)")
   }
-  throw new Error(`Gemini visão falhou: ${ultimo}`)
+  const key = chaveClaude(ctx.agente)
+  if (!key) throw new Error("Sem chave Claude resolvida para a instância")
+  const model = ctx.agente.model_name || "claude-haiku-4-5"
+  const texto = await chamarClaudeMidia({
+    apiKey: key,
+    model,
+    blocoMidia: { type: "image", source: { type: "base64", media_type: mime, data: base64 } },
+    instrucao: "Descreva esta imagem em português brasileiro, objetiva e fielmente, em até 3 linhas. Se houver texto visível, transcreva-o.",
+    maxTokens: 500,
+  })
+  return { texto, provedor: "claude", modelo: model }
 }
 
-// Transcreve áudio: Whisper (se OPENAI_API_KEY) primeiro, Gemini como fallback.
-// A API do Claude NÃO aceita entrada de áudio (só text/image/pdf/document), então
-// não há caminho Claude aqui — ver audioTranscriber.ts. O provedor que funcionou
-// vai para a auditoria.
+// Transcreve áudio: OpenAI Whisper primeiro; Gemini apenas como fallback se o
+// Whisper falhar (registrado no log). A API do Claude NÃO aceita áudio.
 export async function transcreverAudioSmart(
   instanceName: string | undefined,
   base64: string,
