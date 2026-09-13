@@ -8,7 +8,9 @@ import { agenteParaInstancia, handlePatriciaInbound, isNumeroTesteIA, pausarIaMe
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 30
+// Mídia (download/transcrição) + debounce + geração Claude + envio podem passar
+// dos 30s padrão — 60s dão folga sem estourar o limite do plano.
+export const maxDuration = 60
 
 // Sempre responde 200 para não interromper o fluxo da Evolution
 const ok = () => NextResponse.json({ received: true })
@@ -397,9 +399,8 @@ async function handleMessageUpsert(payload: any) {
       // Aguardado de propósito: fire-and-forget (void) pode ser congelado pela
       // Vercel ao retornar a resposta — a IA "morre" no meio do caminho sem rastro.
       // Com idempotência por mensagem_id acima, retry da Evolution é seguro.
-      // mensagemId + recebidaEm alimentam o debounce (rajada vira 1 resposta).
-      const recebidaEm = new Date().toISOString()
-      await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadIdExistente || undefined, instanceName, mensagemId: mensagemId || undefined, recebidaEm }).catch(() => {})
+      // mensagemId alimenta o debounce no handler (rajada vira 1 resposta).
+      await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadIdExistente || undefined, instanceName, mensagemId: mensagemId || undefined }).catch(() => {})
     }
     return
   }
@@ -621,8 +622,7 @@ async function handleMessageUpsert(payload: any) {
   // IA: dispara resposta automática (Patrícia ou Guilherme - teste). Aguardado pelo
   // mesmo motivo acima (nada de void): sem await, a resposta pode morrer sem rastro.
   if (!msg?.key?.fromMe) {
-    const recebidaEm = new Date().toISOString()
-    await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadId || leadIdExistente || undefined, instanceName, mensagemId: mensagemId || undefined, recebidaEm }).catch(() => {})
+    await handlePatriciaInbound({ telefone, texto: corpo, leadId: leadId || leadIdExistente || undefined, instanceName, mensagemId: mensagemId || undefined }).catch(() => {})
   }
 }
 

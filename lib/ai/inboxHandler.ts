@@ -335,6 +335,15 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
     return envRes.ok ? { ok: true } : { ok: false, erro: envRes.erro }
   } catch (e: any) {
     console.error("[IA] erro responder", e)
+    try {
+      await db().from("automation_logs").insert({
+        lead_id: leadIdEfetivo ?? null,
+        event_type: "ia_geracao_falhou",
+        event_title: "Falha na geração/resposta da IA",
+        event_description: `Conversa ${convId} (${telefone}${instanceName ? ` via ${instanceName}` : ""}): ${String(e?.message ?? e).slice(0, 500)}`,
+        actor_type: "ia",
+      })
+    } catch { /* log é best-effort */ }
     return { ok: false, erro: String(e?.message ?? e) }
   }
 }
@@ -395,10 +404,11 @@ export function juntarRajada(corpos: (string | null | undefined)[]): string {
 }
 
 // Janela de debounce: rajadas (textos + áudios + fotos seguidos) viram 1 resposta.
-// Também dá o atraso humano natural (~5s + processamento).
-const DEBOUNCE_MS = 5000
+// Também dá o atraso humano natural (~2,5s + processamento). Tem que caber no
+// orçamento da função (Vercel maxDuration) — 5s estourava junto com mídia+Claude.
+const DEBOUNCE_MS = 2500
 
-export async function handlePatriciaInbound({ telefone, texto, leadId, instanceName, mensagemId, recebidaEm }: { telefone: string; texto: string; leadId?: string; instanceName?: string; mensagemId?: string; recebidaEm?: string }){
+export async function handlePatriciaInbound({ telefone, texto, leadId, instanceName, mensagemId }: { telefone: string; texto: string; leadId?: string; instanceName?: string; mensagemId?: string }){
   try{
     // 1) REGRA DE OURO: instância vinculada a IA ativa + regras habilitadas
     const agente = await agenteParaInstancia(instanceName)
@@ -505,10 +515,22 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
             .order("criado_em", { ascending: false })
             .limit(1)
         ).data?.[0] as { mensagem_id: string; criado_em: string } | undefined
-      const refTs = new Date(recebidaEm || Date.now()).getTime()
+      // refTs = momento REAL da mensagem no WhatsApp (criado_em gravado), NÃO o
+      // horário em que o webhook terminou de processar a mídia. Sem isso, a espera
+      // da própria invocação (download+transcrição ~6s) tornava o gate inócuo e os
+      // dois handlers seguiam em paralelo, duplicando o ciclo.
+      const { data: propria } = await db()
+        .from("whatsapp_mensagens")
+        .select("criado_em")
+        .eq("instance_name", instanceName)
+        .eq("telefone", telefone)
+        .eq("mensagem_id", mensagemId)
+        .maybeSingle()
+        .catch(() => ({ data: null }))
+      const refTs = new Date(propria?.criado_em || new Date(Date.now() - 9000).toISOString()).getTime()
       const u1 = await buscarUltima().catch(() => undefined)
       if (u1 && u1.mensagem_id !== mensagemId && new Date(u1.criado_em).getTime() > refTs) return
-      await sleep(700)
+      await sleep(400)
       const u2 = await buscarUltima().catch(() => undefined)
       if (u2 && u2.mensagem_id !== mensagemId && new Date(u2.criado_em).getTime() > refTs) return
       try {
@@ -539,12 +561,29 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
     }
 
     // 5e) Gera, registra e envia (com espera anti-robô, limite de mensagens e auditoria)
-    await responderConversaIa({
+    const resultado = await responderConversaIa({
       convId, AI_ID, agenteNome: agente.name, rules,
       leadIdEfetivo, telefone, instanceName,
       userMessage: textoEfetivo, inserirUsuario: true, ignorarLimite: false,
     })
+    try {
+      await db().from("automation_logs").insert({
+        lead_id: leadIdEfetivo ?? null,
+        event_type: resultado?.ok ? "ia_ciclo_finalizado" : "ia_ciclo_rejeitado",
+        event_title: resultado?.ok ? "Ciclo IA concluído" : "Ciclo IA sem resposta",
+        event_description: `Conversa ${convId} (${telefone}): ${resultado?.ok ? "resposta enviada" : (resultado?.erro || "sem resposta")}. Entrada: ${textoEfetivo.slice(0, 80)}`,
+        actor_type: "ia",
+      })
+    } catch { /* log é best-effort */ }
   }catch(e){
     console.error("[IA] erro inbox", e)
+    try {
+      await db().from("automation_logs").insert({
+        event_type: "ia_erro_fluxo",
+        event_title: "Erro no fluxo de conversa IA",
+        event_description: `Handle inbound (${telefone}${instanceName ? ` via ${instanceName}` : ""}): ${String(e instanceof Error ? e.message : e).slice(0, 500)}`,
+        actor_type: "ia",
+      })
+    } catch { /* log é best-effort */ }
   }
 }
