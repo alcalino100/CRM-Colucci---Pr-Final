@@ -519,14 +519,21 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       // horário em que o webhook terminou de processar a mídia. Sem isso, a espera
       // da própria invocação (download+transcrição ~6s) tornava o gate inócuo e os
       // dois handlers seguiam em paralelo, duplicando o ciclo.
-      const { data: propria } = await db()
-        .from("whatsapp_mensagens")
-        .select("criado_em")
-        .eq("instance_name", instanceName)
-        .eq("telefone", telefone)
-        .eq("mensagem_id", mensagemId)
-        .maybeSingle()
-        .catch(() => ({ data: null }))
+      // NOTA: esta query usa try/catch (e NUNCA .catch() no builder). O postgrest-js
+      // desta versão não expõe .catch() na cadeia thenable do builder — encadear .catch
+      // ali estourava "X.catch is not a function", matando o ciclo em silêncio ANTES de
+      // gerar a resposta (sintoma exato: "compreendeu, mas não respondeu").
+      let refPropriaMs: number | undefined
+      try {
+        const res = await db()
+          .from("whatsapp_mensagens")
+          .select("criado_em")
+          .eq("instance_name", instanceName)
+          .eq("telefone", telefone)
+          .eq("mensagem_id", mensagemId)
+          .maybeSingle()
+        refPropriaMs = res?.data?.criado_em ? new Date(res.data.criado_em).getTime() : undefined
+      } catch { /* sem a própria → fallback abaixo */ }
       const refTs = new Date(propria?.criado_em || new Date(Date.now() - 9000).toISOString()).getTime()
       const u1 = await buscarUltima().catch(() => undefined)
       if (u1 && u1.mensagem_id !== mensagemId && new Date(u1.criado_em).getTime() > refTs) return
