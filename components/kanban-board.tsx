@@ -205,6 +205,15 @@ export function KanbanBoard({
       return
     }
 
+    if (lead.origem === "Tráfego Pago" && newStatus === "em_automacao") {
+      // Fase C — reativação: gestor moveu para "Em Automação" → reaquece (frio → morno), permanece no Tráfego Pago
+      updateLead(lead.id, { status: newStatus, temperatura: "morno" })
+      logAudit({ leadId: lead.id, leadNome: lead.nome, usuarioNome, tipo: "temperatura", descricao: `Fase C — reativação de Tráfego Pago: ${lead.nome} entrou em "Em Automação"; temperatura reaquecida frio → morno (permanece no funil Tráfego Pago).` })
+      notify(`${lead.nome} reativado em "Em Automação" (Tráfego Pago reaquecido por ${usuarioNome})`, { tipo: "pipeline", paraRole: "gestor", leadId: lead.id })
+      toast(`Tráfego Pago reativado: ${lead.nome}`)
+      return
+    }
+
     updateLead(lead.id, { status: newStatus })
     logAudit({ leadId: lead.id, leadNome: lead.nome, usuarioNome, tipo: "etapa", descricao: `Etapa alterada: ${STATUS_LABEL[lead.status]} → ${STATUS_LABEL[newStatus]}` })
     notify(`${lead.nome} movido para "${STATUS_LABEL[newStatus]}" por ${usuarioNome}`, { tipo: "pipeline", paraRole: "gestor", leadId: lead.id })
@@ -476,7 +485,9 @@ export function KanbanBoard({
       (tempFilter === "todas" || l.temperatura === tempFilter) &&
       (filtros.origem === "todas" || l.origem === filtros.origem) &&
       (filtros.status === "todos" || l.status === filtros.status) &&
+      (isGestor || (l.status !== "em_automacao" && l.status !== "atendimento_ia" && l.status !== "perdido")) &&
       (filtros.corretor === "todos" || l.corretorId === filtros.corretor) &&
+      (isGestor || (l.status !== "em_automacao" && l.status !== "atendimento_ia" && l.status !== "perdido")) &&
       dentroPeriodo(l) &&
       matchesQuery(l),
   )
@@ -611,7 +622,7 @@ export function KanbanBoard({
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="kanban-scroll w-full flex-1 overflow-x-auto overflow-y-hidden pb-3">
           <div className={`flex w-max flex-nowrap gap-4 ${heightClass}`}>
-          {(isGestor ? LEAD_STATUSES : LEAD_STATUSES.filter((s) => s !== "em_followup")).map((status) => {
+          {(isGestor ? LEAD_STATUSES : LEAD_STATUSES.filter((s) => s !== "em_followup" && s !== "em_automacao" && s !== "atendimento_ia" && s !== "perdido")).map((status) => {
             const col = byStatus(status)
             return (
               <Droppable droppableId={status} key={status}>

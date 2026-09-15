@@ -159,6 +159,75 @@ async function encontrarLeadPorTelefone(telefone: string): Promise<string | null
   return lead?.id ?? null
 }
 
+// Transições por resposta (fluxo automação → IA): quando um lead parado em
+// "em_automacao" ou "em_followup" RESPONDE, ele sai da automação sozinho.
+// - "NÃO" (recusa curta) em em_automacao → em_followup (nova tentativa depois)
+// - qualquer outra resposta (inclusive em em_followup) → atendimento_ia
+//   (Patricia assume a conversa). Best-effort: nunca derruba o webhook.
+//   Não envia mensagem — só move a etapa + registra + avisa o gestor.
+const RESPOSTA_NAO_PATTERNS = [
+  "nao", "não", "nao quero", "não quero", "nao tenho interesse", "não tenho interesse",
+  "sem interesse", "nao obrigado", "não obrigado", "nao obrigada", "não obrigada",
+  "pare", "para", "stop", "sair", "remover", "excluir", "cancela", "cancelar",
+  "nao me interessa", "não me interessa", "deixa pra la", "deixa pra lá",
+  "agora nao", "agora não", "nao precisa", "não precisa",
+]
+function pareceRespostaNao(texto: string): boolean {
+  const t = (texto || "").toLowerCase().trim()
+  if (!t || t.length > 40) return false
+  return RESPOSTA_NAO_PATTERNS.some((p) => t === p || t.startsWith(`${p} `) || t.startsWith(`${p}.`) || t.startsWith(`${p}!`))
+}
+async function transicaoRespostaAutomacao(leadId: string, texto: string): Promise<void> {
+  try {
+    const { data: lead } = await wsupabase
+      .from("leads")
+      .select("id,nome,status,corretor_id,observacoes")
+      .eq("id", leadId)
+      .maybeSingle()
+    if (!lead) return
+    const status = String((lead as { status?: unknown }).status ?? "")
+    if (status !== "em_automacao" && status !== "em_followup") return
+    const recusa = status === "em_automacao" && pareceRespostaNao(texto)
+    const destino = recusa ? "em_followup" : "atendimento_ia"
+    const destinoLabel = recusa ? "Em Follow-up" : "Atendimento IA"
+    const { error: upErr } = await wsupabase
+      .from("leads")
+      .update({ status: destino, atualizado_em: new Date().toISOString() })
+      .eq("id", (lead as { id: string }).id)
+      .eq("status", status)
+    if (upErr) return
+    const nome = String((lead as { nome?: unknown }).nome ?? "Lead")
+    const motivo = recusa
+      ? `respondeu "NÃO" à reativação — vai para nova tentativa (follow-up)`
+      : `respondeu à automação — Patricia assume em "Atendimento IA"`
+    try {
+      const obs = `${String((lead as { observacoes?: unknown }).observacoes ?? "").trim()}\n[Automação] ${nome} ${motivo}.`.trim().slice(-6000)
+      await wsupabase.from("leads").update({ observacoes: obs }).eq("id", (lead as { id: string }).id)
+    } catch { /* obs é best-effort */ }
+    try {
+      await wsupabase.from("automation_logs").insert({
+        lead_id: (lead as { id: string }).id,
+        event_type: recusa ? "lead_respondeu_nao_followup" : "lead_respondeu_atendimento_ia",
+        event_title: `${nome} respondeu — foi para "${destinoLabel}"`,
+        event_description: `Lead em "${status}" respondeu "${texto.slice(0, 120)}" e foi movido para "${destino}".`,
+        actor_type: "system",
+      })
+    } catch { /* log é best-effort */ }
+    try {
+      const notif: Record<string, unknown> = {
+        mensagem: `${nome} respondeu à automação e foi para "${destinoLabel}"`,
+        tipo: "pipeline",
+        modulo: "vendas",
+        para_role: "gestor",
+        lead_id: (lead as { id: string }).id,
+      }
+      const dono = (lead as { corretor_id?: unknown }).corretor_id
+      if (typeof dono === "string" && dono) notif.usuario_id = dono
+      await wsupabase.from("notificacoes").insert(notif)
+    } catch { /* notify é best-effort */ }
+  } catch { /* nunca derruba o webhook */ }
+}
+
 // Baixa mídia com retry (a Evolution pode levar segundos para sincronizar o
 // arquivo após o upsert — a 1ª tentativa imediata costuma falhar).
 async function baixarMidiaComRetry(instanceName: string, mensagemId: string | null, tentativas = 3) {
@@ -356,6 +425,12 @@ async function handleMessageUpsert(payload: any) {
   // resposta — liga a resposta ao job. Resolvido uma única vez e reaproveitado no insert abaixo.
   const leadIdExistente = await encontrarLeadPorTelefone(telefone)
   if (leadIdExistente) await registrarRespostaDeLead(leadIdExistente, new Date().toISOString())
+  // Transição por resposta (fluxo automação → IA): lead em "em_automacao"/"em_followup"
+  // que responde sai da automação sozinho. Só mensagem do lead — nunca eco próprio.
+  // Best-effort com catch: jamais derruba o webhook.
+  if (leadIdExistente && msg?.key?.fromMe !== true) {
+    await transicaoRespostaAutomacao(leadIdExistente, corpo).catch(() => {})
+  }
 
   // Código de rastreio (ponte /r): o texto pré-preenchido termina com "Código: XXXXXXXX".
   // Mesmo sem contexto CTWA da Meta, o código casa o clique com o lead.

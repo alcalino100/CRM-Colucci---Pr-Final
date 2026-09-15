@@ -13,6 +13,7 @@ export const maxDuration = 120
 // reativação) e quem tem job de automação aberto.
 const DIAS_INATIVIDADE = 3
 const DIAS_ANTI_LOOP = 7
+const DIAS_FOLLOWUP_PERDIDO = 7
 const ESTAGIOS = ["em_atendimento", "atendimento_humano"]
 const LIMITE = 500
 
@@ -160,14 +161,75 @@ export async function GET(request: Request) {
     detalhes.push({ id: l.id, nome: l.nome, de: l.status, ultimo_contato: ultimoContato ? new Date(ultimoContato).toISOString() : null })
   }
 
+  // Follow-up sem resposta em X dias → perdido (fim do fluxo automático).
+  // Trava: ignora quem tem job de automação aberto (pode ter envio agendado)
+  // e quem teve contato (WhatsApp/visita) após entrar em follow-up.
+  const diasFollowup = Math.max(1, Number(url.searchParams.get("dias_followup") ?? DIAS_FOLLOWUP_PERDIDO) || DIAS_FOLLOWUP_PERDIDO)
+  const corteFollowup = new Date(Date.now() - diasFollowup * 86400000)
+  let perdidos = 0
+  const { data: emFollowup } = await wsupabase
+    .from("leads")
+    .select("id,nome,observacoes,atualizado_em")
+    .eq("status", "em_followup")
+    .is("arquivado_em", null)
+    .is("fechado_em", null)
+    .lt("atualizado_em", corteFollowup.toISOString())
+    .order("atualizado_em", { ascending: true })
+    .limit(LIMITE)
+  const listaFollowup = ((emFollowup ?? []) as { id: string; nome: string; observacoes: string; atualizado_em: string }[])
+  if (listaFollowup.length) {
+    const idsF = listaFollowup.map((l) => l.id)
+    const [{ data: jobsF }, { data: zapF }, { data: visF }] = await Promise.all([
+      wsupabase.from("automation_jobs").select("lead_id").in("lead_id", idsF).not("status", "in", `(${TERMINAL_JOBS.join(",")})`).limit(2000),
+      wsupabase.from("whatsapp_mensagens").select("lead_id,criado_em").in("lead_id", idsF).order("criado_em", { ascending: false }).limit(5000),
+      wsupabase.from("visitas").select("lead_id,data,horario").in("lead_id", idsF).order("data", { ascending: false }).limit(2000),
+    ])
+    const jobAbertoF = new Set(((jobsF ?? []) as { lead_id: string }[]).map((j) => j.lead_id))
+    const ultimoZapF = new Map<string, number>()
+    for (const w of ((zapF ?? []) as { lead_id: string; criado_em: string }[])) {
+      if (!ultimoZapF.has(w.lead_id)) ultimoZapF.set(w.lead_id, new Date(w.criado_em).getTime())
+    }
+    const ultimaVisitaF = new Map<string, number>()
+    for (const v of ((visF ?? []) as { lead_id: string; data: string; horario: string }[])) {
+      const dt = new Date(`${v.data}T${String(v.horario || "00:00").slice(0, 5)}:00`)
+      const t = isNaN(dt.getTime()) ? 0 : dt.getTime()
+      if (!ultimaVisitaF.has(v.lead_id) || (ultimaVisitaF.get(v.lead_id) ?? 0) < t) ultimaVisitaF.set(v.lead_id, t)
+    }
+    const corteFMs = corteFollowup.getTime()
+    for (const l of listaFollowup) {
+      if (jobAbertoF.has(l.id)) continue
+      const ultimoContato = Math.max(ultimoZapF.get(l.id) ?? 0, ultimaVisitaF.get(l.id) ?? 0)
+      if (ultimoContato > corteFMs) continue
+      if (!dry) {
+        const linha = `🔻 [${dataBR(new Date())}] Movido para Perdido: ${diasFollowup} dias em follow-up sem resposta e sem contato (fim do fluxo automático).`
+        const obs = `${(l.observacoes ?? "").trim()}\n${linha}`.trim().slice(-6000)
+        const { error: upErr } = await wsupabase
+          .from("leads")
+          .update({ status: "perdido", observacoes: obs, atualizado_em: new Date().toISOString() })
+          .eq("id", l.id)
+        if (upErr) continue
+        try {
+          await wsupabase.from("automation_logs").insert({
+            lead_id: l.id,
+            event_type: "lead_perdido_followup_sem_resposta",
+            event_title: `Lead perdido (follow-up sem resposta): ${l.nome}`,
+            event_description: `De "em_followup" para "perdido" após ${diasFollowup}d sem resposta e sem contato. Fim do fluxo automático.`,
+            actor_type: "system",
+          })
+        } catch { /* log é best-effort */ }
+      }
+      perdidos++
+    }
+  }
+
   try {
     await wsupabase.from("automation_logs").insert({
       event_type: "regressao_resumo",
       event_title: dry ? "Regressão por inatividade (simulação)" : "Regressão por inatividade executada",
-      event_description: `Avaliados: ${lista.length} | Regredidos: ${regredidos} | Pulados: ${JSON.stringify(pulados)}`,
+      event_description: `Avaliados: ${lista.length} | Regredidos: ${regredidos} | Perdidos (follow-up): ${perdidos} | Pulados: ${JSON.stringify(pulados)}`,
       actor_type: "system",
     })
   } catch { /* log é best-effort */ }
 
-  return NextResponse.json({ ok: true, avaliados: lista.length, regredidos, pulados, dry, detalhes: detalhes.slice(0, 50) })
+  return NextResponse.json({ ok: true, avaliados: lista.length, regredidos, perdidos, pulados, dry, detalhes: detalhes.slice(0, 50) })
 }
