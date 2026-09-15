@@ -47,6 +47,26 @@ export function refsTexto(l: Pick<Lead, "referencias" | "imovelRef">) {
   return list.length ? list.join(", ") : l.imovelRef || ""
 }
 
+// Tag do fluxo automático: carimbada ao entrar em automação (reativação de base
+// ou manual), removida ao sair para humano/perdido. A IA usa referencias como
+// "tags" (leadAptoParaResposta) — com essa tag o agente responde quem está na automação.
+export const TAG_AUTOMACAO = "automacao"
+type RefLike = string | { ref?: unknown } | null | undefined
+export function refNome(r: RefLike): string {
+  return String(typeof r === "string" ? r : r?.ref ?? "").toLowerCase().trim()
+}
+export function temRef(refs: unknown, nome: string): boolean {
+  return Array.isArray(refs) && (refs as RefLike[]).some((r) => refNome(r) === nome.toLowerCase())
+}
+export function comRef<T>(refs: readonly T[] | null | undefined, ref: T): T[] {
+  const arr = Array.isArray(refs) ? [...refs] : []
+  if (!temRef(arr, refNome(ref as RefLike))) arr.push(ref)
+  return arr
+}
+export function semRef<T>(refs: readonly T[] | null | undefined, nome: string): T[] {
+  return (Array.isArray(refs) ? [...refs] : []).filter((r) => refNome(r as RefLike) !== nome.toLowerCase())
+}
+
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   novo: "Novo Lead",
   "em_atendimento": "Em Atendimento",

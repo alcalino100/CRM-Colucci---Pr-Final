@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { generateAIResponse } from "./generateResponse"
+import { TAG_AUTOMACAO, semRef } from "@/lib/labels"
 
 function db() {
   return createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -159,8 +160,8 @@ export async function finalizarParaHumano(params: {
 }): Promise<void> {
   const { leadId, convId, aiId, motivo, triggerName, telefone, instanceName } = params
   try {
-    const { data: lead } = await db().from("leads").select("nome,observacoes,status").eq("id", leadId).maybeSingle()
-    const l = lead as { nome?: string; observacoes?: string; status?: string } | null
+    const { data: lead } = await db().from("leads").select("nome,observacoes,status,referencias").eq("id", leadId).maybeSingle()
+    const l = lead as { nome?: string; observacoes?: string; status?: string; referencias?: { ref: string }[] } | null
     if (!l) return
     const jaEntregue = String(l.status || "") === "atendimento_humano"
     // 1) Move a etapa PRIMEIRO (rápido) — a qualificação abaixo é lenta e era
@@ -187,7 +188,8 @@ export async function finalizarParaHumano(params: {
     const bloco = blocoQualificacao(q, triggerName ? `${motivo} (${triggerName})` : motivo)
 
     const obs = `${(l.observacoes ?? "").trim()}\n${bloco}`.trim().slice(-6000)
-    const patch: Record<string, unknown> = { observacoes: obs, atualizado_em: new Date().toISOString() }
+    // Saiu para humano: remove a tag da automação (dono agora é gente).
+    const patch: Record<string, unknown> = { observacoes: obs, referencias: semRef(l.referencias, TAG_AUTOMACAO), atualizado_em: new Date().toISOString() }
     await db().from("leads").update(patch).eq("id", leadId)
 
     const responsavel = await responsavelHandoff(leadId, instanceName)

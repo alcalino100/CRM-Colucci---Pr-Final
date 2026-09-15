@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server"
-import { normalizePhone } from "@/lib/labels"
+import { TAG_AUTOMACAO, comRef, normalizePhone, semRef } from "@/lib/labels"
 import { onlyDigits, wsupabase } from "@/lib/whatsapp/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
-// Regressão por inatividade: lead parado em atendimento volta sozinho para
-// Novo Lead (frio), com o motivo registrado nas observações + auditoria.
-// Regra: 3 dias SEM contato (WhatsApp/visita) E SEM alteração lógica no CRM.
-// Travas: ignora quem teve regressão nos últimos 7 dias (anti-loop com a
-// reativação) e quem tem job de automação aberto.
+// Regressão por inatividade (cron diário). Duas regras:
+// - TRÁFEGO PAGO em "em_atendimento" parado 3d → esfria (frio) e entra na
+//   automação de reativação de base (em_automacao + tag automacao). Mexida de
+//   corretor só reinicia a contagem (atualizado_em); nada isenta — só job
+//   aberto e contato recente seguram.
+// - Demais origens em atendimento paradas 3d → volta p/ Novo Lead (frio),
+//   com travas: regressão nos últimos 7d, job aberto, obs humana, contato recente.
 const DIAS_INATIVIDADE = 3
 const DIAS_ANTI_LOOP = 7
 const DIAS_FOLLOWUP_PERDIDO = 7
@@ -38,7 +40,7 @@ export async function GET(request: Request) {
 
   const { data: leads, error } = await wsupabase
     .from("leads")
-    .select("id,nome,telefone,temperatura,observacoes,atualizado_em,status,corretor_id,origem")
+    .select("id,nome,telefone,temperatura,observacoes,atualizado_em,status,corretor_id,origem,referencias")
     .in("status", ESTAGIOS)
     .is("arquivado_em", null)
     .is("fechado_em", null)
@@ -49,6 +51,7 @@ export async function GET(request: Request) {
   const lista = (leads ?? []) as {
     id: string; nome: string; telefone: string; temperatura: string;
     observacoes: string; atualizado_em: string; status: string; corretor_id: string | null; origem: string;
+    referencias: { ref: string }[] | null;
   }[]
   if (!lista.length) return NextResponse.json({ ok: true, avaliados: 0, regredidos: 0, dry })
 
@@ -104,44 +107,52 @@ export async function GET(request: Request) {
   }
 
   let regredidos = 0
-  const pulados: Record<string, number> = { com_obs: 0, contato_recente: 0, regressao_recente: 0, job_aberto: 0, trafego_pago: 0 }
+  const pulados: Record<string, number> = { com_obs: 0, contato_recente: 0, regressao_recente: 0, job_aberto: 0, trafego_pago: 0, entrariam_automacao: 0, aguardando_humano: 0 }
   const detalhes: { id: string; nome: string; de: string; ultimo_contato: string | null }[] = []
   const corteMs = corte.getTime()
 
   for (const l of lista) {
-    if (regredidosRecente.has(l.id)) { pulados.regressao_recente++; continue }
-    if (comJobAberto.has(l.id)) { pulados.job_aberto++; continue }
-    // Espelho da conversa IA ("[IA ...]") NÃO conta como observação humana —
-    // senão nenhum lead atendido pela IA jamais regrediria por inatividade.
-    const obsHumana = String(l.observacoes ?? "").split("\n").filter((ln) => !ln.trimStart().startsWith("[IA ")).join("\n").trim()
-    if (obsHumana) { pulados.com_obs++; continue }
     const ultimoContato = Math.max(ultimoZap.get(l.id) ?? 0, ultimaVisita.get(l.id) ?? 0)
-    if (ultimoContato > corteMs) { pulados.contato_recente++; continue }
-
     const ultimoTxt = ultimoContato ? dataBR(new Date(ultimoContato)) : "nenhum contato registrado"
-    if (l.origem === "Tráfego Pago") {
+
+    // REGRA TRÁFEGO PAGO (só em_atendimento, 3d parado → reativação de base).
+    if (l.origem === "Tráfego Pago" && l.status === "em_atendimento") {
       pulados.trafego_pago++
-      if (!dry) {
-        // Reativação de base: lead de Tráfego Pago parado em atendimento por DIAS
-        // dias entra na automação (em_automacao) e reaquece (frio → morno), permanecendo
-        // no funil de Tráfego Pago. FUTURO: quando houver resposta, a IA de atendimento
-        // assumirá a conversa — por enquanto, somente a automação (sem disparar a IA).
-        const obsTrafego = `${(l.observacoes ?? "").trim()}\nReativação de base: Tráfego Pago entrou em "Em Automação" após ${dias}d parado em atendimento sem contato/movimentação no CRM (último contato: ${ultimoTxt}). Temperatura: frio → morno. Somente automação neste momento (IA de atendimento virá em fase futura).`.trim().slice(-6000)
+      if (comJobAberto.has(l.id)) { pulados.job_aberto++; continue }
+      if (ultimoContato > corteMs) { pulados.contato_recente++; continue }
+      if (dry) { pulados.entrariam_automacao++; continue }
+      {
+        // Reativação de base: entra em automação (em_automacao) como FRIO
+        // (esfriou após 3d parado), permanecendo no funil de Tráfego Pago.
+        // Se responder, a IA assume em "Atendimento IA" (transição por resposta no webhook).
+        const obsTrafego = `${(l.observacoes ?? "").trim()}\nReativação de base: Tráfego Pago entrou em "Em Automação" após ${dias}d parado em atendimento sem contato/movimentação no CRM (último contato: ${ultimoTxt}). Temperatura: frio (esfriou). Se responder, a IA assume em "Atendimento IA".`.trim().slice(-6000)
         const { error: upErr } = await wsupabase
           .from("leads")
-          .update({ status: "em_automacao", temperatura: "morno", observacoes: obsTrafego, atualizado_em: new Date().toISOString() })
+          .update({ status: "em_automacao", temperatura: "frio", observacoes: obsTrafego, referencias: comRef(l.referencias, { ref: TAG_AUTOMACAO }), atualizado_em: new Date().toISOString() })
           .eq("id", l.id)
         if (upErr) continue
         await wsupabase.from("automation_logs").insert({
           lead_id: l.id,
           event_type: "lead_reativado_trafego_pago_reativacao_base",
           event_title: `Tráfego Pago entrou na reativação de base (Em Automação): ${l.nome}`,
-          event_description: `Lead de Tráfego Pago parado ${dias}d em atendimento entrou na automação de reativação de base. Temperatura: frio → morno. Permanecerá no funil de Tráfego Pago; IA de atendimento será habilitada em fase futura (por enquanto só automação).`,
+          event_description: `Lead de Tráfego Pago parado ${dias}d em atendimento entrou na automação de reativação de base. Temperatura: frio (esfriou). Permanecerá no funil de Tráfego Pago; se responder, a IA assume em "Atendimento IA".`,
           actor_type: "system",
         }).then(() => {}, () => {})
       }
       continue
     }
+    // Tráfego Pago fora de em_atendimento (ex.: Aguardando Atendimento):
+    // fora do escopo da automação — não mexe.
+    if (l.origem === "Tráfego Pago") { pulados.aguardando_humano++; continue }
+
+    // Legado (demais origens): regressão p/ novo+frio, com as travas antigas.
+    if (regredidosRecente.has(l.id)) { pulados.regressao_recente++; continue }
+    if (comJobAberto.has(l.id)) { pulados.job_aberto++; continue }
+    // Espelho da conversa IA ("[IA ...]") NÃO conta como observação humana —
+    // senão nenhum lead atendido pela IA jamais regrediria por inatividade.
+    const obsHumana = String(l.observacoes ?? "").split("\n").filter((ln) => !ln.trimStart().startsWith("[IA ")).join("\n").trim()
+    if (obsHumana) { pulados.com_obs++; continue }
+    if (ultimoContato > corteMs) { pulados.contato_recente++; continue }
     const linha = `🔄 [${dataBR(new Date())}] Retornado para Novo Lead por inatividade: ${dias} dias sem contato e sem movimentação no CRM (último contato: ${ultimoTxt}). Temperatura ajustada para frio.`
     if (!dry) {
       const obs = `${(l.observacoes ?? "").trim()}\n${linha}`.trim().slice(-6000)
@@ -172,14 +183,14 @@ export async function GET(request: Request) {
   let perdidos = 0
   const { data: emFollowup } = await wsupabase
     .from("leads")
-    .select("id,nome,observacoes,atualizado_em")
+    .select("id,nome,observacoes,atualizado_em,referencias")
     .eq("status", "em_followup")
     .is("arquivado_em", null)
     .is("fechado_em", null)
     .lt("atualizado_em", corteFollowup.toISOString())
     .order("atualizado_em", { ascending: true })
     .limit(LIMITE)
-  const listaFollowup = ((emFollowup ?? []) as { id: string; nome: string; observacoes: string; atualizado_em: string }[])
+  const listaFollowup = ((emFollowup ?? []) as { id: string; nome: string; observacoes: string; atualizado_em: string; referencias: { ref: string }[] | null }[])
   if (listaFollowup.length) {
     const idsF = listaFollowup.map((l) => l.id)
     const [{ data: jobsF }, { data: zapF }, { data: visF }] = await Promise.all([
@@ -208,7 +219,7 @@ export async function GET(request: Request) {
         const obs = `${(l.observacoes ?? "").trim()}\n${linha}`.trim().slice(-6000)
         const { error: upErr } = await wsupabase
           .from("leads")
-          .update({ status: "perdido", observacoes: obs, atualizado_em: new Date().toISOString() })
+          .update({ status: "perdido", observacoes: obs, referencias: semRef(l.referencias, TAG_AUTOMACAO), atualizado_em: new Date().toISOString() })
           .eq("id", l.id)
         if (upErr) continue
         try {
