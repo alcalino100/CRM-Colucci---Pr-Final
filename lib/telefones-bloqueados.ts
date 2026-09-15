@@ -41,7 +41,7 @@ const RAW = [
   "5518996093501", // Isabela privado
   "5518988048761", // Jean CAPTAÇÃO
   "5518991502791", // João Bernardo
-  "5518991975661", // Kleber
+  // "5518991975661", // Kleber — TEMPORARIAMENTE fora do bloqueio p/ teste da IA (voltar depois)
   "5518997663833", // Levi
   "5518935003711", // Lucas CAPTAÇÃO
   "5518997990131", // Patrícia Fernandes privado
