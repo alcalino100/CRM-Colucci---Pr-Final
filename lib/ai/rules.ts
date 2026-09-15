@@ -145,11 +145,17 @@ export function dentroDoHorario(rules: AgentRules, agora = new Date()): boolean 
 
 // QUEM: o lead pode ser respondido? (origem + tags)
 const normalize = (v: string) => v.toLowerCase().trim()
-export function leadAptoParaResposta(rules: AgentRules, lead: { origem?: string | null; referencias?: string[] | null } | null): boolean {
+export function leadAptoParaResposta(rules: AgentRules, lead: { origem?: string | null; referencias?: unknown } | null): boolean {
   if (!lead) return false
   const t = rules.target
   if (t.origensPermitidas.length && !t.origensPermitidas.some(o => normalize(o) === normalize(String(lead.origem || "")))) return false
-  const tags = (lead.referencias || []).map(normalize)
+  // referencias no banco é LeadRef[] ([{ref, principal}]) — aceita string[] legado também.
+  // Sem isso, normalize(obj) estoura "toLowerCase is not a function" e mata a resposta.
+  const raw = Array.isArray(lead.referencias) ? lead.referencias : []
+  const tags = raw
+    .map((r) => (typeof r === "string" ? r : (r as { ref?: unknown } | null)?.ref))
+    .map((v) => normalize(String(v ?? "")))
+    .filter(Boolean)
   if (t.tagsModo === "none" || !t.tags.length) return true
   if (t.tagsModo === "all") return t.tags.every(tag => tags.includes(normalize(tag)))
   return t.tags.some(tag => tags.includes(normalize(tag)))
