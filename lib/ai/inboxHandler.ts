@@ -19,6 +19,37 @@ export async function agenteParaInstancia(instanceName: string | undefined): Pro
   return ativos.find((a) => getBoundInstances(a.config).includes(instanceName)) || null
 }
 
+// Agente cujo numeroTeste contém o telefone (ativo + regras habilitadas).
+// Base do fallback de teste e do diagnóstico visível.
+export async function agenteParaNumeroTeste(telefone: string | undefined): Promise<any | null> {
+  if (!telefone) return null
+  const alvo = normalizePhone(telefone)
+  if (!alvo) return null
+  try {
+    const { data: agentes, error } = await db().from("ai_agents").select("*")
+    if (error || !agentes?.length) return null
+    const ativos = (agentes as any[]).filter((a) => a.is_active && getRules(a.config).enable)
+    return ativos.find((a) => (getRules(a.config).target.numeroTeste || []).some((n) => normalizePhone(String(n || "")) === alvo)) || null
+  } catch {
+    return null
+  }
+}
+
+// Log visível de diagnóstico do teste/automação (Admin > Logs / automation_logs).
+// Chamado SOMENTE em caminho de teste ou estágio de automação — nunca no
+// tráfego normal dos corretores (sem spam de log).
+async function logIaDiagnostico({ telefone, instanceName, leadId, evento, titulo, descricao }: { telefone: string; instanceName?: string; leadId?: string; evento: string; titulo: string; descricao: string }): Promise<void> {
+  try {
+    await db().from("automation_logs").insert({
+      lead_id: leadId ?? null,
+      event_type: evento,
+      event_title: titulo,
+      event_description: `${descricao} (tel ${telefone}${instanceName ? ` via ${instanceName}` : ""})`,
+      actor_type: "ia",
+    })
+  } catch { /* best-effort */ }
+}
+
 // Acha o lead cujo telefone bate com o contato (mesmo corretor da instância quando possível).
 // Busca por variantes no BANCO (ilike) — varredura total quebra acima de 1000 leads.
 async function acharLeadVinculado(telefone: string | undefined, instanceName: string | undefined): Promise<any | null> {
@@ -410,19 +441,34 @@ const DEBOUNCE_MS = 2500
 
 export async function handlePatriciaInbound({ telefone, texto, leadId, instanceName, mensagemId }: { telefone: string; texto: string; leadId?: string; instanceName?: string; mensagemId?: string }){
   try{
-    // 1) REGRA DE OURO: instância vinculada a IA ativa + regras habilitadas
-    const agente = await agenteParaInstancia(instanceName)
+    // 1) REGRA DE OURO: instância vinculada a IA ativa + regras habilitadas.
+    //    Fallback de TESTE: se a instância não tem agente mas o remetente é número
+    //    de teste registrado em algum agente ativo, esse agente assume (somente
+    //    teste — lead real nunca entra por aqui). Tudo auditado abaixo.
+    let agente = await agenteParaInstancia(instanceName)
+    let viaFallbackTeste = false
+    if (!agente) {
+      agente = await agenteParaNumeroTeste(telefone)
+      viaFallbackTeste = !!agente
+    }
     if(!agente) return
     const AI_ID = agente.id as string
     const rules: AgentRules = getRules(agente.config, agente)
     // Match normalizado: "18991502791" bate com "5518991502791" e vice-versa.
     const isTestNumber = (rules.target.numeroTeste || []).some((n) => normalizePhone(String(n || "")) === normalizePhone(telefone))
+    const emEstagioAutomacao = (st: unknown) => ["em_automacao", "atendimento_ia", "em_followup"].includes(normalize(String(st ?? "")))
+    if (viaFallbackTeste) {
+      await logIaDiagnostico({ telefone, instanceName, evento: "ia_teste_fora_da_instancia", titulo: "Teste atendido fora da instância vinculada", descricao: `Agente "${agente.name}" assumiu conversa na instância "${instanceName ?? "?"}" (vinculado a [${getBoundInstances(agente.config).join(", ") || "?"}]).` })
+    }
 
     // 2) QUANDO: se houve horário configurado e fora do expediente, não responde agora
     if (!isTestNumber && !dentroDoHorario(rules)) return
 
     // 3) ONDE: canal habilitado
-    if (rules.channels.length && !rules.channels.includes("whatsapp")) return
+    if (rules.channels.length && !rules.channels.includes("whatsapp")) {
+      if (isTestNumber) await logIaDiagnostico({ telefone, instanceName, evento: "ia_teste_bloqueado", titulo: "Canal WhatsApp desabilitado — sem resposta", descricao: `Agente "${agente.name}" com canal WhatsApp desligado.` })
+      return
+    }
 
     // 4) QUEM: só responde para lead apto (origem + tags) ou número de teste.
     //    Mensagem orgânica/pessoal sem vínculo com lead permitido → NÃO responde.
@@ -433,9 +479,15 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
     } else if (!isTestNumber) {
       lead = await acharLeadVinculado(telefone, instanceName)
     }
-    if (!isTestNumber && !leadAptoParaResposta(rules, lead)) return
+    if (!isTestNumber && !leadAptoParaResposta(rules, lead)) {
+      if (lead && emEstagioAutomacao(lead.status)) await logIaDiagnostico({ telefone, instanceName, leadId: lead?.id, evento: "ia_teste_bloqueado", titulo: "Lead fora do alvo do agente — sem resposta", descricao: `Lead "${lead.id}" (origem ${String(lead.origem ?? "?")}, status ${String(lead.status ?? "?")}) não passou em origem/tags do agente "${agente.name}".` })
+      return
+    }
     // Status bloqueados configurados (ex.: perdido/escalated) — nunca responde
-    if (lead && rules.target.statusBloqueados.map(normalize).includes(normalize(String(lead.status || "")))) return
+    if (lead && rules.target.statusBloqueados.map(normalize).includes(normalize(String(lead.status || "")))) {
+      if (isTestNumber || emEstagioAutomacao(lead.status)) await logIaDiagnostico({ telefone, instanceName, leadId: lead?.id, evento: "ia_teste_bloqueado", titulo: "Status bloqueado — sem resposta", descricao: `Lead em "${String(lead.status)}" está em statusBloqueados do agente "${agente.name}".` })
+      return
+    }
 
     const leadIdEfetivo = lead?.id ?? undefined
 
@@ -460,8 +512,14 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       }
     }
 
-    // Atendimento pausado pelo gestor: IA não responde
-    if(existing?.ai_responding === false) return
+    // Atendimento pausado pelo gestor/corretor (mensagem manual pausa a IA): não responde.
+    // Visível no log para teste/automação — o "mudo" mais comum; resolve com "Retomar IA".
+    if(existing?.ai_responding === false) {
+      if (isTestNumber || emEstagioAutomacao(lead?.status)) {
+        await logIaDiagnostico({ telefone, instanceName, leadId: leadIdEfetivo, evento: "ia_teste_bloqueado", titulo: "IA pausada — sem resposta", descricao: `Conversa ${convId} com ai_responding=false (pausada por atendimento manual). Use "Retomar IA" no Inbox para a IA voltar a responder.` })
+      }
+      return
+    }
 
     // 5b) Auto-pausa por inatividade: conta a partir da última mensagem DO LEAD
     // (last_user_message_at) — não de qualquer evento da conversa. Sem essa ref
@@ -471,6 +529,9 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       if (Date.now() - ultimaMsg > rules.coordination.tempoInatividadeMin * 60_000) {
         await registrarResumoConversa(convId, leadIdEfetivo, "pausada por inatividade do lead")
         await db().from("conversations_ia").update({ ai_responding: false }).eq("id", convId)
+        if (isTestNumber || emEstagioAutomacao(lead?.status)) {
+          await logIaDiagnostico({ telefone, instanceName, leadId: leadIdEfetivo, evento: "ia_teste_bloqueado", titulo: "IA pausada por inatividade — sem resposta", descricao: `Conversa ${convId} pausada: lead há mais de ${rules.coordination.tempoInatividadeMin}min sem escrever.` })
+        }
         return
       }
     }
@@ -534,7 +595,7 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
           .maybeSingle()
         refPropriaMs = res?.data?.criado_em ? new Date(res.data.criado_em).getTime() : undefined
       } catch { /* sem a própria → fallback abaixo */ }
-      const refTs = new Date(propria?.criado_em || new Date(Date.now() - 9000).toISOString()).getTime()
+      const refTs = refPropriaMs ?? Date.now() - 9000
       const u1 = await buscarUltima().catch(() => undefined)
       if (u1 && u1.mensagem_id !== mensagemId && new Date(u1.criado_em).getTime() > refTs) return
       await sleep(400)
