@@ -362,6 +362,21 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
       })
     } catch { /* log é best-effort */ }
 
+    // Espelho da conversa + handoff prometido: a cada resposta enviada, duplica o
+    // turno nas observações do lead ([IA ...] Lead:/IA:) para controle total.
+    // Se a IA prometeu consultor ("um consultor vai continuar"), move o lead para
+    // Aguardando Atendimento + avisa o responsável. Sem isso a promessa vira
+    // mentira e o lead apodrece na etapa.
+    if (envRes.ok && leadIdEfetivo) {
+      try {
+        const { pareceHandoffHumano, finalizarParaHumano, espelharTurnoObs } = await import("./qualificacao")
+        await espelharTurnoObs(leadIdEfetivo, userMessage, aiResp)
+        if (pareceHandoffHumano(aiResp)) {
+          await finalizarParaHumano({ leadId: leadIdEfetivo, convId, aiId: AI_ID, motivo: "IA concluiu e transferiu para consultor", telefone, instanceName })
+        }
+      } catch { /* espelho/handoff é best-effort */ }
+    }
+
     await registrarAnalytics({ convId, aiId: AI_ID, ms: Date.now() - t0, tokens: tokensUsed ?? 0, modelo: model ?? "", semEscalacao: true })
     return envRes.ok ? { ok: true } : { ok: false, erro: envRes.erro }
   } catch (e: any) {

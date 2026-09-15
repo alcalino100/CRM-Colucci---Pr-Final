@@ -111,7 +111,10 @@ export async function GET(request: Request) {
   for (const l of lista) {
     if (regredidosRecente.has(l.id)) { pulados.regressao_recente++; continue }
     if (comJobAberto.has(l.id)) { pulados.job_aberto++; continue }
-    if (String(l.observacoes ?? "").trim()) { pulados.com_obs++; continue }
+    // Espelho da conversa IA ("[IA ...]") NÃO conta como observação humana —
+    // senão nenhum lead atendido pela IA jamais regrediria por inatividade.
+    const obsHumana = String(l.observacoes ?? "").split("\n").filter((ln) => !ln.trimStart().startsWith("[IA ")).join("\n").trim()
+    if (obsHumana) { pulados.com_obs++; continue }
     const ultimoContato = Math.max(ultimoZap.get(l.id) ?? 0, ultimaVisita.get(l.id) ?? 0)
     if (ultimoContato > corteMs) { pulados.contato_recente++; continue }
 

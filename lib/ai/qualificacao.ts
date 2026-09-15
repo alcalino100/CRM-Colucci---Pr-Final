@@ -108,7 +108,45 @@ async function responsavelHandoff(leadId: string, instanceName?: string): Promis
   return null
 }
 
-// Handoff completo: resumo nas observações + etapa Atendimento Humano + notificação.
+// Promessa de handoff na resposta da IA ("um consultor vai continuar...").
+// Quando a IA fala isso, o sistema precisa mover o lead de verdade — senão a
+// promessa vira mentira e o lead apodrece na etapa errada. Direção segura:
+// falso-positivo só manda o lead para a fila humana + aviso.
+const HANDOFF_PHRASES = [
+  "consultor vai", "consultor irá", "consultor ira", "consultor entrará", "consultor entrara",
+  "vou te transferir", "vou transferir", "transferir você", "transferir voce",
+  "passar para um", "passo para um", "passando para um",
+  "especialista vai", "alguém da equipe", "alguem da equipe", "nossa equipe vai",
+  "corretor vai", "vai te chamar", "vão te chamar", "vao te chamar",
+  "dar continuidade", "continuar o atendimento", "assumir o atendimento", "assume o atendimento",
+  "passo seu contato", "passei seu contato", "encaminhar seu", "encaminhando seu", "encaminhei seu",
+]
+export function pareceHandoffHumano(texto: string): boolean {
+  const t = (texto || "").toLowerCase()
+  if (!t) return false
+  return HANDOFF_PHRASES.some((p) => t.includes(p))
+}
+
+// Espelho da conversa nas observações do lead: cada turno (pergunta do lead +
+// resposta da IA) vira 2 linhas prefixadas com "[IA ...]", como duplicata da
+// conversa para controle do gestor/corretor. Teto de 6000 chars (mantém o fim).
+// ATENÇÃO: a regressão por inatividade ignora linhas "[IA " ao decidir se o
+// lead "tem observação" — senão nenhum lead atendido pela IA regrediria.
+const MAX_OBS_ESPELHO = 6000
+function carimboIA(): string {
+  return new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+}
+export async function espelharTurnoObs(leadId: string, userMessage: string, aiResp: string): Promise<void> {
+  try {
+    const { data: lead } = await db().from("leads").select("observacoes").eq("id", leadId).maybeSingle()
+    const base = String((lead as { observacoes?: unknown } | null)?.observacoes ?? "")
+    const bloco = `[IA ${carimboIA()}] Lead: ${userMessage.trim().slice(0, 500)}\n[IA ${carimboIA()}] IA: ${aiResp.trim().slice(0, 800)}`
+    const nova = `${base.trim()}\n${bloco}`.trim().slice(-MAX_OBS_ESPELHO)
+    await db().from("leads").update({ observacoes: nova }).eq("id", leadId)
+  } catch { /* espelho é best-effort */ }
+}
+
+// Handoff completo: resumo nas observações + etapa Aguardando Atendimento + notificação.
 // Idempotente por evento (cada chamada = um marco); observações limitadas a 6000 chars.
 export async function finalizarParaHumano(params: {
   leadId: string
@@ -136,7 +174,7 @@ export async function finalizarParaHumano(params: {
     if (!l) return
     const obs = `${(l.observacoes ?? "").trim()}\n${bloco}`.trim().slice(-6000)
     const patch: Record<string, unknown> = { observacoes: obs, atualizado_em: new Date().toISOString() }
-    if (["novo", "em_atendimento", "em_followup"].includes(String(l.status || ""))) {
+    if (["novo", "em_atendimento", "em_automacao", "atendimento_ia", "em_followup"].includes(String(l.status || ""))) {
       patch.status = "atendimento_humano"
     }
     await db().from("leads").update(patch).eq("id", leadId)
@@ -146,7 +184,7 @@ export async function finalizarParaHumano(params: {
     const umaLinha = q?.resumo || motivo
     try {
       await db().from("notificacoes").insert({
-        mensagem: `🤝 Lead qualificado pela IA: ${nome} — ${umaLinha} → etapa Atendimento Humano. Ver observações.`,
+        mensagem: `🤝 Lead qualificado pela IA: ${nome} — ${umaLinha} → etapa Aguardando Atendimento. Ver observações.`,
         tipo: "handoff_ia",
         modulo: "vendas",
         usuario_id: responsavel,
@@ -161,7 +199,7 @@ export async function finalizarParaHumano(params: {
         lead_id: leadId,
         event_type: "ia_handoff_humano",
         event_title: `Lead entregue ao atendimento humano (${nome})`,
-        event_description: `${motivo}${triggerName ? ` (${triggerName})` : ""} → etapa Atendimento Humano${responsavel ? "" : " (sem responsável resolvido)"}.`,
+        event_description: `${motivo}${triggerName ? ` (${triggerName})` : ""} → etapa Aguardando Atendimento${responsavel ? "" : " (sem responsável resolvido)"}.`,
         actor_type: "ia",
         payload: JSON.stringify({ convId, instance: instanceName, responsavel }).slice(0, 400),
       })

@@ -52,7 +52,7 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
   "em_atendimento": "Em Atendimento",
   "em_automacao": "Em Automação",
   "atendimento_ia": "Atendimento IA",
-  "atendimento_humano": "Atendimento Humano",
+  "atendimento_humano": "Aguardando Atendimento",
   "em_followup": "Em Follow-up",
   "escolhendo opcoes": "Separando Opções",
   "imovel necessidade": "Imóvel - Necessidade",
