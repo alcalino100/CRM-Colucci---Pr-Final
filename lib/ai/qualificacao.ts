@@ -159,6 +159,23 @@ export async function finalizarParaHumano(params: {
 }): Promise<void> {
   const { leadId, convId, aiId, motivo, triggerName, telefone, instanceName } = params
   try {
+    const { data: lead } = await db().from("leads").select("nome,observacoes,status").eq("id", leadId).maybeSingle()
+    const l = lead as { nome?: string; observacoes?: string; status?: string } | null
+    if (!l) return
+    const jaEntregue = String(l.status || "") === "atendimento_humano"
+    // 1) Move a etapa PRIMEIRO (rápido) — a qualificação abaixo é lenta e era
+    //    a fonte da "demora" entre a despedida da IA e a mudança de etapa.
+    if (!jaEntregue && ["novo", "em_atendimento", "em_automacao", "atendimento_ia", "em_followup"].includes(String(l.status || ""))) {
+      try {
+        await db().from("leads").update({ status: "atendimento_humano", atualizado_em: new Date().toISOString() }).eq("id", leadId)
+      } catch { /* move é best-effort */ }
+    }
+    // 2) Pausa a IA da conversa: humano assumiu — evita a IA reengajando lead
+    //    já entregue (promessa quebrada + atendimentos confundidos).
+    try {
+      await db().from("conversations_ia").update({ ai_responding: false }).eq("id", convId)
+    } catch { /* pausa é best-effort */ }
+    // 3) Qualificação (lenta) + observações.
     const { data: history } = await db()
       .from("messages_ia")
       .select("role,content")
@@ -169,19 +186,15 @@ export async function finalizarParaHumano(params: {
     const q = hist.length ? await extrairQualificacao(aiId, hist) : null
     const bloco = blocoQualificacao(q, triggerName ? `${motivo} (${triggerName})` : motivo)
 
-    const { data: lead } = await db().from("leads").select("nome,observacoes,status").eq("id", leadId).maybeSingle()
-    const l = lead as { nome?: string; observacoes?: string; status?: string } | null
-    if (!l) return
     const obs = `${(l.observacoes ?? "").trim()}\n${bloco}`.trim().slice(-6000)
     const patch: Record<string, unknown> = { observacoes: obs, atualizado_em: new Date().toISOString() }
-    if (["novo", "em_atendimento", "em_automacao", "atendimento_ia", "em_followup"].includes(String(l.status || ""))) {
-      patch.status = "atendimento_humano"
-    }
     await db().from("leads").update(patch).eq("id", leadId)
 
     const responsavel = await responsavelHandoff(leadId, instanceName)
     const nome = l.nome || telefone
     const umaLinha = q?.resumo || motivo
+    // 4) Notificação só na primeira entrega (sem spam em handoff duplo).
+    if (!jaEntregue) {
     try {
       await db().from("notificacoes").insert({
         mensagem: `🤝 Lead qualificado pela IA: ${nome} — ${umaLinha} → etapa Aguardando Atendimento. Ver observações.`,
@@ -193,6 +206,7 @@ export async function finalizarParaHumano(params: {
         lead_id: leadId,
       })
     } catch { /* notificação é best-effort */ }
+    }
 
     try {
       await db().from("automation_logs").insert({
