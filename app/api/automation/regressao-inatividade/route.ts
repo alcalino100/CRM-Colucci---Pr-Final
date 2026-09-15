@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { TAG_AUTOMACAO, comRef, normalizePhone, semRef } from "@/lib/labels"
+import { comTagsEntradaAutomacao, normalizePhone, semTagsFluxo } from "@/lib/labels"
 import { onlyDigits, wsupabase } from "@/lib/whatsapp/server"
 
 export const runtime = "nodejs"
@@ -128,7 +128,7 @@ export async function GET(request: Request) {
         const obsTrafego = `${(l.observacoes ?? "").trim()}\nReativação de base: Tráfego Pago entrou em "Em Automação" após ${dias}d parado em atendimento sem contato/movimentação no CRM (último contato: ${ultimoTxt}). Temperatura: frio (esfriou). Se responder, a IA assume em "Atendimento IA".`.trim().slice(-6000)
         const { error: upErr } = await wsupabase
           .from("leads")
-          .update({ status: "em_automacao", temperatura: "frio", observacoes: obsTrafego, referencias: comRef(l.referencias, { ref: TAG_AUTOMACAO }), atualizado_em: new Date().toISOString() })
+          .update({ status: "em_automacao", temperatura: "frio", observacoes: obsTrafego, referencias: comTagsEntradaAutomacao(l.referencias), atualizado_em: new Date().toISOString() })
           .eq("id", l.id)
         if (upErr) continue
         await wsupabase.from("automation_logs").insert({
@@ -219,7 +219,7 @@ export async function GET(request: Request) {
         const obs = `${(l.observacoes ?? "").trim()}\n${linha}`.trim().slice(-6000)
         const { error: upErr } = await wsupabase
           .from("leads")
-          .update({ status: "perdido", observacoes: obs, referencias: semRef(l.referencias, TAG_AUTOMACAO), atualizado_em: new Date().toISOString() })
+          .update({ status: "perdido", observacoes: obs, referencias: semTagsFluxo(l.referencias), atualizado_em: new Date().toISOString() })
           .eq("id", l.id)
         if (upErr) continue
         try {

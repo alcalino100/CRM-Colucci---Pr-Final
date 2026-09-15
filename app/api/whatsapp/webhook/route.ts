@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { normalizePhone } from "@/lib/labels"
+import { TAG_FOLLOWUP, TAG_NAO_RESPONDEU_AUTOMACAO, TAG_RESPONDEU_AUTOMACAO, comRef, normalizePhone, semRef } from "@/lib/labels"
 import { baixarEArmazenarMidia, detectarMidia, mapConnectionState, notifyDisconnection, onlyDigits, wsupabase, type MidiaDetectada } from "@/lib/whatsapp/server"
 import { registrarRespostaDeLead, registrarStatusEntrega } from "@/lib/automation-services"
 import { enviarLeadCapi } from "@/lib/meta/capi"
@@ -181,7 +181,7 @@ async function transicaoRespostaAutomacao(leadId: string, texto: string): Promis
   try {
     const { data: lead } = await wsupabase
       .from("leads")
-      .select("id,nome,status,corretor_id,observacoes")
+      .select("id,nome,status,corretor_id,observacoes,referencias")
       .eq("id", leadId)
       .maybeSingle()
     if (!lead) return
@@ -190,9 +190,15 @@ async function transicaoRespostaAutomacao(leadId: string, texto: string): Promis
     const recusa = status === "em_automacao" && pareceRespostaNao(texto)
     const destino = recusa ? "em_followup" : "atendimento_ia"
     const destinoLabel = recusa ? "Em Follow-up" : "Atendimento IA"
+    // Tags de estágio: NÃO → nao-respondeu-automacao + followup; SIM/resposta →
+    // respondeu-automacao (limpa nao-respondeu/followup, mantém automacao).
+    const refsBase = (lead as { referencias?: unknown }).referencias
+    const novasRefs = recusa
+      ? comRef(comRef(refsBase as { ref: string }[], { ref: TAG_NAO_RESPONDEU_AUTOMACAO }), { ref: TAG_FOLLOWUP })
+      : comRef(semRef(semRef(refsBase as { ref: string }[], TAG_NAO_RESPONDEU_AUTOMACAO), TAG_FOLLOWUP), { ref: TAG_RESPONDEU_AUTOMACAO })
     const { error: upErr } = await wsupabase
       .from("leads")
-      .update({ status: destino, atualizado_em: new Date().toISOString() })
+      .update({ status: destino, referencias: novasRefs, atualizado_em: new Date().toISOString() })
       .eq("id", (lead as { id: string }).id)
       .eq("status", status)
     if (upErr) return

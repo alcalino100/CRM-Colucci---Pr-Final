@@ -13,7 +13,7 @@ import { supabase } from "@/lib/supabase/client"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
-import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TAG_AUTOMACAO, TEMPERATURAS, TEMP_LABEL, brl, comRef, normalizePhone, refsTexto } from "@/lib/labels"
+import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, comTagsEntradaAutomacao, normalizePhone, refsTexto } from "@/lib/labels"
 import { ORIGENS, type Lead, type LeadStatus, type Origem, type Temperatura } from "@/lib/mock-data"
 import { lerFiltros, ORIGEM_SLUG, queryFiltros, STATUS_SLUG } from "@/lib/leads-filtros"
 import { cn } from "@/lib/utils"
@@ -207,7 +207,7 @@ export function KanbanBoard({
 
     if (lead.origem === "Tráfego Pago" && newStatus === "em_automacao") {
       // Fase C — reativação: gestor moveu para "Em Automação" → reaquece (frio → morno), permanece no Tráfego Pago
-      updateLead(lead.id, { status: newStatus, temperatura: "morno", referencias: comRef(lead.referencias, { ref: TAG_AUTOMACAO }) })
+      updateLead(lead.id, { status: newStatus, temperatura: "morno", referencias: comTagsEntradaAutomacao(lead.referencias) })
       logAudit({ leadId: lead.id, leadNome: lead.nome, usuarioNome, tipo: "temperatura", descricao: `Fase C — reativação de Tráfego Pago: ${lead.nome} entrou em "Em Automação"; temperatura reaquecida frio → morno (permanece no funil Tráfego Pago).` })
       notify(`${lead.nome} reativado em "Em Automação" (Tráfego Pago reaquecido por ${usuarioNome})`, { tipo: "pipeline", paraRole: "gestor", leadId: lead.id })
       toast(`Tráfego Pago reativado: ${lead.nome}`)

@@ -51,6 +51,13 @@ export function refsTexto(l: Pick<Lead, "referencias" | "imovelRef">) {
 // ou manual), removida ao sair para humano/perdido. A IA usa referencias como
 // "tags" (leadAptoParaResposta) — com essa tag o agente responde quem está na automação.
 export const TAG_AUTOMACAO = "automacao"
+// Tags de estágio do ciclo (a IA usa referencias como alvo — leadAptoParaResposta):
+// respondeu/não-respondeu à reativação, em follow-up. Namespace do fluxo; ao
+// sair para humano/perdido, todas saem (semTagsFluxo). Slugs sem acento.
+export const TAG_RESPONDEU_AUTOMACAO = "respondeu-automacao"
+export const TAG_NAO_RESPONDEU_AUTOMACAO = "nao-respondeu-automacao"
+export const TAG_FOLLOWUP = "followup"
+export const TAGS_FLUXO = [TAG_AUTOMACAO, TAG_RESPONDEU_AUTOMACAO, TAG_NAO_RESPONDEU_AUTOMACAO, TAG_FOLLOWUP]
 type RefLike = string | { ref?: unknown } | null | undefined
 export function refNome(r: RefLike): string {
   return String(typeof r === "string" ? r : r?.ref ?? "").toLowerCase().trim()
@@ -65,6 +72,15 @@ export function comRef<T>(refs: readonly T[] | null | undefined, ref: T): T[] {
 }
 export function semRef<T>(refs: readonly T[] | null | undefined, nome: string): T[] {
   return (Array.isArray(refs) ? [...refs] : []).filter((r) => refNome(r as RefLike) !== nome.toLowerCase())
+}
+export function semTagsFluxo<T>(refs: unknown): T[] {
+  return (Array.isArray(refs) ? [...refs] : []).filter((r) => !TAGS_FLUXO.includes(refNome(r as RefLike))) as T[]
+}
+// Entrada (ou reentrada) na automação: zera o ciclo anterior e carimba automacao.
+export function comTagsEntradaAutomacao(refs: unknown): { ref: string }[] {
+  const base = semTagsFluxo(refs).map((r) => (typeof r === "string" ? { ref: r } : (r as { ref: string })))
+  if (!temRef(base, TAG_AUTOMACAO)) base.push({ ref: TAG_AUTOMACAO })
+  return base
 }
 
 export const STATUS_LABEL: Record<LeadStatus, string> = {
