@@ -50,6 +50,8 @@ export function refsTexto(l: Pick<Lead, "referencias" | "imovelRef">) {
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   novo: "Novo Lead",
   "em_atendimento": "Em Atendimento",
+  "em_automacao": "Em Automação",
+  "atendimento_ia": "Atendimento IA",
   "atendimento_humano": "Atendimento Humano",
   "em_followup": "Em Follow-up",
   "escolhendo opcoes": "Separando Opções",
@@ -63,6 +65,8 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
 export const STATUS_VARIANT: Record<LeadStatus, string> = {
   novo: "blue",
   "em_atendimento": "indigo",
+  "em_automacao": "sky",
+  "atendimento_ia": "cyan",
   "atendimento_humano": "violet",
   "em_followup": "orange",
   "escolhendo opcoes": "slate",
@@ -77,6 +81,8 @@ export const STATUS_VARIANT: Record<LeadStatus, string> = {
 export const STATUS_ACCENT: Record<LeadStatus, string> = {
   novo: "#0ea5e9",
   "em_atendimento": "#4f46e5",
+  "em_automacao": "#06b6d4",
+  "atendimento_ia": "#22d3ee",
   "atendimento_humano": "#7c3aed",
   "em_followup": "#f97316",
   "escolhendo opcoes": "#54595f",
@@ -90,6 +96,8 @@ export const STATUS_ACCENT: Record<LeadStatus, string> = {
 export const LEAD_STATUSES: LeadStatus[] = [
   "novo",
   "em_atendimento",
+  "em_automacao",
+  "atendimento_ia",
   "atendimento_humano",
   "em_followup",
   "escolhendo opcoes",

@@ -20,7 +20,10 @@ export const SLUG_ORIGEM: Record<string, Origem> = Object.fromEntries(
 
 export const STATUS_SLUG: Record<LeadStatus, string> = {
   novo: "novo",
-  em_atendimento: "em-atendimento",
+  "em_atendimento": "em-atendimento",
+  "em_automacao": "em-automacao",
+  "atendimento_ia": "atendimento-ia",
+  "atendimento_humano": "atendimento-humano",
   em_followup: "em-followup",
   "escolhendo opcoes": "escolhendo-opcoes",
   "visita agendada": "visita-agendada",

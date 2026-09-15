@@ -10,6 +10,8 @@ export type Modulo = "vendas" | "locacao"
 export type LeadStatus =
   | "novo"
   | "em_atendimento"
+  | "em_automacao"
+  | "atendimento_ia"
   | "atendimento_humano"
   | "em_followup"
   | "escolhendo opcoes"
