@@ -21,6 +21,8 @@ const COLORS = ["#b22222", "#54595f", "#c41e24", "#a1a1aa", "#d4d4d8", "#e4a11b"
 const PIPELINE_PROB: Record<LeadStatus, number> = {
   novo: 0.1,
   "em_atendimento": 0.2,
+  em_automacao: 0.15,
+  "atendimento_ia": 0.12,
   "em_followup": 0.15,
   "escolhendo opcoes": 0.3,
   "imovel necessidade": 0.3,

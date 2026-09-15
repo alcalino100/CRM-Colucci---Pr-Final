@@ -8,10 +8,10 @@ export const maxDuration = 120
 
 // Regressão por inatividade: lead parado em atendimento volta sozinho para
 // Novo Lead (frio), com o motivo registrado nas observações + auditoria.
-// Regra: 2 dias SEM contato (WhatsApp/visita) E SEM alteração lógica no CRM.
+// Regra: 3 dias SEM contato (WhatsApp/visita) E SEM alteração lógica no CRM.
 // Travas: ignora quem teve regressão nos últimos 7 dias (anti-loop com a
 // reativação) e quem tem job de automação aberto.
-const DIAS_INATIVIDADE = 2
+const DIAS_INATIVIDADE = 3
 const DIAS_ANTI_LOOP = 7
 const ESTAGIOS = ["em_atendimento", "atendimento_humano"]
 const LIMITE = 500
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
 
   const { data: leads, error } = await wsupabase
     .from("leads")
-    .select("id,nome,telefone,temperatura,observacoes,atualizado_em,status,corretor_id")
+    .select("id,nome,telefone,temperatura,observacoes,atualizado_em,status,corretor_id,origem")
     .in("status", ESTAGIOS)
     .is("arquivado_em", null)
     .is("fechado_em", null)
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
   const lista = (leads ?? []) as {
     id: string; nome: string; telefone: string; temperatura: string;
-    observacoes: string; atualizado_em: string; status: string; corretor_id: string | null;
+    observacoes: string; atualizado_em: string; status: string; corretor_id: string | null; origem: string;
   }[]
   if (!lista.length) return NextResponse.json({ ok: true, avaliados: 0, regredidos: 0, dry })
 
@@ -103,17 +103,41 @@ export async function GET(request: Request) {
   }
 
   let regredidos = 0
-  const pulados: Record<string, number> = { contato_recente: 0, regressao_recente: 0, job_aberto: 0 }
+  const pulados: Record<string, number> = { com_obs: 0, contato_recente: 0, regressao_recente: 0, job_aberto: 0, trafego_pago: 0 }
   const detalhes: { id: string; nome: string; de: string; ultimo_contato: string | null }[] = []
   const corteMs = corte.getTime()
 
   for (const l of lista) {
     if (regredidosRecente.has(l.id)) { pulados.regressao_recente++; continue }
     if (comJobAberto.has(l.id)) { pulados.job_aberto++; continue }
+    if (String(l.observacoes ?? "").trim()) { pulados.com_obs++; continue }
     const ultimoContato = Math.max(ultimoZap.get(l.id) ?? 0, ultimaVisita.get(l.id) ?? 0)
     if (ultimoContato > corteMs) { pulados.contato_recente++; continue }
 
     const ultimoTxt = ultimoContato ? dataBR(new Date(ultimoContato)) : "nenhum contato registrado"
+    if (l.origem === "Tráfego Pago") {
+      pulados.trafego_pago++
+      if (!dry) {
+        // Reativação de base: lead de Tráfego Pago parado em atendimento por DIAS
+        // dias entra na automação (em_automacao) e reaquece (frio → morno), permanecendo
+        // no funil de Tráfego Pago. FUTURO: quando houver resposta, a IA de atendimento
+        // assumirá a conversa — por enquanto, somente a automação (sem disparar a IA).
+        const obsTrafego = `${(l.observacoes ?? "").trim()}\nReativação de base: Tráfego Pago entrou em "Em Automação" após ${dias}d parado em atendimento sem contato/movimentação no CRM (último contato: ${ultimoTxt}). Temperatura: frio → morno. Somente automação neste momento (IA de atendimento virá em fase futura).`.trim().slice(-6000)
+        const { error: upErr } = await wsupabase
+          .from("leads")
+          .update({ status: "em_automacao", temperatura: "morno", observacoes: obsTrafego, atualizado_em: new Date().toISOString() })
+          .eq("id", l.id)
+        if (upErr) continue
+        await wsupabase.from("automation_logs").insert({
+          lead_id: l.id,
+          event_type: "lead_reativado_trafego_pago_reativacao_base",
+          event_title: `Tráfego Pago entrou na reativação de base (Em Automação): ${l.nome}`,
+          event_description: `Lead de Tráfego Pago parado ${dias}d em atendimento entrou na automação de reativação de base. Temperatura: frio → morno. Permanecerá no funil de Tráfego Pago; IA de atendimento será habilitada em fase futura (por enquanto só automação).`,
+          actor_type: "system",
+        }).then(() => {}, () => {})
+      }
+      continue
+    }
     const linha = `🔄 [${dataBR(new Date())}] Retornado para Novo Lead por inatividade: ${dias} dias sem contato e sem movimentação no CRM (último contato: ${ultimoTxt}). Temperatura ajustada para frio.`
     if (!dry) {
       const obs = `${(l.observacoes ?? "").trim()}\n${linha}`.trim().slice(-6000)
