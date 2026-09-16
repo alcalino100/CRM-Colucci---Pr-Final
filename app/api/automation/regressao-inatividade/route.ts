@@ -15,7 +15,7 @@ export const maxDuration = 120
 //   com travas: regressão nos últimos 7d, job aberto, obs humana, contato recente.
 const DIAS_INATIVIDADE = 3
 const DIAS_ANTI_LOOP = 7
-const DIAS_FOLLOWUP_PERDIDO = 7
+const DIAS_FOLLOWUP_TRIAGEM = 7
 const ESTAGIOS = ["em_atendimento", "atendimento_humano"]
 const LIMITE = 500
 
@@ -175,22 +175,22 @@ export async function GET(request: Request) {
     detalhes.push({ id: l.id, nome: l.nome, de: l.status, ultimo_contato: ultimoContato ? new Date(ultimoContato).toISOString() : null })
   }
 
-  // Follow-up sem resposta em X dias → perdido (fim do fluxo automático).
-  // Trava: ignora quem tem job de automação aberto (pode ter envio agendado)
-  // e quem teve contato (WhatsApp/visita) após entrar em follow-up.
-  const diasFollowup = Math.max(1, Number(url.searchParams.get("dias_followup") ?? DIAS_FOLLOWUP_PERDIDO) || DIAS_FOLLOWUP_PERDIDO)
+  // Follow-up sem resposta em X dias → TRIAGEM HUMANA (Aguardando Atendimento).
+  // A equipe decide: perdido ou nova tentativa. Trava: ignora quem tem job de
+  // automação aberto (pode ter envio agendado) e quem teve contato após entrar.
+  const diasFollowup = Math.max(1, Number(url.searchParams.get("dias_followup") ?? DIAS_FOLLOWUP_TRIAGEM) || DIAS_FOLLOWUP_TRIAGEM)
   const corteFollowup = new Date(Date.now() - diasFollowup * 86400000)
-  let perdidos = 0
+  let triagem = 0
   const { data: emFollowup } = await wsupabase
     .from("leads")
-    .select("id,nome,observacoes,atualizado_em,referencias")
+    .select("id,nome,observacoes,atualizado_em,referencias,corretor_id")
     .eq("status", "em_followup")
     .is("arquivado_em", null)
     .is("fechado_em", null)
     .lt("atualizado_em", corteFollowup.toISOString())
     .order("atualizado_em", { ascending: true })
     .limit(LIMITE)
-  const listaFollowup = ((emFollowup ?? []) as { id: string; nome: string; observacoes: string; atualizado_em: string; referencias: { ref: string }[] | null }[])
+  const listaFollowup = ((emFollowup ?? []) as { id: string; nome: string; observacoes: string; atualizado_em: string; referencias: { ref: string }[] | null; corretor_id: string | null }[])
   if (listaFollowup.length) {
     const idsF = listaFollowup.map((l) => l.id)
     const [{ data: jobsF }, { data: zapF }, { data: visF }] = await Promise.all([
@@ -215,24 +215,35 @@ export async function GET(request: Request) {
       const ultimoContato = Math.max(ultimoZapF.get(l.id) ?? 0, ultimaVisitaF.get(l.id) ?? 0)
       if (ultimoContato > corteFMs) continue
       if (!dry) {
-        const linha = `🔻 [${dataBR(new Date())}] Movido para Perdido: ${diasFollowup} dias em follow-up sem resposta e sem contato (fim do fluxo automático).`
+        const linha = `🔻 [${dataBR(new Date())}] Follow-up sem resposta há ${diasFollowup}d → triagem humana (Aguardando Atendimento). Decidir: perdido ou nova tentativa.`
         const obs = `${(l.observacoes ?? "").trim()}\n${linha}`.trim().slice(-6000)
         const { error: upErr } = await wsupabase
           .from("leads")
-          .update({ status: "perdido", observacoes: obs, referencias: semTagsFluxo(l.referencias), atualizado_em: new Date().toISOString() })
+          .update({ status: "atendimento_humano", observacoes: obs, referencias: semTagsFluxo(l.referencias), atualizado_em: new Date().toISOString() })
           .eq("id", l.id)
         if (upErr) continue
         try {
           await wsupabase.from("automation_logs").insert({
             lead_id: l.id,
-            event_type: "lead_perdido_followup_sem_resposta",
-            event_title: `Lead perdido (follow-up sem resposta): ${l.nome}`,
-            event_description: `De "em_followup" para "perdido" após ${diasFollowup}d sem resposta e sem contato. Fim do fluxo automático.`,
+            event_type: "lead_followup_sem_resposta_triagem",
+            event_title: `Follow-up sem resposta — triagem humana: ${l.nome}`,
+            event_description: `De "em_followup" para "atendimento_humano" após ${diasFollowup}d sem resposta e sem contato. Equipe decide: perdido ou nova tentativa.`,
             actor_type: "system",
           })
         } catch { /* log é best-effort */ }
+        try {
+          const notif: Record<string, unknown> = {
+            mensagem: `🔻 ${l.nome} não respondeu ao follow-up (${diasFollowup}d) e foi para Aguardando Atendimento — decidir: perdido ou nova tentativa.`,
+            tipo: "pipeline",
+            modulo: "vendas",
+            para_role: "gestor",
+            lead_id: l.id,
+          }
+          if (l.corretor_id) notif.usuario_id = l.corretor_id
+          await wsupabase.from("notificacoes").insert(notif)
+        } catch { /* notify é best-effort */ }
       }
-      perdidos++
+      triagem++
     }
   }
 
@@ -240,10 +251,10 @@ export async function GET(request: Request) {
     await wsupabase.from("automation_logs").insert({
       event_type: "regressao_resumo",
       event_title: dry ? "Regressão por inatividade (simulação)" : "Regressão por inatividade executada",
-      event_description: `Avaliados: ${lista.length} | Regredidos: ${regredidos} | Perdidos (follow-up): ${perdidos} | Pulados: ${JSON.stringify(pulados)}`,
+      event_description: `Avaliados: ${lista.length} | Regredidos: ${regredidos} | Triagem humana (follow-up): ${triagem} | Pulados: ${JSON.stringify(pulados)}`,
       actor_type: "system",
     })
   } catch { /* log é best-effort */ }
 
-  return NextResponse.json({ ok: true, avaliados: lista.length, regredidos, perdidos, pulados, dry, detalhes: detalhes.slice(0, 50) })
+  return NextResponse.json({ ok: true, avaliados: lista.length, regredidos, triagem_humana: triagem, pulados, dry, detalhes: detalhes.slice(0, 50) })
 }

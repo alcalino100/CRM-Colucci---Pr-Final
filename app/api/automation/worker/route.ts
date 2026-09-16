@@ -265,7 +265,7 @@ async function runWorker() {
       const { data: leads, error: leadsErr } = await wsupabase
         .from("leads")
         .select("id, nome, telefone, temperatura, status, origem, corretor_id, criado_em, gestor_responsavel, arquivado_em, fechado_em, referencias")
-        .eq("status", "novo")
+        .eq("status", "em_atendimento")
         .is("arquivado_em", null)
         .is("fechado_em", null)
 
@@ -285,7 +285,7 @@ async function runWorker() {
           automation_id: automation.id,
           event_type: "lead_not_eligible",
           event_title: "Nenhum lead encontrado",
-          event_description: "Nenhum lead com status=novo, não arquivado, não fechado",
+          event_description: "Nenhum lead com status=em_atendimento, não arquivado, não fechado",
         })
         continue
       }
@@ -472,9 +472,9 @@ async function runWorker() {
           .eq("id", job.lead_id)
           .maybeSingle()
 
-        // Automações normais exigem status=novo; follow-up aceita em_atendimento/em_followup
+        // Automações normais exigem status=em_atendimento; follow-up aceita em_atendimento/em_followup
         const isFollowup = automation.trigger_type === "no_response_followup"
-        const validStatuses = isFollowup ? ["em_atendimento", "em_followup"] : ["novo"]
+        const validStatuses = isFollowup ? ["em_atendimento", "em_followup"] : ["em_atendimento"]
         const temTagFollowUp = tagsFollowUp.size > 0 && tagsDoLead(lead.referencias).some((t) => tagsFollowUp.has(t))
         if (!lead || !validStatuses.includes(lead.status) || (lead.origem !== "Tráfego Pago" && !temTagFollowUp) || lead.fechado_em || lead.arquivado_em) {
           await cancelJob(job.id, "Lead não atende mais às condições", "system")
