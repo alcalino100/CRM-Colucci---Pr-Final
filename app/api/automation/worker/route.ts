@@ -265,7 +265,7 @@ async function runWorker() {
       const { data: leads, error: leadsErr } = await wsupabase
         .from("leads")
         .select("id, nome, telefone, temperatura, status, origem, corretor_id, criado_em, gestor_responsavel, arquivado_em, fechado_em, referencias")
-        .eq("status", "em_atendimento")
+        .in("status", ["em_atendimento", "em_automacao"])
         .is("arquivado_em", null)
         .is("fechado_em", null)
 
@@ -285,7 +285,7 @@ async function runWorker() {
           automation_id: automation.id,
           event_type: "lead_not_eligible",
           event_title: "Nenhum lead encontrado",
-          event_description: "Nenhum lead com status=em_atendimento, não arquivado, não fechado",
+          event_description: "Nenhum lead com status=em_atendimento/em_automacao, não arquivado, não fechado",
         })
         continue
       }
@@ -472,9 +472,9 @@ async function runWorker() {
           .eq("id", job.lead_id)
           .maybeSingle()
 
-        // Automações normais exigem status=em_atendimento; follow-up aceita em_atendimento/em_followup
+        // Automações normais exigem em_atendimento/em_automacao; follow-up aceita em_atendimento/em_followup
         const isFollowup = automation.trigger_type === "no_response_followup"
-        const validStatuses = isFollowup ? ["em_atendimento", "em_followup"] : ["em_atendimento"]
+        const validStatuses = isFollowup ? ["em_atendimento", "em_followup"] : ["em_atendimento", "em_automacao"]
         const temTagFollowUp = tagsFollowUp.size > 0 && tagsDoLead(lead.referencias).some((t) => tagsFollowUp.has(t))
         if (!lead || !validStatuses.includes(lead.status) || (lead.origem !== "Tráfego Pago" && !temTagFollowUp) || lead.fechado_em || lead.arquivado_em) {
           await cancelJob(job.id, "Lead não atende mais às condições", "system")
@@ -645,6 +645,28 @@ async function runWorker() {
           })
 
           results.sent++
+
+          // Ordem do fluxo: enviou a reativação → lead vai para Em Automação + tag.
+          // (Só reativação lead_inactive; follow-up tem regra própria de etapa.)
+          // Best-effort: nunca derruba a contabilização do envio.
+          if (automation.trigger_type === "lead_inactive" && (lead as { status?: unknown }).status === "em_atendimento") {
+            try {
+              const { data: leadAtual } = await wsupabase.from("leads").select("observacoes,referencias").eq("id", job.lead_id).maybeSingle()
+              const base = (leadAtual ?? {}) as { observacoes?: unknown; referencias?: unknown }
+              const refs = Array.isArray(base.referencias) ? [...(base.referencias as { ref: string }[])] : []
+              if (!refs.some((r) => String(typeof r === "string" ? r : (r as { ref?: unknown })?.ref ?? "").toLowerCase() === "automacao")) refs.push({ ref: "automacao" })
+              const obsMove = `${String(base.observacoes ?? "").trim()}\n[Automação] Mensagem de reativação de base enviada — lead movido para "Em Automação" (frio). Se responder, a IA assume em "Atendimento IA".`.trim().slice(-6000)
+              await wsupabase.from("leads").update({ status: "em_automacao", temperatura: "frio", observacoes: obsMove, referencias: refs, atualizado_em: new Date().toISOString() }).eq("id", job.lead_id).eq("status", "em_atendimento")
+              await createLog({
+                automation_id: automation.id,
+                job_id: job.id,
+                lead_id: job.lead_id,
+                event_type: "lead_moved_automacao",
+                event_title: "Lead movido para Em Automação",
+                event_description: `${lead.nome} saiu de em_atendimento e entrou em "Em Automação" após o envio da reativação.`,
+              })
+            } catch { /* best-effort */ }
+          }
         } else {
           const attempts = (job.attempts ?? 0) + 1
           const maxAttempts = job.max_attempts ?? 3

@@ -186,10 +186,21 @@ async function transicaoRespostaAutomacao(leadId: string, texto: string): Promis
       .maybeSingle()
     if (!lead) return
     const status = String((lead as { status?: unknown }).status ?? "")
-    if (status !== "em_automacao" && status !== "em_followup") return
-    const recusa = status === "em_automacao" && pareceRespostaNao(texto)
+    if (status !== "em_automacao" && status !== "em_followup" && status !== "em_atendimento") return
+    // em_atendimento: só entra se for RESPOSTA a mensagem de automação enviada
+    // (reativação/follow-up) nos últimos 30d — mesma regra da resposta em automação.
+    // Sem job enviado, é conversa orgânica do humano: não mexe.
+    let recusa = false
+    if (status === "em_atendimento") {
+      const corte = new Date(Date.now() - 30 * 86400000).toISOString()
+      const { data: jobEnviado } = await wsupabase.from("automation_jobs").select("id").eq("lead_id", leadId).in("status", ["sent", "delivered", "read"]).gte("sent_at", corte).limit(1)
+      if (!jobEnviado?.length) return
+    } else {
+      recusa = status === "em_automacao" && pareceRespostaNao(texto)
+    }
     const destino = recusa ? "em_followup" : "atendimento_ia"
     const destinoLabel = recusa ? "Em Follow-up" : "Atendimento IA"
+    const evento = recusa ? "lead_respondeu_nao_followup" : "lead_respondeu_atendimento_ia"
     // Tags de estágio: NÃO → nao-respondeu-automacao + followup; SIM/resposta →
     // respondeu-automacao (limpa nao-respondeu/followup, mantém automacao).
     const refsBase = (lead as { referencias?: unknown }).referencias
@@ -213,7 +224,7 @@ async function transicaoRespostaAutomacao(leadId: string, texto: string): Promis
     try {
       await wsupabase.from("automation_logs").insert({
         lead_id: (lead as { id: string }).id,
-        event_type: recusa ? "lead_respondeu_nao_followup" : "lead_respondeu_atendimento_ia",
+        event_type: evento,
         event_title: `${nome} respondeu — foi para "${destinoLabel}"`,
         event_description: `Lead em "${status}" respondeu "${texto.slice(0, 120)}" e foi movido para "${destino}".`,
         actor_type: "system",
