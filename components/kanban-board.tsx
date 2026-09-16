@@ -14,6 +14,7 @@ import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
 import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, comTagsEntradaAutomacao, normalizePhone, refsTexto } from "@/lib/labels"
+import { CORRETOR_HIDDEN } from "@/lib/pipeline-stages"
 import { ORIGENS, type Lead, type LeadStatus, type Origem, type Temperatura } from "@/lib/mock-data"
 import { lerFiltros, ORIGEM_SLUG, queryFiltros, STATUS_SLUG } from "@/lib/leads-filtros"
 import { cn } from "@/lib/utils"
@@ -485,9 +486,9 @@ export function KanbanBoard({
       (tempFilter === "todas" || l.temperatura === tempFilter) &&
       (filtros.origem === "todas" || l.origem === filtros.origem) &&
       (filtros.status === "todos" || l.status === filtros.status) &&
-      (isGestor || (l.status !== "em_automacao" && l.status !== "atendimento_ia" && l.status !== "perdido")) &&
+      (isGestor || !CORRETOR_HIDDEN.has(l.status)) &&
       (filtros.corretor === "todos" || l.corretorId === filtros.corretor) &&
-      (isGestor || (l.status !== "em_automacao" && l.status !== "atendimento_ia" && l.status !== "perdido")) &&
+      (isGestor || !CORRETOR_HIDDEN.has(l.status)) &&
       dentroPeriodo(l) &&
       matchesQuery(l),
   )
@@ -622,7 +623,7 @@ export function KanbanBoard({
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="kanban-scroll w-full flex-1 overflow-x-auto overflow-y-hidden pb-3">
           <div className={`flex w-max flex-nowrap gap-4 ${heightClass}`}>
-          {(isGestor ? LEAD_STATUSES : LEAD_STATUSES.filter((s) => s !== "em_followup" && s !== "em_automacao" && s !== "atendimento_ia" && s !== "perdido")).map((status) => {
+          {(isGestor ? LEAD_STATUSES : LEAD_STATUSES.filter((s) => !CORRETOR_HIDDEN.has(s))).map((status) => {
             const col = byStatus(status)
             return (
               <Droppable droppableId={status} key={status}>

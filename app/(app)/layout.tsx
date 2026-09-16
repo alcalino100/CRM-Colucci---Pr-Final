@@ -121,6 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadBrand().then((r) => { applyBrand(r.settings); setBrand(r.settings) }).catch(() => {})
+    import("@/lib/pipeline-stages").then((m) => m.loadStagesOverride().catch(() => {})).catch(() => {})
   }, [])
 
   useEffect(() => {

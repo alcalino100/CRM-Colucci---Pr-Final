@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
 import { BRAND_DEFAULTS, applyBrand, isMasterEmail, loadBrand, saveBrand, type BrandSettings } from "@/lib/master"
-import { LEAD_STATUSES, STATUS_LABEL, TAGS_FLUXO } from "@/lib/labels"
+import { LEAD_STATUSES, TAGS_FLUXO } from "@/lib/labels"
+import { listStages, saveStage, type StageRow } from "@/lib/pipeline-stages"
 import { ROLE_LABEL } from "@/lib/roles"
 import type { Role } from "@/lib/mock-data"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Input, Label, Select, Table, TD, TH, THead, TR, Textarea, useToast } from "@/components/ui/primitives"
@@ -28,9 +29,6 @@ type Aba = (typeof ABAS)[number]["id"]
 const btn = (primary = false) =>
   cn("rounded-lg px-3 py-2 text-xs font-semibold transition disabled:opacity-50",
     primary ? "bg-primary text-primary-foreground hover:opacity-90" : "border border-border bg-card hover:bg-muted")
-
-// Etapas invisíveis ao corretor (espelha components/kanban-board.tsx)
-const HIDDEN_CORRETOR = new Set(["em_followup", "em_automacao", "atendimento_ia", "perdido"])
 
 export default function MasterPage() {
   const { user, loading } = useAuth()
@@ -366,39 +364,73 @@ function EquipeSection() {
   )
 }
 
+const VARIANTS = ["blue", "indigo", "sky", "cyan", "violet", "orange", "slate", "teal", "purple", "amber", "accent", "green", "gray", "red"]
+
 function PipelinesSection() {
+  const toast = useToast()
+  const [rows, setRows] = useState<StageRow[]>([])
+  const [faltaTabela, setFaltaTabela] = useState(false)
   const [counts, setCounts] = useState<Record<string, number>>({})
-  useEffect(() => {
-    ;(async () => {
-      const out: Record<string, number> = {}
-      await Promise.all(LEAD_STATUSES.map(async (s) => {
-        try {
-          const r = await supabase.from("leads").select("id", { count: "exact", head: true }).eq("status", s)
-          out[s] = (r as { count: number | null }).count ?? 0
-        } catch { out[s] = -1 }
-      }))
-      setCounts(out)
-    })()
-  }, [])
+  const [saving, setSaving] = useState<string | null>(null)
+
+  const carregar = async () => {
+    const r = await listStages()
+    setRows(r.rows); setFaltaTabela(r.faltaTabela)
+    const out: Record<string, number> = {}
+    await Promise.all(LEAD_STATUSES.map(async (s) => {
+      try {
+        const q = await supabase.from("leads").select("id", { count: "exact", head: true }).eq("status", s)
+        out[s] = (q as { count: number | null }).count ?? 0
+      } catch { out[s] = -1 }
+    }))
+    setCounts(out)
+  }
+  useEffect(() => { carregar() }, [])
+
+  const salvar = async (row: StageRow) => {
+    setSaving(row.key)
+    const r = await saveStage(row)
+    setSaving(null)
+    if (!r.ok) { toast(`Falha: ${r.erro}`, "error"); return }
+    toast(`Etapa "${row.label}" salva — recarregando para aplicar.`)
+    setTimeout(() => window.location.reload(), 800)
+  }
+
+  const set = (key: string, patch: Partial<StageRow>) =>
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))
 
   return (
     <Card>
-      <CardHeader><CardTitle>Pipeline de vendas (etapas × visibilidade)</CardTitle></CardHeader>
+      <CardHeader><CardTitle>Pipeline de vendas (editável)</CardTitle></CardHeader>
       <CardContent>
+        {faltaTabela && (
+          <p className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+            Rode <code>scripts/027_pipeline_stages.sql</code> no Supabase e recarregue. Sem a tabela, valem os valores do código.
+          </p>
+        )}
+        <p className="mb-2 text-xs text-muted-foreground">Chaves nunca mudam (automações dependem delas). Salvar recarrega para aplicar em todas as telas.</p>
         <Table>
-          <THead><TR><TH>Etapa</TH><TH>Gestor vê</TH><TH>Corretor vê</TH><TH>Leads</TH></TR></THead>
+          <THead><TR><TH>Chave</TH><TH>Rótulo</TH><TH>Cor</TH><TH>Variante</TH><TH>Ordem</TH><TH>Corretor vê</TH><TH>Ativa</TH><TH>Leads</TH><TH></TH></TR></THead>
           <tbody>
-            {LEAD_STATUSES.map((s) => (
-              <TR key={s}>
-                <TD>{STATUS_LABEL[s]}</TD>
-                <TD>SIM</TD>
-                <TD>{HIDDEN_CORRETOR.has(s) ? "NÃO" : "SIM"}</TD>
-                <TD>{counts[s] === undefined ? "…" : counts[s] < 0 ? "?" : counts[s]}</TD>
+            {rows.map((r) => (
+              <TR key={r.key}>
+                <TD className="font-mono text-[11px]">{r.key}</TD>
+                <TD><Input value={r.label} onChange={(e) => set(r.key, { label: e.target.value })} className="h-8 min-w-36 text-xs" /></TD>
+                <TD><input type="color" value={r.accent} onChange={(e) => set(r.key, { accent: e.target.value })} className="h-8 w-10 cursor-pointer rounded border border-input bg-background" /></TD>
+                <TD>
+                  <Select value={r.variant} onChange={(e) => set(r.key, { variant: e.target.value })} className="h-8 text-xs">
+                    {VARIANTS.map((v) => <option key={v} value={v}>{v}</option>)}
+                  </Select>
+                </TD>
+                <TD><Input type="number" value={r.ordem} onChange={(e) => set(r.key, { ordem: Number(e.target.value) })} className="h-8 w-16 text-xs" /></TD>
+                <TD><input type="checkbox" checked={r.visivel_corretor} onChange={(e) => set(r.key, { visivel_corretor: e.target.checked })} className="size-4" /></TD>
+                <TD><input type="checkbox" checked={r.ativo} onChange={(e) => set(r.key, { ativo: e.target.checked })} className="size-4" /></TD>
+                <TD>{counts[r.key] === undefined ? "…" : counts[r.key] < 0 ? "?" : counts[r.key]}</TD>
+                <TD><button type="button" disabled={saving === r.key} onClick={() => salvar(r)} className={btn(true)}>Salvar</button></TD>
               </TR>
             ))}
           </tbody>
         </Table>
-        <p className="mt-2 text-xs text-muted-foreground">Criar/renomear etapas exige mudança de código (v2 do Master). Contagens ao vivo do banco.</p>
       </CardContent>
     </Card>
   )
@@ -462,6 +494,7 @@ function ClonarSection() {
       const pack = {
         exportado_em: new Date().toISOString(),
         workspace_settings: await get("workspace_settings"),
+        pipeline_stages: await get("pipeline_stages"),
         ai_agents: await get("ai_agents"),
         automations: await get("automations"),
         automation_message_templates: await get("automation_message_templates"),
@@ -479,7 +512,7 @@ function ClonarSection() {
   const importar = async (f: File) => {
     try {
       const pack = JSON.parse(await f.text()) as Record<string, { id?: string }[]>
-      for (const t of ["workspace_settings", "ai_agents", "automations", "automation_message_templates"] as const) {
+      for (const t of ["workspace_settings", "pipeline_stages", "ai_agents", "automations", "automation_message_templates"] as const) {
         const rows = pack[t] ?? []
         for (const row of rows) {
           const { error } = await supabase.from(t).upsert(row, { onConflict: "id" })
