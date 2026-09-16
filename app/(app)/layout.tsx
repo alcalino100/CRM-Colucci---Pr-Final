@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox, ChevronDown, Bot } from "lucide-react"
+import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox, ChevronDown, Bot, Crown } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
+import { applyBrand, isMasterEmail, loadBrand, type BrandSettings } from "@/lib/master"
 import { ToastProvider } from "@/components/ui/primitives"
 import { BRTClock } from "@/lib/timezone"
 import { LeadsProvider, useLeads } from "@/lib/leads-store"
@@ -94,6 +95,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [secAutomacoes, setSecAutomacoes] = useState(false)
   const [secIA, setSecIA] = useState(true)
   const [secAdmin, setSecAdmin] = useState(false)
+  const [brand, setBrand] = useState<BrandSettings | null>(null)
+
+  // White-label: aplica marca salva (cor + título); logo troca na sidebar.
 
   // Mantém link do Kanban/Dashboard com filtros salvos do gestor — contínuo para Voltar/Avançar e sidebar
   useEffect(() => {
@@ -116,6 +120,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, pathname])
 
   useEffect(() => {
+    loadBrand().then((r) => { applyBrand(r.settings); setBrand(r.settings) }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
     if (!loading && !user) router.replace("/login")
   }, [loading, user, router])
 
@@ -125,6 +133,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (pathname.startsWith("/automacoes")) setSecAutomacoes(true)
     if (pathname.startsWith("/ai-agents")) setSecIA(true)
     if (pathname.startsWith("/admin")) setSecAdmin(true)
+    if (pathname.startsWith("/master")) setSecAdmin(true)
     if (pathname.startsWith("/inbox") || pathname.startsWith("/painel-corretor") || pathname.startsWith("/contacts") || pathname.startsWith("/follow-ups")) setSecVendas(true)
   }, [pathname])
 
@@ -148,6 +157,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   } else if (isAdminRole(user.role)) {
     // Admin legado e master gerenciam toda a equipe pela seção Administração
     items2.push(ACESSOS_LINK)
+  }
+  // Painel Master: SOMENTE o e-mail do proprietário (invisível aos demais)
+  if (user && isMasterEmail(user.email)) {
+    items2.push({ href: "/master", label: "Master", icon: Crown, roles: ["gestor"] })
   }
   const initials = user.nome.split(" ").map((n) => n[0]).slice(0, 2).join("")
 
@@ -177,7 +190,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const SidebarContent = (
     <>
       <div className="flex items-center px-5 py-5">
-        <ColucciLogo />
+        {brand?.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={brand.logo_url} alt={brand.brand_name} className="h-10 w-auto rounded-lg bg-white px-3 py-2 shadow-sm" />
+        ) : (
+          <ColucciLogo />
+        )}
       </div>
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3">
         {items.length > 0 && (
