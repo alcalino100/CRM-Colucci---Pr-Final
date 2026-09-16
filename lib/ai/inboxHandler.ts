@@ -188,7 +188,8 @@ export async function pausarIaMensagemManual({ telefone, instanceName, textoOutb
           telefone,
           instanceName,
         })
-      } else {
+      } else if (!MANUAL_PIPELINE_INSTANCES.has(instanceName || "")) {
+        // Exceção: instâncias 100% manuais (ex.: Brayon) — nunca move sozinho.
         await moverLeadPipeline(lead.id, "em_atendimento")
       }
     }
