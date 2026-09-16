@@ -7,6 +7,12 @@ import { getBoundInstances, getRules, dentroDoHorario, leadAptoParaResposta, nom
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
 const normalize = (v: string) => (v || "").toLowerCase().trim()
+// Instâncias onde o pipeline é 100% manual: o lead NUNCA muda de etapa sozinho
+// (nem novo→em_atendimento na resposta). Configurável via
+// WHATSAPP_MANUAL_PIPELINE_INSTANCES (vírgula). Default: Brayon (não gosta do auto-move).
+const MANUAL_PIPELINE_INSTANCES = new Set(
+  (process.env.WHATSAPP_MANUAL_PIPELINE_INSTANCES || "brayon-22b51e92").split(",").map((s) => s.trim()).filter(Boolean),
+);
 
 // Resolve a IA que responde numa instância. REGRA DE OURO: a instância precisa estar
 // vinculada a um agente (config.testInstance ou whitelistInstances) E o agente precisa
@@ -239,6 +245,31 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
   const t0 = Date.now()
   // Mensagem vazia (sticker/reaction sem texto): não aciona ciclo de IA.
   if (!userMessage.trim()) return { ok: false, erro: "Mensagem vazia, nada a responder." }
+  // TRAVA ANTI-VAZAMENTO: o agente só envia pela instância vinculada ou para
+  // número de teste registrado. Vale para TODOS os caminhos (automático, manual,
+  // futuros) — sem exceção silenciosa: bloqueia com erro + log visível.
+  try {
+    const { data: agRow } = await db().from("ai_agents").select("config,is_active").eq("id", AI_ID).maybeSingle()
+    const ag = agRow as { config?: unknown; is_active?: boolean } | null
+    const agRules = getRules(ag?.config)
+    const agAtivo = !!ag?.is_active && agRules.enable
+    const vinculado = !!instanceName && getBoundInstances(ag?.config).includes(instanceName)
+    const ehTeste = (agRules.target.numeroTeste || []).some((n) => normalizePhone(String(n || "")) === normalizePhone(telefone))
+    if (!agAtivo || (!vinculado && !ehTeste)) {
+      try {
+        await db().from("automation_logs").insert({
+          lead_id: leadIdEfetivo ?? null,
+          event_type: "ia_envio_bloqueado_instancia",
+          event_title: "Envio bloqueado: fora da instância vinculada",
+          event_description: `Agente ${AI_ID} tentou enviar para ${telefone} via "${instanceName ?? "?"}": ${!agAtivo ? "agente inativo/desabilitado" : "instância não vinculada e não é número de teste"}.`,
+          actor_type: "ia",
+        })
+      } catch { /* log é best-effort */ }
+      return { ok: false, erro: "Agente sem vínculo com esta instância (e não é número de teste). Envio bloqueado." }
+    }
+  } catch (e) {
+    return { ok: false, erro: `Falha na trava de instância: ${e instanceof Error ? e.message : String(e)}` }
+  }
   try {
     // 0) Registra a msg do lead primeiro: vale para todos os desfechos (resposta,
     //    escalação ou limite) — o gatilho sempre fica no histórico.
@@ -507,7 +538,8 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
     const leadIdEfetivo = lead?.id ?? undefined
 
     // Pipeline: lead respondeu e se qualifica → sai de "novo" e entra em atendimento.
-    if (lead) await moverLeadPipeline(lead.id, "em_atendimento")
+    // Exceção: instâncias 100% manuais (ex.: Brayon) — nunca move sozinho.
+    if (lead && !MANUAL_PIPELINE_INSTANCES.has(instanceName || "")) await moverLeadPipeline(lead.id, "em_atendimento")
 
     // 5) Busca ou cria conversa IA para este contato
     let convId: string

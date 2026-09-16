@@ -27,7 +27,7 @@ type Contexto = { origens: string[]; statuses: string[]; tags: string[] }
 const DEFAULTS: AgentRules = {
   enable: true,
   schedule: { enabled: true, days: [1,2,3,4,5,6], start: "08:00", end: "19:00", timezone: "America/Sao_Paulo" },
-  target: { origensPermitidas: ["Tráfego Pago"], tags: [], tagsModo: "none", numeroTeste: ["5518981729340","18981729340"], statusBloqueados: ["perdido","escalated"] },
+  target: { origensPermitidas: ["Tráfego Pago"], tags: [], tagsModo: "none", numeroTeste: [], statusBloqueados: ["perdido","escalated"] },
   style: { maxLines: 2, maxQuestions: 1, emojis: "poucos", tom: "acolhedor, claro e direto", proativarReativacao: true, saudacaoDefault: "", responseMode: "auto", waitMs: 0, maxMessages: 0 },
   coordination: { paraleloComAutomacao: false, pausarPorInatividade: false, tempoInatividadeMin: 30 },
   channels: ["whatsapp"],

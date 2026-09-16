@@ -84,7 +84,7 @@ export function getRules(config: unknown, fallback?: { wait_time_ms?: number | n
       origensPermitidas: Array.isArray(target?.origensPermitidas) ? target.origensPermitidas : ["Tráfego Pago"],
       tags: Array.isArray(target?.tags) ? target.tags : [],
       tagsModo: (target?.tagsModo === "any" || target?.tagsModo === "all") ? target.tagsModo : "none",
-      numeroTeste: Array.isArray(target?.numeroTeste) && target.numeroTeste.length ? target.numeroTeste : ["5518981729340","18981729340"],
+      numeroTeste: Array.isArray(target?.numeroTeste) ? target.numeroTeste : [],
       statusBloqueados: Array.isArray(target?.statusBloqueados) ? target.statusBloqueados : ["perdido","escalated"],
     },
     style: {
