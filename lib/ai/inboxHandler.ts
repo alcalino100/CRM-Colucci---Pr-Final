@@ -669,7 +669,20 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
           .limit(10)
         const bloco = juntarRajada(((rajada ?? []) as { corpo: string }[]).map((r) => r.corpo))
         if (bloco) textoEfetivo = bloco
-        else return
+        else {
+          // Rajada vazia (ex.: áudio que não transcreveu e sem legenda): sem
+          // texto não há o que responder — mas registra, nunca silêncio total.
+          try {
+            await db().from("automation_logs").insert({
+              lead_id: leadIdEfetivo ?? null,
+              event_type: "ia_ciclo_rejeitado",
+              event_title: "Ciclo IA sem resposta",
+              event_description: `Conversa ${convId} (${telefone}): nada aproveitável na rajada (mídia sem transcrição/legenda?).`,
+              actor_type: "ia",
+            })
+          } catch { /* log é best-effort */ }
+          return
+        }
       } catch (e) {
         console.error("[IA] erro rajada, segue com texto único", e)
       }
