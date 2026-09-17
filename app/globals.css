@@ -67,24 +67,24 @@
 
 :root {
   color-scheme: light;
-  --background: #fafafa;
-  --foreground: #18181b;
-  --card: #ffffff;
-  --card-foreground: #18181b;
-  --popover: #ffffff;
-  --popover-foreground: #18181b;
+  --background: #f3efe6;
+  --foreground: #1c1917;
+  --card: #fffdf7;
+  --card-foreground: #1c1917;
+  --popover: #fffdf7;
+  --popover-foreground: #1c1917;
   --primary: #b22222;
   --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --secondary-foreground: #ffffff;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --accent: #18181b;
-  --accent-foreground: #ffffff;
+  --secondary: #292524;
+  --secondary-foreground: #fafaf9;
+  --muted: #e9e2d3;
+  --muted-foreground: #78716c;
+  --accent: #1c1917;
+  --accent-foreground: #fafaf9;
   --destructive: #dc2626;
-  --border: #e7e7e9;
-  --input: #e7e7e9;
-  --ring: #18181b;
+  --border: #e2d9c6;
+  --input: #e2d9c6;
+  --ring: #1c1917;
   --chart-1: #18181b;
   --chart-2: #52525b;
   --chart-3: #a1a1aa;
@@ -182,22 +182,25 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Grão de papel pardo: textura sutil sobre tudo, sem custo de asset. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+  }
 }
 
-/* ---- efeitos "brilhoso" ---- */
-.shine {
-  position: relative;
-  overflow: hidden;
+/* ---- efeitos "brilhoso" (desligado na identidade papel: brilho varrendo = cara de template) ---- */
+.shine,
+.shine::after {
+  animation: none;
 }
 .shine::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.55) 50%, transparent 65%);
-  transform: translateX(-130%);
-  animation: shine-sweep 7s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 1;
+  display: none;
 }
 @keyframes shine-sweep {
   0%, 55% { transform: translateX(-130%); }
