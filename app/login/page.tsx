@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Lock, Mail } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { homeDaRole } from "@/lib/roles"
+import { applyBrand, loadBrand } from "@/lib/master"
 import { Button } from "@/components/ui/button"
 import { Input, Label } from "@/components/ui/primitives"
 
@@ -15,6 +16,17 @@ export default function LoginPage() {
   const [senha, setSenha] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [logo, setLogo] = useState("/logo-colucci.png")
+  const [marca, setMarca] = useState("Colucci Imóveis")
+
+  // Marca do workspace (logo/título/cor) também no login.
+  useEffect(() => {
+    loadBrand().then((r) => {
+      applyBrand(r.settings)
+      if (r.settings.logo_url) setLogo(r.settings.logo_url)
+      if (r.settings.brand_name) setMarca(r.settings.brand_name)
+    }).catch(() => {})
+  }, [])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -43,7 +55,8 @@ export default function LoginPage() {
       <div className="shine relative w-full max-w-md rounded-2xl bg-card p-8 shadow-[0_24px_60px_-12px_rgb(0_0_0/0.4)]">
         <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent" />
         <div className="mb-8 flex flex-col items-center text-center">
-          <img src="/logo-colucci.png" alt="Colucci Imóveis" className="mb-5 h-20 w-auto" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logo} alt={marca} className="mb-5 h-20 w-auto" />
           <p className="text-sm text-muted-foreground">Acesse sua conta para continuar</p>
         </div>
 
