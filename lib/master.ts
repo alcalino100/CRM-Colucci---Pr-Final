@@ -1,8 +1,9 @@
 import { supabase } from "@/lib/supabase/client"
 
-// Painel Master: acesso exclusivo do proprietário (e-mail hardcoded).
-// O link do menu nem é renderizado para os demais.
-export const MASTER_EMAIL = "guilherme@colucci.com"
+// Painel Master: acesso exclusivo do proprietário.
+// Por env (NEXT_PUBLIC_MASTER_EMAIL) para cada whitelabel ter o seu dono;
+// default = Colucci. O link do menu nem é renderizado para os demais.
+export const MASTER_EMAIL = (process.env.NEXT_PUBLIC_MASTER_EMAIL || "guilherme@colucci.com").toLowerCase()
 
 export function isMasterEmail(email: string | null | undefined): boolean {
   return (email || "").toLowerCase().trim() === MASTER_EMAIL
