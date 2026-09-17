@@ -41,9 +41,9 @@ insert into public.automations (
   '{"amount":0,"unit":"minutes","allowed_start_hour":"08:00","allowed_end_hour":"18:00","allowed_days":[1,2,3,4,5],"timezone":"America/Sao_Paulo"}',
   '{"cancel_on_manual_message":true,"cancel_on_lead_replied":true,"cancel_on_stage_change":true,"cancel_on_lost":true,"cancel_on_converted":true,"cancel_on_archived":true}',
   'a0000000-0000-0000-0000-000000000002',
-  'cf0b4d97-b783-4c1e-9507-a18214071cd5',
+  null, -- whatsapp_connection_id: configurar por cliente (instância da IA)
   false,
-  '6c2875b4-0d11-4370-b9fd-3c13b5257bd4',
+  (select id from public.usuarios where nome = 'Patricia' limit 1), -- NULL-safe em banco novo
   true,
   false,
   '{"max_sends_per_lead":1,"max_daily_sends":50,"min_interval_between_messages_minutes":60}'

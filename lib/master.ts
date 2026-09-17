@@ -19,7 +19,10 @@ export interface BrandSettings {
   id: string
   brand_name: string
   logo_url: string | null
+  favicon_url: string | null
   cor_primaria: string
+  fonte_titulo: string
+  fonte_texto: string
   links: BrandLinks
 }
 
@@ -27,16 +30,48 @@ export const BRAND_DEFAULTS: BrandSettings = {
   id: "main",
   brand_name: "Colucci Imóveis",
   logo_url: null,
+  favicon_url: null,
   cor_primaria: "#b22222",
+  fonte_titulo: "Space Grotesk",
+  fonte_texto: "Inter",
   links: { site: "", instagram: "", suporte: "" },
 }
 
-// Aplica a identidade na sessão atual (CSS vars + título). Falha silenciosa.
+// Fontes permitidas (Google Fonts) — whitelist contra injeção.
+export const FONTES_TITULO = ["Space Grotesk", "Archivo", "Sora", "Montserrat", "Poppins", "Inter"]
+export const FONTES_TEXTO = ["Inter", "Roboto", "Archivo", "Sora", "Montserrat", "Poppins"]
+
+// Aplica a identidade na sessão atual (CSS vars + título + favicon + fontes).
+// Falha silenciosa.
 export function applyBrand(b: Partial<BrandSettings>): void {
   try {
     if (typeof document === "undefined") return
     if (b.cor_primaria) document.documentElement.style.setProperty("--primary", b.cor_primaria)
     if (b.brand_name) document.title = `${b.brand_name} — CRM`
+    if (b.favicon_url) {
+      let link = document.querySelector<HTMLLinkElement>("link[rel='icon']")
+      if (!link) {
+        link = document.createElement("link")
+        link.rel = "icon"
+        document.head.appendChild(link)
+      }
+      link.href = b.favicon_url
+    }
+    const fams = [b.fonte_titulo, b.fonte_texto].filter(
+      (f): f is string => !!f && [...FONTES_TITULO, ...FONTES_TEXTO].includes(f),
+    )
+    if (fams.length) {
+      const id = "master-fonts"
+      if (!document.getElementById(id)) {
+        const link = document.createElement("link")
+        link.id = id
+        link.rel = "stylesheet"
+        link.href = `https://fonts.googleapis.com/css2?${[...new Set(fams)].map((f) => `family=${f.replace(/ /g, "+")}:wght@400;500;600;700`).join("&")}&display=swap`
+        document.head.appendChild(link)
+      }
+      if (b.fonte_texto) document.documentElement.style.setProperty("--font-inter", `'${b.fonte_texto}', sans-serif`)
+      if (b.fonte_titulo) document.documentElement.style.setProperty("--font-jakarta", `'${b.fonte_titulo}', sans-serif`)
+    }
   } catch { /* best-effort */ }
 }
 
@@ -57,7 +92,10 @@ export async function loadBrand(): Promise<{ ok: boolean; settings: BrandSetting
         id: "main",
         brand_name: String(d.brand_name ?? BRAND_DEFAULTS.brand_name),
         logo_url: (d.logo_url as string | null) ?? null,
+        favicon_url: (d.favicon_url as string | null) ?? null,
         cor_primaria: String(d.cor_primaria ?? BRAND_DEFAULTS.cor_primaria),
+        fonte_titulo: String(d.fonte_titulo ?? BRAND_DEFAULTS.fonte_titulo),
+        fonte_texto: String(d.fonte_texto ?? BRAND_DEFAULTS.fonte_texto),
         links: { ...BRAND_DEFAULTS.links, ...((d.links ?? {}) as Partial<BrandLinks>) },
       },
     }
@@ -72,7 +110,10 @@ export async function saveBrand(s: BrandSettings): Promise<{ ok: boolean; erro?:
       id: "main",
       brand_name: s.brand_name,
       logo_url: s.logo_url || null,
+      favicon_url: s.favicon_url || null,
       cor_primaria: s.cor_primaria,
+      fonte_titulo: s.fonte_titulo,
+      fonte_texto: s.fonte_texto,
       links: s.links,
       updated_at: new Date().toISOString(),
     }, { onConflict: "id" })

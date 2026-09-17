@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
-import { BRAND_DEFAULTS, applyBrand, isMasterEmail, loadBrand, saveBrand, type BrandSettings } from "@/lib/master"
+import { BRAND_DEFAULTS, FONTES_TEXTO, FONTES_TITULO, applyBrand, isMasterEmail, loadBrand, saveBrand, type BrandSettings } from "@/lib/master"
 import { LEAD_STATUSES, TAGS_FLUXO } from "@/lib/labels"
 import { listStages, saveStage, type StageRow } from "@/lib/pipeline-stages"
 import { createWorkspace, listWorkspaces, type Workspace } from "@/lib/tenant"
@@ -74,9 +74,11 @@ export default function MasterPage() {
 
 function MarcaSection() {
   const toast = useToast()
+  const { user } = useAuth()
   const [form, setForm] = useState<BrandSettings>(BRAND_DEFAULTS)
   const [faltaTabela, setFaltaTabela] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState<"logo" | "favicon" | null>(null)
 
   useEffect(() => {
     loadBrand().then((r) => { setForm(r.settings); setFaltaTabela(r.faltaTabela); applyBrand(r.settings) })
@@ -91,6 +93,26 @@ function MarcaSection() {
     toast("Marca aplicada.")
   }
 
+  const enviarArquivo = async (kind: "logo" | "favicon", file: File) => {
+    setUploading(kind)
+    try {
+      const buf = await file.arrayBuffer()
+      let bin = ""
+      const bytes = new Uint8Array(buf)
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+      const r = await fetch("/api/master/brand-upload", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user?.email ?? "", kind, filename: file.name, mime: file.type, dataBase64: btoa(bin) }),
+      })
+      const j = await r.json()
+      if (!j.ok) throw new Error(j.erro || "falha")
+      const patch = kind === "logo" ? { logo_url: j.url as string } : { favicon_url: j.url as string }
+      setForm((f) => ({ ...f, ...patch }))
+      toast(`${kind === "logo" ? "Logo" : "Favicon"} enviado — salve para aplicar.`)
+    } catch (e) { toast(`Falha no upload: ${e instanceof Error ? e.message : e}`, "error") }
+    setUploading(null)
+  }
+
   return (
     <Card>
       <CardHeader><CardTitle>Marca (white-label)</CardTitle></CardHeader>
@@ -103,8 +125,18 @@ function MarcaSection() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5"><Label>Nome da marca</Label>
             <Input value={form.brand_name} onChange={(e) => setForm({ ...form, brand_name: e.target.value })} /></div>
-          <div className="grid gap-1.5"><Label>URL da logo (vazio = padrão)</Label>
+          <div className="grid gap-1.5"><Label>URL da logo (ou envie abaixo)</Label>
             <Input value={form.logo_url ?? ""} placeholder="https://..." onChange={(e) => setForm({ ...form, logo_url: e.target.value || null })} /></div>
+          <div className="grid gap-1.5"><Label>Favicon (URL ou envio)</Label>
+            <Input value={form.favicon_url ?? ""} placeholder="https://..." onChange={(e) => setForm({ ...form, favicon_url: e.target.value || null })} /></div>
+          <div className="grid gap-1.5"><Label>Fonte dos títulos</Label>
+            <Select value={form.fonte_titulo} onChange={(e) => setForm({ ...form, fonte_titulo: e.target.value })}>
+              {FONTES_TITULO.map((f) => <option key={f} value={f}>{f}</option>)}
+            </Select></div>
+          <div className="grid gap-1.5"><Label>Fonte dos textos</Label>
+            <Select value={form.fonte_texto} onChange={(e) => setForm({ ...form, fonte_texto: e.target.value })}>
+              {FONTES_TEXTO.map((f) => <option key={f} value={f}>{f}</option>)}
+            </Select></div>
           <div className="grid gap-1.5"><Label>Cor primária</Label>
             <div className="flex items-center gap-2">
               <input type="color" value={form.cor_primaria} onChange={(e) => setForm({ ...form, cor_primaria: e.target.value })} className="h-9 w-12 cursor-pointer rounded border border-input bg-background" />
@@ -117,8 +149,17 @@ function MarcaSection() {
           <div className="grid gap-1.5"><Label>Suporte (WhatsApp)</Label>
             <Input value={form.links.suporte} onChange={(e) => setForm({ ...form, links: { ...form.links, suporte: e.target.value } })} /></div>
         </div>
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button type="button" onClick={salvar} disabled={saving} className={btn(true)}>{saving ? "Salvando..." : "Salvar e aplicar"}</button>
+          <Label className={btn()}>Enviar logo
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) enviarArquivo("logo", f); e.target.value = "" }} />
+          </Label>
+          <Label className={btn()}>Enviar favicon
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/x-icon,image/svg+xml" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) enviarArquivo("favicon", f); e.target.value = "" }} />
+          </Label>
+          {uploading && <span className="text-xs text-muted-foreground">Enviando {uploading}...</span>}
           {form.logo_url && <img src={form.logo_url} alt="logo" className="h-9 w-auto rounded border border-border bg-white px-2 py-1" />}
         </div>
       </CardContent>
