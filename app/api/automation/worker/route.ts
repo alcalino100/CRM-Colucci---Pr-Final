@@ -266,12 +266,16 @@ export async function runWorker() {
 
     // FASE 1: Avaliar leads elegíveis e criar jobs
     for (const automation of automacoesNormais) {
+      // Teto por rodada: avaliar tudo (700+ leads × N queries) estoura os 300s.
+      // Mais antigos primeiro = fila justa; o resto entra nas próximas rodadas (30min).
       const { data: leads, error: leadsErr } = await wsupabase
         .from("leads")
         .select("id, nome, telefone, temperatura, status, origem, corretor_id, criado_em, gestor_responsavel, arquivado_em, fechado_em, referencias")
         .in("status", ["em_atendimento", "em_automacao"])
         .is("arquivado_em", null)
         .is("fechado_em", null)
+        .order("atualizado_em", { ascending: true, nullsFirst: false })
+        .limit(150)
 
       if (leadsErr) {
         await createLog({
