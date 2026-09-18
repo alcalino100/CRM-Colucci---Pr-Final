@@ -25,11 +25,11 @@ import { getRules } from "@/lib/ai/rules"
 import { normalizePhone } from "@/lib/labels"
 import { getTagsCatalog } from "@/lib/ai/tags-catalog"
 
-// O worker faz várias consultas + envios; sem isto cairia no limite padrão de 10s do Hobby
-// e poderia ser morto no meio de um envio. 60s é o teto do Hobby.
+// O worker faz várias consultas + envios; sem isto cairia no limite padrão.
+// Projeto Pro: 300s (conta-gotas + retries cabem).
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 60
+export const maxDuration = 300
 
 const WORKER_ID = `worker-${Date.now()}`
 
@@ -228,7 +228,7 @@ interface RejectionBreakdown {
 }
 
 // Núcleo do worker — chamado pelo botão manual (POST) e pelo cron (GET autenticado).
-async function runWorker() {
+export async function runWorker() {
   const runStart = Date.now()
   try {
     const automations = await getActiveAutomations()

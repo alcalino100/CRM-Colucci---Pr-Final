@@ -236,9 +236,11 @@ function IAsSection() {
 
 function AutomacoesSection() {
   const toast = useToast()
+  const { user } = useAuth()
   const [status, setStatus] = useState<Record<string, unknown> | null>(null)
   const [dry, setDry] = useState("")
   const [busy, setBusy] = useState(false)
+  const [runOut, setRunOut] = useState("")
 
   const carregar = async () => {
     try {
@@ -265,7 +267,24 @@ function AutomacoesSection() {
       const r = await fetch("/api/automation/regressao-inatividade?dry=1")
       const j = await r.json()
       setDry(JSON.stringify(j, null, 1).slice(0, 2000))
-    } catch { setDry("falha (verifique CRON_SECRET/l[CACHE]ogin)") }
+    } catch { setDry("falha (verifique CRON_SECRET/login)") }
+  }
+
+  const executar = async () => {
+    setBusy(true)
+    setRunOut("executando (até ~4 min, não feche)...")
+    try {
+      const r = await fetch("/api/automation/worker-run", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user?.email ?? "" }),
+      })
+      const j = await r.json()
+      setRunOut(JSON.stringify(j, null, 1).slice(0, 2000))
+      if (j.ok) toast("Rodada concluída.")
+      else toast(`Falha: ${j.erro ?? j.error ?? "?"}`, "error")
+      carregar()
+    } catch { setRunOut("falha de rede"); toast("Falha.", "error") }
+    setBusy(false)
   }
 
   const s = (status ?? {}) as Record<string, unknown>
@@ -278,11 +297,13 @@ function AutomacoesSection() {
             Ativas: {String(s.active_automations ?? "?")} · Pausadas: {String(s.paused_automations ?? "?")} · Jobs pendentes: {String(s.pending_jobs ?? "?")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" disabled={busy} onClick={executar} className={btn(true)}>Executar agora</button>
             <button type="button" disabled={busy} onClick={() => pausar(true)} className={btn()}>Pausar tudo</button>
             <button type="button" disabled={busy} onClick={() => pausar(false)} className={btn()}>Retomar tudo</button>
             <Link href="/automacoes" className={btn()}>Abrir automações</Link>
             <Link href="/automacoes/logs" className={btn()}>Ver logs</Link>
           </div>
+          {runOut && <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-muted p-2 text-[11px]">{runOut}</pre>}
         </CardContent>
       </Card>
       <Card>
