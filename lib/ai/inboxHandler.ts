@@ -158,6 +158,33 @@ export async function pausarIaMensagemManual({ telefone, instanceName, textoOutb
     if (!telefone) return
     const lead = await acharLeadVinculado(telefone, instanceName)
     const key = chaveConversa(lead?.id, telefone)
+    // Anti-rajada: mesmo contato+texto nos últimos 5min → um pause basta.
+    // (Retries da Evolution disparam N eventos por mensagem enviada.)
+    if (textoOutbound?.trim()) {
+      try {
+        const desde = new Date(Date.now() - 5 * 60000).toISOString()
+        const { data: repetida } = await db().from("whatsapp_mensagens")
+          .select("mensagem_id").eq("instance_name", instanceName ?? "")
+          .eq("telefone", telefone).eq("de_mim", true)
+          .eq("corpo", textoOutbound.trim()).gte("criado_em", desde).limit(3)
+        if ((repetida ?? []).length > 1) return
+      } catch { /* segue o fluxo */ }
+    }
+    // Eco de envio da AUTOMAÇÃO (job sent recente com mesmo texto) não é
+    // atendimento manual — ignora sem pausar, mover ou logar.
+    if (textoOutbound?.trim() && lead) {
+      try {
+        const desdeJobs = new Date(Date.now() - 30 * 60000).toISOString()
+        const { data: jobs } = await db().from("automation_jobs")
+          .select("message_content_rendered").eq("lead_id", lead.id)
+          .in("status", ["sent", "delivered", "read"])
+          .gte("sent_at", desdeJobs).limit(5)
+        const norm = (s: string) => s.toLowerCase().trim()
+        const ecoAutomacao = ((jobs ?? []) as { message_content_rendered?: unknown }[])
+          .some((j) => norm(String(j.message_content_rendered ?? "")) === norm(textoOutbound))
+        if (ecoAutomacao) return
+      } catch { /* segue o fluxo */ }
+    }
     let convHandoff: string | undefined
     if (agente) {
       const { data: conv } = await db().from("conversations_ia").select("id,ai_responding").eq("ai_id", agente.id).eq("contact_id", key).maybeSingle()
