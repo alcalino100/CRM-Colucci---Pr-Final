@@ -449,23 +449,35 @@ export function calculateScheduledAt(waitConfig: AutomationWaitConfig): string {
   // Converter wait para minutos (máximo 1 dia = 1440 min)
   const waitMinutes = unit === "minutes" ? amount : unit === "hours" ? amount * 60 : Math.min(amount * 1440, 1440)
 
+  // ATENÇÃO TZ: setHours/setDate usam o TZ do servidor (UTC na Vercel), mas
+  // start/end/current estão em parede BRT. Bug clássico: agendava 3h antes
+  // (ex.: criado 12:31 UTC → "09:41" gravado como UTC = 06:41 BRT).
+  // Correção: ancora o dia BRT em UTC e soma minutos de parede + offset.
+  // BRT = UTC-3 fixo o ano todo (sem horário de verão desde 2019).
+  const BRT_MS = 3 * 3600 * 1000
+  const brtNow = new Date(now.getTime() - BRT_MS)
+  let diaUtc = Date.UTC(brtNow.getUTCFullYear(), brtNow.getUTCMonth(), brtNow.getUTCDate())
+  let hh: number
+  let mm: number
+
   let scheduled: Date
 
   if (currentTimeMinutes >= startTimeMinutes && currentTimeMinutes <= endTimeMinutes) {
-    // Dentro do horário → agendar para HOJE, mas não passar do fim do horário
+    // Dentro do horário → HOJE (parede BRT), sem passar do fim do horário
     const targetMinutes = Math.min(currentTimeMinutes + waitMinutes, endTimeMinutes)
-    scheduled = new Date(now)
-    scheduled.setHours(Math.floor(targetMinutes / 60), targetMinutes % 60, 0, 0)
+    hh = Math.floor(targetMinutes / 60)
+    mm = targetMinutes % 60
   } else if (currentTimeMinutes > endTimeMinutes) {
-    // Depois do horário → AMANHÃ no início do horário
-    scheduled = new Date(now)
-    scheduled.setDate(scheduled.getDate() + 1)
-    scheduled.setHours(startH ?? 8, startM ?? 0, 0, 0)
+    // Depois do horário → AMANHÃ (parede BRT) no início do horário
+    diaUtc += 86400000
+    hh = startH ?? 0
+    mm = startM ?? 0
   } else {
-    // Antes do horário → HOJE no início do horário
-    scheduled = new Date(now)
-    scheduled.setHours(startH ?? 8, startM ?? 0, 0, 0)
+    // Antes do horário → HOJE (parede BRT) no início do horário
+    hh = startH ?? 0
+    mm = startM ?? 0
   }
+  scheduled = new Date(diaUtc + (hh * 60 + mm) * 60000 + BRT_MS)
 
   return scheduled.toISOString()
 }
