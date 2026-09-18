@@ -584,8 +584,12 @@ export async function runWorker() {
             const supervisionUpdate: Record<string, unknown> = {
               gestor_responsavel: automation.supervisor_user_id,
             }
-            // Follow-up: NÃO força status — lead permanece em_followup até responder
-            if (!isFollowupAutomation) {
+            // Follow-up: NÃO força status — lead permanece em_followup até responder.
+            // Automação: NÃO puxa de volta — lead em estágio de máquina
+            // (em_automacao/atendimento_ia/em_followup) fica onde está; só o dono é definido.
+            // Sem isso a supervisão desfazia a movimentação do próprio envio.
+            const estagioMaquina = ["em_automacao", "atendimento_ia", "em_followup"].includes(String((lead as { status?: unknown }).status ?? ""))
+            if (!isFollowupAutomation && !estagioMaquina) {
               supervisionUpdate.status = "em_atendimento"
             }
             const { error: supErr } = await wsupabase
