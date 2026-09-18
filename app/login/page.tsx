@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Loader2, Lock, Mail } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { homeDaRole } from "@/lib/roles"
-import { applyBrand, loadBrand } from "@/lib/master"
+import { BRAND_DEFAULTS, applyBrand, getInitialBrand, loadBrand } from "@/lib/master"
 import { Button } from "@/components/ui/button"
 import { Input, Label } from "@/components/ui/primitives"
 
@@ -16,11 +16,19 @@ export default function LoginPage() {
   const [senha, setSenha] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [logo, setLogo] = useState("/logo-colucci.png")
-  const [marca, setMarca] = useState("Colucci Imóveis")
+  const [logo, setLogo] = useState(() => getInitialBrand()?.logo_url ?? "/logo-colucci.png")
+  const [marca, setMarca] = useState(() => getInitialBrand()?.brand_name ?? "Colucci Imóveis")
 
   // Marca do workspace (logo/título/cor) também no login.
   useEffect(() => {
+    const boot = getInitialBrand()
+    if (boot) {
+      const full = { ...BRAND_DEFAULTS, ...boot }
+      applyBrand(full)
+      if (full.logo_url) setLogo(full.logo_url)
+      if (full.brand_name) setMarca(full.brand_name)
+      return
+    }
     loadBrand().then((r) => {
       applyBrand(r.settings)
       if (r.settings.logo_url) setLogo(r.settings.logo_url)

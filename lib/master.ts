@@ -23,6 +23,9 @@ export interface BrandSettings {
   cor_primaria: string
   fonte_titulo: string
   fonte_texto: string
+  sidebar_bg: string
+  sidebar_fg: string
+  sidebar_accent: string
   links: BrandLinks
 }
 
@@ -34,6 +37,9 @@ export const BRAND_DEFAULTS: BrandSettings = {
   cor_primaria: "#b22222",
   fonte_titulo: "Space Grotesk",
   fonte_texto: "Inter",
+  sidebar_bg: "#54595f",
+  sidebar_fg: "#d4d4d8",
+  sidebar_accent: "#45494e",
   links: { site: "", instagram: "", suporte: "" },
 }
 
@@ -41,6 +47,17 @@ export const BRAND_DEFAULTS: BrandSettings = {
 export const FONTES_TITULO = ["Space Grotesk", "Archivo", "Sora", "Montserrat", "Poppins", "Inter"]
 export const FONTES_TEXTO = ["Inter", "Roboto", "Archivo", "Sora", "Montserrat", "Poppins"]
 
+// Marca embutida no HTML pelo servidor (sem flash). Nulo no SSR/pré-render.
+export function getInitialBrand(): Partial<BrandSettings> | null {
+  try {
+    if (typeof window === "undefined") return null
+    const w = (window as unknown as { __BRAND__?: Partial<BrandSettings> }).__BRAND__
+    return w ?? null
+  } catch {
+    return null
+  }
+}
+// Falha silenciosa.
 // Aplica a identidade na sessão atual (CSS vars + título + favicon + fontes).
 // Falha silenciosa.
 export function applyBrand(b: Partial<BrandSettings>): void {
@@ -94,6 +111,9 @@ export async function loadBrand(): Promise<{ ok: boolean; settings: BrandSetting
         logo_url: (d.logo_url as string | null) ?? null,
         favicon_url: (d.favicon_url as string | null) ?? null,
         cor_primaria: String(d.cor_primaria ?? BRAND_DEFAULTS.cor_primaria),
+        sidebar_bg: String(d.sidebar_bg ?? BRAND_DEFAULTS.sidebar_bg),
+        sidebar_fg: String(d.sidebar_fg ?? BRAND_DEFAULTS.sidebar_fg),
+        sidebar_accent: String(d.sidebar_accent ?? BRAND_DEFAULTS.sidebar_accent),
         fonte_titulo: String(d.fonte_titulo ?? BRAND_DEFAULTS.fonte_titulo),
         fonte_texto: String(d.fonte_texto ?? BRAND_DEFAULTS.fonte_texto),
         links: { ...BRAND_DEFAULTS.links, ...((d.links ?? {}) as Partial<BrandLinks>) },
@@ -112,6 +132,9 @@ export async function saveBrand(s: BrandSettings): Promise<{ ok: boolean; erro?:
       logo_url: s.logo_url || null,
       favicon_url: s.favicon_url || null,
       cor_primaria: s.cor_primaria,
+      sidebar_bg: s.sidebar_bg,
+      sidebar_fg: s.sidebar_fg,
+      sidebar_accent: s.sidebar_accent,
       fonte_titulo: s.fonte_titulo,
       fonte_texto: s.fonte_texto,
       links: s.links,

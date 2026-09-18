@@ -7,7 +7,7 @@ import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOu
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
-import { applyBrand, isMasterEmail, loadBrand, type BrandSettings } from "@/lib/master"
+import { BRAND_DEFAULTS, applyBrand, getInitialBrand, isMasterEmail, loadBrand, type BrandSettings } from "@/lib/master"
 import { ToastProvider } from "@/components/ui/primitives"
 import { BRTClock } from "@/lib/timezone"
 import { LeadsProvider, useLeads } from "@/lib/leads-store"
@@ -95,7 +95,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [secAutomacoes, setSecAutomacoes] = useState(false)
   const [secIA, setSecIA] = useState(true)
   const [secAdmin, setSecAdmin] = useState(false)
-  const [brand, setBrand] = useState<BrandSettings | null>(null)
+  const [brand, setBrand] = useState<BrandSettings | null>(() => {
+    const boot = getInitialBrand()
+    return boot ? ({ ...BRAND_DEFAULTS, ...boot } as BrandSettings) : null
+  })
 
   // White-label: aplica marca salva (cor + título); logo troca na sidebar.
 
@@ -120,8 +123,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, pathname])
 
   useEffect(() => {
+    // Servidor já embutiu a marca (sem flash); aqui só confirma/atualiza.
+    const boot = getInitialBrand()
+    if (boot) { applyBrand({ ...BRAND_DEFAULTS, ...boot }); setBrand((b) => b ?? ({ ...BRAND_DEFAULTS, ...boot } as BrandSettings)); return }
     loadBrand().then((r) => { applyBrand(r.settings); setBrand(r.settings) }).catch(() => {})
-    import("@/lib/pipeline-stages").then((m) => m.loadStagesOverride().catch(() => {})).catch(() => {})
   }, [])
 
   useEffect(() => {
