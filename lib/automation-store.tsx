@@ -187,7 +187,9 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
 
     const [automationsRes, jobsRes] = await Promise.all([
       supabase.from("automations").select("id", { count: "exact", head: true }).eq("status", "active").is("deleted_at", null),
-      supabase.from("automation_jobs").select("status, created_at, sent_at, responded_at"),
+      // Ordenado + limite alto: sem isso o PostgREST devolve 1000 linhas
+      // arbitrárias e os envios de hoje somem do painel.
+      supabase.from("automation_jobs").select("status, created_at, sent_at, responded_at").order("created_at", { ascending: false }).limit(5000),
     ])
 
     const allJobs = (jobsRes.data ?? []) as { status: string; created_at: string; sent_at: string | null; responded_at: string | null }[]

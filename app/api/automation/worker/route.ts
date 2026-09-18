@@ -241,9 +241,9 @@ export async function runWorker() {
       cancelled: 0,
       blocked_hour: 0,
     }
-    // Conta-gotas anti-ban: maxDuration curta (60s) + espaçamento entre envios.
-    // No máximo 3 envios por rodada, 15-25s entre eles; o teto diário segue valendo.
-    const MAX_ENVIOS_POR_RODADA = 3
+    // Conta-gotas anti-ban: maxDuration Pro (300s) comporta ~10 envios com
+    // 15-25s entre eles + avaliação; o teto diário segue valendo.
+    const MAX_ENVIOS_POR_RODADA = 10
     let enviadosNestaRodada = 0
     const rejections: RejectionBreakdown = {
       has_active_job: 0,
