@@ -502,11 +502,13 @@ export async function getJobsToProcess(): Promise<AutomationJob[]> {
   const now = new Date()
   const nowIso = now.toISOString()
 
-  // Buscar jobs cujo scheduled_at já chegou (case tradicional)
+  // Buscar jobs cujo scheduled_at já chegou (case tradicional).
+  // Inclui blocked_hour vencidos: fora da janela viram scheduled travado —
+  // sem isso, apodrecem na fila para sempre mesmo com a janela aberta.
   const { data: readyJobs } = await wsupabase
     .from("automation_jobs")
     .select("*")
-    .in("status", ["scheduled", "pending_validation", "retrying"])
+    .in("status", ["scheduled", "pending_validation", "retrying", "blocked_hour"])
     .lte("scheduled_at", nowIso)
     .order("scheduled_at", { ascending: true })
     .limit(50)

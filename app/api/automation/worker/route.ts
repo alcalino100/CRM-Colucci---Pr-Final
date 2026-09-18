@@ -241,6 +241,10 @@ async function runWorker() {
       cancelled: 0,
       blocked_hour: 0,
     }
+    // Conta-gotas anti-ban: maxDuration curta (60s) + espaçamento entre envios.
+    // No máximo 3 envios por rodada, 15-25s entre eles; o teto diário segue valendo.
+    const MAX_ENVIOS_POR_RODADA = 3
+    let enviadosNestaRodada = 0
     const rejections: RejectionBreakdown = {
       has_active_job: 0,
       conditions_not_met: 0,
@@ -552,6 +556,10 @@ async function runWorker() {
           continue
         }
 
+        if (enviadosNestaRodada >= MAX_ENVIOS_POR_RODADA) {
+          await releaseLock(job.id)
+          continue
+        }
         const result = await sendAutomationMessage({
           phone: lead.telefone,
           connection_id: connectionId,
@@ -645,6 +653,9 @@ async function runWorker() {
           })
 
           results.sent++
+          enviadosNestaRodada++
+          // Respiro anti-ban entre um lead e outro (conta do WhatsApp agradece).
+          await new Promise((r) => setTimeout(r, 15000 + Math.random() * 10000))
 
           // Ordem do fluxo: enviou a reativação → lead vai para Em Automação + tag.
           // (Só reativação lead_inactive; follow-up tem regra própria de etapa.)
