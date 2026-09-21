@@ -37,18 +37,17 @@ export async function GET(request: Request) {
   const ini = inicioDiaBRT()
   const fim = new Date(new Date(ini).getTime() + 86400000).toISOString()
 
-  const [jobs, logs, anal, fila] = await Promise.all([
-    wsupabase.from("automation_jobs").select("status,sent_at,responded_at").gte("created_at", ini).lt("created_at", fim).limit(5000),
+  const [nEnv, nResp, logs, anal, fila] = await Promise.all([
+    wsupabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("sent_at", ini).lt("sent_at", fim),
+    wsupabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("responded_at", ini).lt("responded_at", fim),
     wsupabase.from("automation_logs").select("event_type").gte("created_at", ini).lt("created_at", fim).limit(5000),
     wsupabase.from("conversation_analytics").select("tokens_used,api_cost_usd").gte("created_at", ini).lt("created_at", fim).limit(5000),
     wsupabase.from("automation_jobs").select("id", { count: "exact", head: true }).in("status", ["scheduled", "retrying"]),
   ])
-  const J = ((jobs.data ?? []) as { status: string; sent_at: string | null; responded_at: string | null }[])
+  const enviadas = (nEnv as { count: number | null }).count ?? 0
+  const respondidas = (nResp as { count: number | null }).count ?? 0
   const L = ((logs.data ?? []) as { event_type: string }[])
   const A = ((anal.data ?? []) as { tokens_used: number | null; api_cost_usd: number | null }[])
-
-  const enviadas = J.filter((j) => j.sent_at && j.sent_at >= ini && j.sent_at < fim).length
-  const respondidas = J.filter((j) => j.responded_at && j.responded_at >= ini && j.responded_at < fim).length
   const contaEv = (ev: string) => L.filter((l) => l.event_type === ev).length
   const viraramIA = contaEv("lead_respondeu_atendimento_ia")
   const handoffs = contaEv("ia_handoff_humano")
