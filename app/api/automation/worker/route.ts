@@ -610,14 +610,18 @@ export async function runWorker() {
           continue
         }
 
-        const todayStart = new Date()
-        todayStart.setHours(0, 0, 0, 0)
+        // Teto diário GLOBAL (todas as automações somadas — é a conta do WhatsApp
+        // que está em jogo, não cada automação). Conta sent+delivered+read+responded:
+        // só 'sent' subcontava, pois resposta evoluía o status e liberava vaga!
+        // Dia em BRT (00:00 BRT = 03:00Z), não meia-noite UTC do servidor.
+        const fmtDia = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" })
+        const [anoB, mesB, diaB] = fmtDia.format(new Date()).split("-").map(Number)
+        const todayStart = new Date(Date.UTC(anoB, mesB - 1, diaB, 3, 0, 0))
         const { count: todayCount } = await wsupabase
           .from("automation_jobs")
           .select("id", { count: "exact", head: true })
-          .eq("automation_id", job.automation_id)
           .gte("sent_at", todayStart.toISOString())
-          .eq("status", "sent")
+          .in("status", ["sent", "delivered", "read", "responded"])
 
         const maxDaily = automation.limits_config.max_daily_sends ?? 50
         if ((todayCount ?? 0) >= maxDaily) {
