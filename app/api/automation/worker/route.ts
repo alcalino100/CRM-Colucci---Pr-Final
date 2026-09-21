@@ -458,6 +458,7 @@ export async function runWorker() {
     })
 
     // FASE 2: Processar jobs agendados
+    const semConexaoAvisada = new Set<string>()
     let jobsToProcess = await getJobsToProcess()
 
     // Contingência queda WhatsApp: automação cuja instância está DESCONECTADA
@@ -593,8 +594,19 @@ export async function runWorker() {
 
         const connectionId = automation.whatsapp_connection_id
         if (!connectionId) {
-          await cancelJob(job.id, "Conexão WhatsApp não configurada", "system")
-          results.cancelled++
+          // Sem conexão: PULA sem cancelar (a fila sobrevive a erro humano de
+          // configuração). Logado 1× por automação por rodada, não por job.
+          await wsupabase.from("automation_jobs").update({ status: "scheduled" }).eq("id", job.id)
+          await releaseLock(job.id)
+          if (!semConexaoAvisada.has(automation.id)) {
+            semConexaoAvisada.add(automation.id)
+            await createLog({
+              automation_id: automation.id,
+              event_type: "worker_sem_conexao",
+              event_title: `Automação sem conexão WhatsApp: ${automation.name}`,
+              event_description: "whatsapp_connection_id vazio (zerado fora do app?). Jobs mantidos na fila — configure a conexão para retomar.",
+            })
+          }
           continue
         }
 

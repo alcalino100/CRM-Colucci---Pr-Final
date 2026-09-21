@@ -85,10 +85,14 @@ export async function GET() {
       db().from("automation_jobs").select("id", { count: "exact", head: true }).eq("status", "failed").gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
       db().from("automation_logs").select("event_description,created_at").eq("event_type", "lead_evaluated").order("created_at", { ascending: false }).limit(1),
     ])
+    const { data: autos } = await db().from("automations").select("id,name,status,whatsapp_connection_id").is("deleted_at", null)
+    const autoConns = ((autos ?? []) as { id: string; name: string; status: string; whatsapp_connection_id: string | null }[])
+      .map((a) => ({ name: a.name, status: a.status, conectada: !!a.whatsapp_connection_id }))
     const ultimo = ((last ?? []) as { event_description?: string; created_at?: string }[])[0]
     return NextResponse.json({
       ok: true,
       instancias: estados,
+      automacoes: autoConns,
       backlog: { na_fila: fila ?? 0, falhou_7d: falhou7d ?? 0 },
       ultima_rodada: ultimo ? { em: ultimo.created_at, resumo: String(ultimo.event_description ?? "").slice(0, 200) } : null,
     })

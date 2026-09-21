@@ -243,6 +243,7 @@ function AutomacoesSection() {
   const [runOut, setRunOut] = useState("")
   const [saude, setSaude] = useState<{
     instancias?: { instance: string; state: string }[]
+    automacoes?: { name: string; status: string; conectada: boolean }[]
     backlog?: { na_fila?: number; falhou_7d?: number }
     ultima_rodada?: { em?: string; resumo?: string } | null
   } | null>(null)
@@ -335,6 +336,14 @@ function AutomacoesSection() {
                 Fila agora: <b>{saude.backlog?.na_fila ?? "?"}</b> · Falharam (7d): <b>{saude.backlog?.falhou_7d ?? "?"}</b>
                 {saude.ultima_rodada?.em ? ` · Última rodada: ${saude.ultima_rodada.em.slice(0, 16).replace("T", " ")}` : " · Sem rodada recente"}
               </p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {(saude.automacoes ?? []).map((a) => (
+                  <span key={a.name} className={cn("rounded-full border px-2 py-0.5 text-[11px]",
+                    a.status === "active" && a.conectada ? "border-green-600/40 bg-green-600/10" : "border-red-600/40 bg-red-600/10")}>
+                    {a.name.slice(0, 28)}: {a.status !== "active" ? "pausada" : a.conectada ? "conectada" : "SEM CONEXÃO"}
+                  </span>
+                ))}
+              </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button type="button" disabled={busy} className={btn()} onClick={async () => {
                   setBusy(true)
