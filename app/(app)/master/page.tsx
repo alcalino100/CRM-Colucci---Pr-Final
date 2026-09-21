@@ -241,6 +241,18 @@ function AutomacoesSection() {
   const [dry, setDry] = useState("")
   const [busy, setBusy] = useState(false)
   const [runOut, setRunOut] = useState("")
+  const [saude, setSaude] = useState<{
+    instancias?: { instance: string; state: string }[]
+    backlog?: { na_fila?: number; falhou_7d?: number }
+    ultima_rodada?: { em?: string; resumo?: string } | null
+  } | null>(null)
+
+  const carregarSaude = async () => {
+    try {
+      const r = await fetch("/api/automation/worker-run")
+      setSaude(await r.json())
+    } catch { setSaude(null) }
+  }
 
   const carregar = async () => {
     try {
@@ -248,7 +260,7 @@ function AutomacoesSection() {
       setStatus(await r.json())
     } catch { setStatus(null) }
   }
-  useEffect(() => { carregar() }, [])
+  useEffect(() => { carregar(); carregarSaude() }, [])
 
   const pausar = async (pausado: boolean) => {
     setBusy(true)
@@ -304,6 +316,43 @@ function AutomacoesSection() {
             <Link href="/automacoes/logs" className={btn()}>Ver logs</Link>
           </div>
           {runOut && <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-muted p-2 text-[11px]">{runOut}</pre>}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Contingência (quedas de WhatsApp)</CardTitle></CardHeader>
+        <CardContent>
+          {!saude ? <p className="text-xs text-muted-foreground">Carregando saúde...</p> : (
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {(saude.instancias ?? []).map((i) => (
+                  <span key={i.instance} className={cn("rounded-full border px-2 py-0.5 text-[11px]",
+                    i.state === "open" ? "border-green-600/40 bg-green-600/10" : "border-red-600/40 bg-red-600/10")}>
+                    {i.instance}: {i.state === "open" ? "conectada" : i.state}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Fila agora: <b>{saude.backlog?.na_fila ?? "?"}</b> · Falharam (7d): <b>{saude.backlog?.falhou_7d ?? "?"}</b>
+                {saude.ultima_rodada?.em ? ` · Última rodada: ${saude.ultima_rodada.em.slice(0, 16).replace("T", " ")}` : " · Sem rodada recente"}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" disabled={busy} className={btn()} onClick={async () => {
+                  setBusy(true)
+                  try {
+                    const r = await fetch("/api/automation/worker-run", {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email: user?.email ?? "", action: "requeue-falhas" }),
+                    })
+                    const j = await r.json()
+                    toast(j.ok ? `Recolocados: ${j.recolocados}. Saem nas próximas rodadas.` : `Falha: ${j.erro}`, j.ok ? undefined : "error")
+                    carregarSaude()
+                  } catch { toast("Falha.", "error") }
+                  setBusy(false)
+                }}>Recolocar falhas da queda</button>
+                <button type="button" onClick={carregarSaude} className={btn()}>Atualizar</button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
       <Card>

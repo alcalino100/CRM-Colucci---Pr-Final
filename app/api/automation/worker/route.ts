@@ -458,7 +458,61 @@ export async function runWorker() {
     })
 
     // FASE 2: Processar jobs agendados
-    const jobsToProcess = await getJobsToProcess()
+    let jobsToProcess = await getJobsToProcess()
+
+    // Contingência queda WhatsApp: automação cuja instância está DESCONECTADA
+    // não envia nesta rodada — os jobs seguem scheduled (retoma de onde parou).
+    // Sem isso, cada rodada queimava tentativas no vazio até falhar tudo.
+    try {
+      const { data: insts } = await wsupabase.from("whatsapp_instancias").select("id,instance_name")
+      const nomePorId = new Map(((insts ?? []) as { id: string; instance_name: string }[]).map((i) => [i.id, i.instance_name]))
+      const saude = new Map<string, boolean>()
+      const checar = async (instanceName: string): Promise<boolean> => {
+        try {
+          const { evolutionConfig } = await import("@/lib/whatsapp/server")
+          const cfg = evolutionConfig()
+          if (!cfg.ok) return false
+          const res = await fetch(`${cfg.url}/instance/connectionState/${encodeURIComponent(instanceName)}`, {
+            headers: { apikey: cfg.key },
+            signal: AbortSignal.timeout(8000),
+          })
+          if (!res.ok) return false
+          const j = await res.json().catch(() => null)
+          return (j as { instance?: { state?: string } } | null)?.instance?.state === "open"
+        } catch {
+          return false
+        }
+      }
+      const antes = jobsToProcess.length
+      const idsBloqueados = new Set<string>()
+      for (const job of jobsToProcess) {
+        const automation = automations.find((a) => a.id === job.automation_id)
+        const inst = automation?.whatsapp_connection_id ? nomePorId.get(automation.whatsapp_connection_id) : undefined
+        if (!inst) continue
+        if (!saude.has(inst)) saude.set(inst, await checar(inst))
+        if (!saude.get(inst)) idsBloqueados.add(job.id)
+      }
+      if (idsBloqueados.size > 0) {
+        jobsToProcess = jobsToProcess.filter((j) => !idsBloqueados.has(j.id))
+        await createLog({
+          automation_id: null,
+          event_type: "worker_instancia_morta",
+          event_title: "Instância desconectada — envios pausados",
+          event_description: `Sem envio nesta rodada: instância(s) fora do ar. ${idsBloqueados.size} job(s) mantidos em fila (de ${antes}). Retoma sozinho ao reconectar.`,
+        })
+      } else if (antes > 0) {
+        // Retomada: havia backlog e está tudo conectado — registra a volta.
+        const { data: rec } = await wsupabase.from("automation_logs").select("id").eq("event_type", "worker_instancia_morta").gte("created_at", new Date(Date.now() - 48 * 3600000).toISOString()).limit(1)
+        if ((rec ?? []).length > 0) {
+          await createLog({
+            automation_id: null,
+            event_type: "worker_instancia_volto",
+            event_title: "Instância reconectada — retomando fila",
+            event_description: `Conexão OK. ${antes} job(s) na fila serão processados nas próximas rodadas (respeitando teto e espaçamento).`,
+          })
+        }
+      }
+    } catch { /* contingência nunca derruba a rodada */ }
 
     for (const job of jobsToProcess) {
       const locked = await acquireLock(job.id, WORKER_ID)
