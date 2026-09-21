@@ -799,6 +799,22 @@ export async function runWorker() {
           }
           results.failed++
         }
+      } catch (jobErr) {
+        // Um job problemático NUNCA pode matar a rodada inteira (era assim que
+        // jobs ficavam presos em "processing" e o resumo sumia). Volta para a
+        // fila e registra — a rodada segue para os próximos.
+        try {
+          await wsupabase.from("automation_jobs").update({ status: "scheduled" }).eq("id", job.id)
+          await createLog({
+            automation_id: job.automation_id,
+            job_id: job.id,
+            lead_id: job.lead_id,
+            event_type: "worker_job_error",
+            event_title: "Job com erro — voltou para a fila",
+            event_description: String((jobErr as Error)?.message ?? jobErr).slice(0, 300),
+          })
+        } catch { /* best-effort */ }
+        results.failed++
       } finally {
         await releaseLock(job.id)
       }
