@@ -37,22 +37,26 @@ export async function GET(request: Request) {
   const ini = inicioDiaBRT()
   const fim = new Date(new Date(ini).getTime() + 86400000).toISOString()
 
-  const [nEnv, nResp, logs, anal, fila] = await Promise.all([
+  // Contagens server-side por evento (nunca baixa linhas: em dia cheio o
+  // limit cortava a noite e zerava métricas — foi o bug do "nada atendido").
+  const conta = async (ev: string): Promise<number> => {
+    const r = await wsupabase.from("automation_logs").select("id", { count: "exact", head: true }).eq("event_type", ev).gte("created_at", ini).lt("created_at", fim)
+    return (r as { count: number | null }).count ?? 0
+  }
+  const [nEnv, nResp, anal, fila, viraramIA, handoffs, triagens, reativacoes, respIA] = await Promise.all([
     wsupabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("sent_at", ini).lt("sent_at", fim),
     wsupabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("responded_at", ini).lt("responded_at", fim),
-    wsupabase.from("automation_logs").select("event_type").gte("created_at", ini).lt("created_at", fim).limit(5000),
     wsupabase.from("conversation_analytics").select("tokens_used,api_cost_usd").gte("created_at", ini).lt("created_at", fim).limit(5000),
     wsupabase.from("automation_jobs").select("id", { count: "exact", head: true }).in("status", ["scheduled", "retrying"]),
+    conta("lead_respondeu_atendimento_ia"),
+    conta("ia_handoff_humano"),
+    conta("lead_followup_sem_resposta_triagem"),
+    conta("lead_reativado_trafego_pago_reativacao_base"),
+    conta("ia_resposta_enviada"),
   ])
   const enviadas = (nEnv as { count: number | null }).count ?? 0
   const respondidas = (nResp as { count: number | null }).count ?? 0
-  const L = ((logs.data ?? []) as { event_type: string }[])
   const A = ((anal.data ?? []) as { tokens_used: number | null; api_cost_usd: number | null }[])
-  const contaEv = (ev: string) => L.filter((l) => l.event_type === ev).length
-  const viraramIA = contaEv("lead_respondeu_atendimento_ia")
-  const handoffs = contaEv("ia_handoff_humano")
-  const triagens = contaEv("lead_followup_sem_resposta_triagem")
-  const reativacoes = contaEv("lead_reativado_trafego_pago_reativacao_base")
   const tokens = A.reduce((s, a) => s + (a.tokens_used ?? 0), 0)
   const custo = A.reduce((s, a) => s + Number(a.api_cost_usd ?? 0), 0)
   const taxaIA = respondidas ? Math.round((viraramIA / respondidas) * 1000) / 10 : 0
@@ -64,7 +68,7 @@ export async function GET(request: Request) {
     `Data: ${dataBR}`,
     `Mensagens enviadas (reativação+follow-up): ${enviadas}`,
     `Leads que responderam: ${respondidas} (taxa de resposta ${taxaResp}%)`,
-    `Respostas assumidas pela IA (Atendimento IA): ${viraramIA} (taxa de atendimento IA ${taxaIA}%)`,
+    `Respostas da IA no WhatsApp: ${respIA} (viraram Atendimento IA: ${viraramIA}, taxa ${taxaIA}%)`,
     `Entraram em automação hoje: ${reativacoes}`,
     `Handoffs para humano: ${handoffs} | Triagens humanas: ${triagens}`,
     `Tokens IA gastos: ${tokens.toLocaleString("pt-BR")} (~US$ ${custo.toFixed(4)})`,
