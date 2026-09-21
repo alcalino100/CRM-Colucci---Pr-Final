@@ -64,6 +64,7 @@ const NAV_AUTOMACOES: { href: string; label: string; icon: any; roles: Role[] }[
   { href: "/automacoes/regras", label: "Regras de Automação", icon: Zap, roles: ["gestor"] },
   { href: "/automacoes/fila", label: "Fila de Envios", icon: ClipboardCheck, roles: ["gestor"] },
   { href: "/automacoes/logs", label: "Logs de Automação", icon: ScrollText, roles: ["gestor"] },
+  { href: "/automacoes/relatorio", label: "Relatório Diário", icon: BarChart3, roles: ["gestor"] },
 ]
 
 const NAV_IA: { href: string; label: string; icon: any; roles: Role[] }[] = [
