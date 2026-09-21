@@ -44,11 +44,14 @@ export default function RelatorioAutomacoesPage() {
     if (!loading && !permitido) router.replace("/painel-corretor")
   }, [loading, permitido, router])
 
-  const carregar = async () => {
+  const carregar = async (iniArg?: string, fimArg?: string) => {
     setBusy(true)
     try {
-      const ini = `${inicio}T00:00:00Z`
-      const fimX = `${fim}T23:59:59Z`
+      // Fronteiras em BRT (00:00 BRT = 03:00Z), para o "dia" bater com o real.
+      const ini = `${iniArg ?? inicio}T03:00:00Z`
+      const fdt = new Date(`${fimArg ?? fim}T12:00:00Z`)
+      fdt.setDate(fdt.getDate() + 1)
+      const fimX = `${fdt.toISOString().slice(0, 10)}T03:00:00Z`
       const [jobs, logs, anal] = await Promise.all([
         supabase.from("automation_jobs").select("status,sent_at,responded_at,created_at").gte("created_at", ini).lte("created_at", fimX).limit(10000),
         supabase.from("automation_logs").select("event_type,created_at").gte("created_at", ini).lte("created_at", fimX).limit(10000),
@@ -91,6 +94,21 @@ export default function RelatorioAutomacoesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permitido])
 
+  const preset = (op: "hoje" | "ontem" | "7d" | "30d") => {
+    const hoje = new Date()
+    const f = (d: Date) => iso(d)
+    if (op === "hoje") {
+      setInicio(f(hoje)); setFim(f(hoje)); void carregar(f(hoje), f(hoje))
+    } else if (op === "ontem") {
+      const d = new Date(hoje)
+      d.setDate(d.getDate() - 1)
+      setInicio(f(d)); setFim(f(d)); void carregar(f(d), f(d))
+    } else {
+      const d = new Date(hoje)
+      d.setDate(d.getDate() - (op === "7d" ? 6 : 29))
+      setInicio(f(d)); setFim(f(hoje)); void carregar(f(d), f(hoje))
+    }
+  }
   const tot = (k: keyof Dia) => (typeof linhas[0]?.[k] === "number" ? linhas.reduce((s, l) => s + (l[k] as number), 0) : 0)
   const taxaGeral = (tot("enviadas") as number) ? Math.round(((tot("respondidas") as number) / (tot("enviadas") as number)) * 1000) / 10 : 0
 
@@ -116,10 +134,15 @@ export default function RelatorioAutomacoesPage() {
           <p className="text-xs text-muted-foreground">Dia a dia: envios, respostas, taxas, IA, triagem e custo. Exporte em CSV para compartilhar.</p>
         </div>
         <div className="flex items-center gap-2">
+          {(["hoje", "ontem", "7d", "30d"] as const).map((p) => (
+            <button key={p} type="button" onClick={() => preset(p)} className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
+              {p === "hoje" ? "Hoje" : p === "ontem" ? "Ontem" : p === "7d" ? "7 dias" : "30 dias"}
+            </button>
+          ))}
           <Input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} className="h-9 w-auto text-xs" aria-label="Data inicial" />
           <span className="text-xs text-muted-foreground">→</span>
           <Input type="date" value={fim} onChange={(e) => setFim(e.target.value)} className="h-9 w-auto text-xs" aria-label="Data final" />
-          <button type="button" onClick={carregar} disabled={busy} className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+          <button type="button" onClick={() => carregar()} disabled={busy} className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50">
             {busy ? "..." : "Buscar"}
           </button>
           <button type="button" onClick={csv} className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted">CSV</button>
