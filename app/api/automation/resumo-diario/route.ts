@@ -23,14 +23,16 @@ function inicioDiaBRT(d = new Date()): string {
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
+  const dry = url.searchParams.get("dry") === "1"
+  // Prévia (dry) é só leitura de agregados — liberada sem segredo.
+  // O envio real exige CRON_SECRET.
   const secret = process.env.CRON_SECRET
-  if (secret) {
+  if (secret && !dry) {
     const auth = request.headers.get("authorization")
     const qs = url.searchParams.get("secret")
     const ok = auth === `Bearer ${secret}` || qs === secret
     if (!ok) return NextResponse.json({ ok: false, erro: "não autorizado" }, { status: 401 })
   }
-  const dry = url.searchParams.get("dry") === "1"
 
   const ini = inicioDiaBRT()
   const fim = new Date(new Date(ini).getTime() + 86400000).toISOString()
