@@ -241,6 +241,7 @@ function AutomacoesSection() {
   const [dry, setDry] = useState("")
   const [busy, setBusy] = useState(false)
   const [runOut, setRunOut] = useState("")
+  const [resumo, setResumo] = useState("")
   const [saude, setSaude] = useState<{
     instancias?: { instance: string; state: string }[]
     automacoes?: { name: string; status: string; conectada: boolean }[]
@@ -362,6 +363,22 @@ function AutomacoesSection() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Resumo das 18h (Kleber)</CardTitle></CardHeader>
+        <CardContent>
+          <p className="mb-2 text-xs text-muted-foreground">Prévia exata do que a IA enviará hoje às 18h (seg–sex). Não envia nada.</p>
+          <button type="button" disabled={busy} className={btn(true)} onClick={async () => {
+            setBusy(true)
+            try {
+              const r = await fetch("/api/automation/resumo-diario?dry=1")
+              const j = await r.json()
+              setResumo(j.ok ? String(j.texto ?? "") : `Falha: ${j.erro ?? "?"}`)
+            } catch { setResumo("Falha de rede.") }
+            setBusy(false)
+          }}>Pré-visualizar resumo de hoje</button>
+          {resumo && <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted p-3 text-xs">{resumo}</pre>}
         </CardContent>
       </Card>
       <Card>
