@@ -625,7 +625,8 @@ export async function runWorker() {
 
         const maxDaily = automation.limits_config.max_daily_sends ?? 50
         if ((todayCount ?? 0) >= maxDaily) {
-          await wsupabase.from("automation_jobs").update({ status: "blocked_limit" }).eq("id", job.id)
+          // Teto do dia: mantém scheduled (tenta de novo amanhã) em vez de
+          // marcar blocked_limit terminal — senão a fila apodrece para sempre.
           await releaseLock(job.id)
           continue
         }
