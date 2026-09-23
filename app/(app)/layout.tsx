@@ -126,8 +126,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Servidor já embutiu a marca (sem flash); aqui só confirma/atualiza.
     const boot = getInitialBrand()
-    if (boot) { applyBrand({ ...BRAND_DEFAULTS, ...boot }); setBrand((b) => b ?? ({ ...BRAND_DEFAULTS, ...boot } as BrandSettings)); return }
-    loadBrand().then((r) => { applyBrand(r.settings); setBrand(r.settings) }).catch(() => {})
+    if (boot) { applyBrand({ ...BRAND_DEFAULTS, ...boot }); setBrand((b) => b ?? ({ ...BRAND_DEFAULTS, ...boot } as BrandSettings)); }
+    else loadBrand().then((r) => { applyBrand(r.settings); setBrand(r.settings) }).catch(() => {})
+    // Etapas editáveis no Master: aplica overrides do banco (rótulos, ordem, visibilidade).
+    import("@/lib/pipeline-stages").then((m) => m.loadStagesOverride().catch(() => {})).catch(() => {})
   }, [])
 
   useEffect(() => {

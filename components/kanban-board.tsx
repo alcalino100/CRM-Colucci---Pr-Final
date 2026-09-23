@@ -66,6 +66,14 @@ export function KanbanBoard({
   const [query, setQuery] = useState("")
   const [showArchived, setShowArchived] = useState(false)
   const [tagColorMap, setTagColorMap] = useState<Record<string, string>>({})
+  // Etapas editáveis no Master: relê rótulos/visibilidade quando mudarem,
+  // sem exigir reload da página.
+  const [, setStagesTick] = useState(0)
+  useEffect(() => {
+    const h = () => setStagesTick((t) => t + 1)
+    window.addEventListener("crm-stages-change", h)
+    return () => window.removeEventListener("crm-stages-change", h)
+  }, [])
 
   useEffect(() => {
     fetch("/api/tags")

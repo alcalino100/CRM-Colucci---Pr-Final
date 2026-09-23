@@ -46,6 +46,11 @@ export async function loadStagesOverride(): Promise<boolean> {
     LEAD_STATUSES.push(...ativas)
     CORRETOR_HIDDEN.clear()
     for (const r of rows) if (!r.visivel_corretor) CORRETOR_HIDDEN.add(r.key)
+    // Avisa telas já montadas (kanban) para reler — sem isso, quem não
+    // recarrega a página nunca vê a mudança (ponta solta clássica).
+    try {
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("crm-stages-change"))
+    } catch { /* best-effort */ }
     return true
   } catch {
     return false
