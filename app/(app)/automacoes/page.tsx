@@ -240,7 +240,7 @@ export default function AutomacoesPage() {
 
       {/* Ver dia: isola um dia por vez (BRT) */}
       <Card>
-        <CardContent>
+        <CardContent className="p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ver dia:</span>
             {(["hoje", "ontem"] as const).map((p) => {
@@ -249,7 +249,7 @@ export default function AutomacoesPage() {
               const iso = d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
               return (
                 <button key={p} type="button" onClick={() => setDia(iso)}
-                  className={cn("rounded-full border px-3 py-1 text-xs font-medium transition",
+                  className={cn("rounded-full border px-3 py-1.5 text-xs font-medium transition",
                     dia === iso ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>
                   {p === "hoje" ? "Hoje" : "Ontem"}
                 </button>
@@ -260,18 +260,28 @@ export default function AutomacoesPage() {
             {diaBusy && <span className="text-xs text-muted-foreground">carregando...</span>}
           </div>
           {diaStats && (
-            <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <MetricCard icon={MessageCircle} label={`Enviadas (${dia.split("-").reverse().join("/")})`} value={diaStats.enviadas} color="text-blue-600" />
-              <MetricCard icon={CheckCircle2} label="Responderam" value={diaStats.respondidas} color="text-emerald-600" />
-              <MetricCard icon={Eye} label="Taxa resposta %" value={diaStats.taxa} color="text-teal-600" />
-              <MetricCard icon={Clock} label="Jobs criados" value={diaStats.criados} color="text-amber-600" />
+            <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border pt-4 md:grid-cols-4">
+              {[
+                { icon: MessageCircle, v: diaStats.enviadas, l: `Enviadas (${dia.split("-").reverse().join("/")})` },
+                { icon: CheckCircle2, v: diaStats.respondidas, l: "Responderam" },
+                { icon: Eye, v: `${diaStats.taxa}%`, l: "Taxa resposta" },
+                { icon: Clock, v: diaStats.criados, l: "Jobs criados" },
+              ].map((s) => (
+                <div key={s.l} className="flex items-center gap-3">
+                  <s.icon className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="text-2xl font-bold leading-tight tabular-nums">{s.v}</p>
+                    <p className="truncate text-xs text-muted-foreground">{s.l}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* Métricas principais */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
         <MetricCard icon={Zap} label="Automações Ativas" value={metrics?.active_automations ?? 0} color="text-primary" />
         <MetricCard icon={Users} label="Leads Analisados Hoje" value={metrics?.leads_analyzed_today ?? 0} color="text-sky-600" />
         <MetricCard icon={CheckCircle2} label="Leads Elegíveis" value={metrics?.leads_eligible_today ?? 0} color="text-emerald-600" />
@@ -285,58 +295,58 @@ export default function AutomacoesPage() {
       </div>
 
       {/* Métricas secundárias */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
-          <CardContent className="flex items-center gap-4 p-4">
+          <CardContent className="flex items-center gap-4 p-5">
             <div className="flex size-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <CheckCircle2 className="size-5" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{metrics?.response_rate ?? 0}%</p>
+              <p className="text-2xl font-bold tabular-nums">{metrics?.response_rate ?? 0}%</p>
               <p className="text-xs text-muted-foreground">Taxa de Resposta</p>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex items-center gap-4 p-4">
+          <CardContent className="flex items-center gap-4 p-5">
             <div className="flex size-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
               <Users className="size-5" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{metrics?.cancel_rate ?? 0}%</p>
+              <p className="text-2xl font-bold tabular-nums">{metrics?.cancel_rate ?? 0}%</p>
               <p className="text-xs text-muted-foreground">Cancelamento por Ação Humana</p>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex items-center gap-4 p-4">
+          <CardContent className="flex items-center gap-4 p-5">
             <div className="flex size-10 items-center justify-center rounded-full bg-red-100 text-red-600">
               <Shield className="size-5" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{metrics?.supervisions_applied ?? 0}</p>
+              <p className="text-2xl font-bold tabular-nums">{metrics?.supervisions_applied ?? 0}</p>
               <p className="text-xs text-muted-foreground">Supervisões Aplicadas</p>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex items-center gap-4 p-4">
+          <CardContent className="flex items-center gap-4 p-5">
             <div className="flex size-10 items-center justify-center rounded-full bg-sky-100 text-sky-600">
               <Clock className="size-5" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{metrics?.median_response_minutes ?? 0} min</p>
+              <p className="text-2xl font-bold tabular-nums">{metrics?.median_response_minutes ?? 0} min</p>
               <p className="text-xs text-muted-foreground">Tempo mediano até responder</p>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex items-center gap-4 p-4">
+          <CardContent className="flex items-center gap-4 p-5">
             <div className="flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
               <Users className="size-5" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{metrics?.follow_up_pool ?? 0}</p>
+              <p className="text-2xl font-bold tabular-nums">{metrics?.follow_up_pool ?? 0}</p>
               <p className="text-xs text-muted-foreground">Fila de follow-up (enviados sem resposta)</p>
             </div>
           </CardContent>
@@ -430,15 +440,15 @@ export default function AutomacoesPage() {
 
 function MetricCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
   return (
-    <Card className="relative overflow-hidden">
-      <CardContent className="p-4">
+    <Card className="relative h-full overflow-hidden">
+      <CardContent className="h-full p-5">
         <div className="flex items-center gap-3">
-          <div className={cn("flex size-9 items-center justify-center rounded-lg bg-muted", color)}>
+          <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted", color)}>
             <Icon className="size-4.5" />
           </div>
-          <div>
-            <p className="text-xl font-bold leading-tight">{value}</p>
-            <p className="text-xs text-muted-foreground">{label}</p>
+          <div className="min-w-0">
+            <p className="text-2xl font-bold leading-tight tabular-nums">{value}</p>
+            <p className="truncate text-xs text-muted-foreground">{label}</p>
           </div>
         </div>
       </CardContent>
