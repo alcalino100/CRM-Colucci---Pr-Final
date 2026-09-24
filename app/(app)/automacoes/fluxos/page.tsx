@@ -4,6 +4,7 @@ import { ChevronRight, Workflow } from "lucide-react"
 import { PageHeading } from "@/components/ui/page-heading"
 import FlowList, { FlowListSkeleton } from "@/components/automation/flow-list"
 import FlowEditor from "@/components/automation/flow-editor"
+import { RequireGestor } from "@/components/RequireGestor"
 import { EditorSkeleton } from "@/components/automation/flow-editor"
 
 // Server Component — Next 16: searchParams é uma Promise (async).
@@ -15,6 +16,7 @@ export default async function FluxosPage({
   const { fluxo } = await searchParams
 
   return (
+    <RequireGestor>
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <PageHeading
@@ -47,5 +49,6 @@ export default async function FluxosPage({
         As alterações são salvas localmente neste dispositivo (demo). Em breve serão sincronizadas com o CRM.
       </p>
     </div>
+    </RequireGestor>
   )
 }

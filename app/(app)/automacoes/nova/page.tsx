@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, Badge, Input, Textarea, Label
 import { useAutomation } from "@/lib/automation-store"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
+import { isGestorNivel } from "@/lib/roles"
 import {
   MESSAGE_VARIABLES,
   type Automation,
@@ -53,6 +54,11 @@ export default function NovaAutomacaoPage() {
 
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (user && !isGestorNivel(user.role)) router.replace("/painel-corretor")
+  }, [user, router])
+  if (user && !isGestorNivel(user.role)) return null
 
   // Form state
   const [name, setName] = useState("")

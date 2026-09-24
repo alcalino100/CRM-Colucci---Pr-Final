@@ -8,8 +8,25 @@ import { useAutomation } from "@/lib/automation-store"
 import { useLeads } from "@/lib/leads-store"
 import { AUTOMATION_STATUS_LABEL, AUTOMATION_STATUS_VARIANT, type Automation } from "@/lib/automation-types"
 import { fmtDateTime } from "@/lib/labels"
+import { useAuth } from "@/lib/auth-context"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
+import { isGestorNivel } from "@/lib/roles"
+
+function useAuthSafeGate() {
+  const { user, loading } = useAuth()
+  const router = useRouter()
+  useEffect(() => {
+    if (!loading && user && !isGestorNivel(user.role)) router.replace("/painel-corretor")
+  }, [loading, user, router])
+  return { user, loading, bloqueado: !loading && !!user && !isGestorNivel(user.role) }
+}
 
 export default function RegrasPage() {
+  const { user, loading: gateLoading, bloqueado } = useAuthSafeGate()
+  if (gateLoading) return <div className="py-16 text-center text-muted-foreground">Carregando...</div>
+  if (bloqueado || !user) return null
+
   const { automations, toggleAutomation, deleteAutomation } = useAutomation()
   const { users } = useLeads()
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)

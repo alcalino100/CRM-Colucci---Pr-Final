@@ -14,6 +14,10 @@ import { ControlCenter } from "@/components/ai-agents/ControlCenter"
 import { TagsPanel } from "@/components/ai-agents/TagsPanel"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
+import { isGestorNivel } from "@/lib/roles"
 
 const TABS = [
   { id:"control", label:"Controle & Dashboard" },
@@ -40,7 +44,20 @@ class PanelBoundary extends Component<{ children: ReactNode }, { erro: string | 
   }
 }
 
+function useAuthSafeGate() {
+  const { user, loading } = useAuth()
+  const router = useRouter()
+  useEffect(() => {
+    if (!loading && user && !isGestorNivel(user.role)) router.replace("/painel-corretor")
+  }, [loading, user, router])
+  return { user, loading, bloqueado: !loading && !!user && !isGestorNivel(user.role) }
+}
+
 export default function AIAgentEditor({ params }: { params: Promise<{id:string}> }){
+  const { user, loading: gateLoading, bloqueado } = useAuthSafeGate()
+  if (gateLoading) return <div className="py-16 text-center text-muted-foreground">Carregando...</div>
+  if (bloqueado || !user) return null
+
   const { id } = use(params)
   const agent = useAIAgentsStore(s=> s.agents.find(a=>a.id===id))
   const [tab, setTab] = useState<typeof TABS[number]["id"]>("bot")

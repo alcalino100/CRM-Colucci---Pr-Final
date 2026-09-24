@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox, ChevronDown, Bot, Crown } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
-import { isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
+import { ROLE_LABEL, isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
 import { BRAND_DEFAULTS, applyBrand, getInitialBrand, isMasterEmail, loadBrand, type BrandSettings } from "@/lib/master"
 import { ToastProvider } from "@/components/ui/primitives"
 import { BRTClock } from "@/lib/timezone"
@@ -34,7 +34,7 @@ function TopbarAvatar({ userId, initials }: { userId: string; initials: string }
 
 const NAV: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/inbox", label: "Inbox", icon: Inbox, roles: ["gestor"] },
-  { href: "/contacts", label: "Contacts", icon: UsersRound, roles: ["gestor"] },
+  { href: "/contacts", label: "Contatos", icon: UsersRound, roles: ["gestor"] },
   { href: "/follow-ups", label: "Follow-ups", icon: Zap, roles: ["gestor"] },
   { href: "/painel-corretor", label: "Kanban", icon: KanbanSquare, roles: ["corretor", "gestor"] },
   { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["corretor", "gestor"] },
@@ -255,7 +255,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <span className="px-3 text-xs uppercase tracking-wide text-sidebar-foreground/70">
-          {nivel === "master" ? "Gestor Master" : nivel === "gestor" ? "Gestor" : "Corretor"}
+          {ROLE_LABEL[user.role] ?? "Corretor"}
         </span>
       </div>
     </>

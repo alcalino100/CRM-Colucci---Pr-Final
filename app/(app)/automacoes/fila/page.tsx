@@ -7,8 +7,25 @@ import { useAutomation } from "@/lib/automation-store"
 import { useLeads } from "@/lib/leads-store"
 import { AUTOMATION_JOB_STATUS_LABEL, AUTOMATION_JOB_STATUS_VARIANT, type AutomationJob } from "@/lib/automation-types"
 import { fmtDateTime } from "@/lib/labels"
+import { useAuth } from "@/lib/auth-context"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
+import { isGestorNivel } from "@/lib/roles"
+
+function useAuthSafeGate() {
+  const { user, loading } = useAuth()
+  const router = useRouter()
+  useEffect(() => {
+    if (!loading && user && !isGestorNivel(user.role)) router.replace("/painel-corretor")
+  }, [loading, user, router])
+  return { user, loading, bloqueado: !loading && !!user && !isGestorNivel(user.role) }
+}
 
 export default function FilaPage() {
+  const { user, loading: gateLoading, bloqueado } = useAuthSafeGate()
+  if (gateLoading) return <div className="py-16 text-center text-muted-foreground">Carregando...</div>
+  if (bloqueado || !user) return null
+
   const { jobs, automations, cancelJob, clearQueue, rerunJob } = useAutomation()
   const { users, leads } = useLeads()
   const [filterStatus, setFilterStatus] = useState<string>("all")
