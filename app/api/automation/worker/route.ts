@@ -466,6 +466,10 @@ export async function runWorker() {
             new_status: "scheduled",
             payload: { scheduled_at: scheduledAt, lead_nome: lead.nome },
           })
+        } else if (String(error.message || "").includes("duplicate") || String((error as { code?: string }).code || "") === "23505") {
+          // Corrida entre rodadas simultâneas: outra rodada criou primeiro
+          // (índice único parcial). Não é erro — conta como job ativo.
+          rejections.has_active_job++
         } else {
           rejections.insert_error++
           rejectionDetails.push({ lead_id: lead.id, lead_nome: lead.nome, reason: `Erro ao criar job: ${error.message}` })
