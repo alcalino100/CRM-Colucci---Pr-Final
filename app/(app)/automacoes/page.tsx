@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth-context"
 import { AUTOMATION_STATUS_LABEL, AUTOMATION_STATUS_VARIANT, AUTOMATION_JOB_STATUS_LABEL, AUTOMATION_JOB_STATUS_VARIANT, type AutomationJob } from "@/lib/automation-types"
 import { fmtDateTime } from "@/lib/labels"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabase/client"
 import { EmergencyPauseButton } from "@/components/automation/EmergencyPauseButton"
 
 export default function AutomacoesPage() {
@@ -21,6 +22,42 @@ export default function AutomacoesPage() {
   const [workerRunning, setWorkerRunning] = useState(false)
   const [workerResult, setWorkerResult] = useState<{ ok: boolean; message: string; details?: any } | null>(null)
   const [lastRun, setLastRun] = useState<{ timestamp: string; description?: string } | null>(null)
+  // Ver dia: métricas isoladas por data (BRT), sem misturar dias.
+  const hojeBRT = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
+  const [dia, setDia] = useState(hojeBRT)
+  const [diaStats, setDiaStats] = useState<{ enviadas: number; respondidas: number; taxa: number; criados: number } | null>(null)
+  const [diaBusy, setDiaBusy] = useState(false)
+
+  const carregarDia = async (isoDia: string) => {
+    setDiaBusy(true)
+    try {
+      const ini = `${isoDia}T03:00:00Z`
+      const fdt = new Date(`${isoDia}T12:00:00Z`)
+      fdt.setDate(fdt.getDate() + 1)
+      const fim = `${fdt.toISOString().slice(0, 10)}T03:00:00Z`
+      const [sEnv, sResp, sCri] = await Promise.all([
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("sent_at", ini).lt("sent_at", fim),
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("responded_at", ini).lt("responded_at", fim),
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("created_at", ini).lt("created_at", fim),
+      ])
+      const enviadas = (sEnv as { count: number | null }).count ?? 0
+      const respondidas = (sResp as { count: number | null }).count ?? 0
+      setDiaStats({
+        enviadas,
+        respondidas,
+        taxa: enviadas ? Math.round((respondidas / enviadas) * 1000) / 10 : 0,
+        criados: (sCri as { count: number | null }).count ?? 0,
+      })
+    } catch {
+      setDiaStats(null)
+    }
+    setDiaBusy(false)
+  }
+
+  useEffect(() => {
+    carregarDia(dia)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dia, storeReady])
 
   useEffect(() => {
     if (!storeReady) return
@@ -197,6 +234,38 @@ export default function AutomacoesPage() {
           </div>
           {lastRun?.description && (
             <p className="max-w-md truncate text-xs text-muted-foreground sm:text-right" title={lastRun.description}>{lastRun.description}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Ver dia: isola um dia por vez (BRT) */}
+      <Card>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ver dia:</span>
+            {(["hoje", "ontem"] as const).map((p) => {
+              const d = new Date()
+              if (p === "ontem") d.setDate(d.getDate() - 1)
+              const iso = d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
+              return (
+                <button key={p} type="button" onClick={() => setDia(iso)}
+                  className={cn("rounded-full border px-3 py-1 text-xs font-medium transition",
+                    dia === iso ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>
+                  {p === "hoje" ? "Hoje" : "Ontem"}
+                </button>
+              )
+            })}
+            <input type="date" value={dia} onChange={(e) => e.target.value && setDia(e.target.value)} aria-label="Escolher dia"
+              className="h-8 w-auto rounded-lg border border-input bg-background px-2 text-xs" />
+            {diaBusy && <span className="text-xs text-muted-foreground">carregando...</span>}
+          </div>
+          {diaStats && (
+            <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <MetricCard icon={MessageCircle} label={`Enviadas (${dia.split("-").reverse().join("/")})`} value={diaStats.enviadas} color="text-blue-600" />
+              <MetricCard icon={CheckCircle2} label="Responderam" value={diaStats.respondidas} color="text-emerald-600" />
+              <MetricCard icon={Eye} label="Taxa resposta %" value={diaStats.taxa} color="text-teal-600" />
+              <MetricCard icon={Clock} label="Jobs criados" value={diaStats.criados} color="text-amber-600" />
+            </div>
           )}
         </CardContent>
       </Card>
