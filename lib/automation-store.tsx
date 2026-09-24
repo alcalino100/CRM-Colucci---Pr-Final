@@ -180,37 +180,64 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
   }, [])
 
   // ---------- Métricas do dashboard ----------
+  // Regra de ouro: dia = BRT e contagens server-side. Contar linhas no cliente
+  // com limite de janela gerava números diferentes a cada tela (ex.: 20 vs 19).
   const loadDashboardMetrics = useCallback(async (): Promise<DashboardMetrics> => {
-    const hoje = new Date()
-    hoje.setHours(0, 0, 0, 0)
-    const hojeISO = hoje.toISOString()
+    const diaBRT = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
+    const hojeStr = diaBRT(new Date())
+    const ini = `${hojeStr}T03:00:00Z`
+    const fdt = new Date(`${hojeStr}T12:00:00Z`)
+    fdt.setDate(fdt.getDate() + 1)
+    const fim = `${fdt.toISOString().slice(0, 10)}T03:00:00Z`
 
-    const [automationsRes, jobsRes] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cnt = async (build: (q: any) => any): Promise<number> => {
+      try {
+        const r = await build(supabase.from("automation_jobs").select("id", { count: "exact", head: true }))
+        return (r as { count: number | null }).count ?? 0
+      } catch {
+        return 0
+      }
+    }
+
+    const [automationsRes, jobsRes, sentToday, respToday, criadosHoje, elegiveisHoje] = await Promise.all([
       supabase.from("automations").select("id", { count: "exact", head: true }).eq("status", "active").is("deleted_at", null),
-      // Ordenado + limite alto: sem isso o PostgREST devolve 1000 linhas
-      // arbitrárias e os envios de hoje somem do painel.
       supabase.from("automation_jobs").select("status, created_at, sent_at, responded_at").order("created_at", { ascending: false }).limit(5000),
+      cnt((q) => q.gte("sent_at", ini).lt("sent_at", fim)),
+      cnt((q) => q.gte("responded_at", ini).lt("responded_at", fim)),
+      cnt((q) => q.gte("created_at", ini).lt("created_at", fim)),
+      cnt((q) => q.gte("created_at", ini).lt("created_at", fim).in("status", ["scheduled", "pending_validation"])),
     ])
 
     const allJobs = (jobsRes.data ?? []) as { status: string; created_at: string; sent_at: string | null; responded_at: string | null }[]
-    const todayJobs = allJobs.filter((j) => new Date(j.created_at) >= hoje)
 
-    const counts: Record<string, number> = {}
-    for (const j of allJobs) counts[j.status] = (counts[j.status] || 0) + 1
-    const todayCounts: Record<string, number> = {}
-    for (const j of todayJobs) todayCounts[j.status] = (todayCounts[j.status] || 0) + 1
-
-    const totalSent = (counts.sent ?? 0) + (counts.delivered ?? 0) + (counts.read ?? 0) + (counts.responded ?? 0)
-    const responseRate = totalSent > 0 ? ((counts.responded ?? 0) / totalSent) * 100 : 0
-    const cancelRate = allJobs.length > 0 ? ((counts.cancelled_human ?? 0) / allJobs.length) * 100 : 0
-    const failureRate = allJobs.length > 0 ? ((counts.failed ?? 0) / allJobs.length) * 100 : 0
-
-    // Enviados hoje: baseado em sent_at (não no status), senão jobs que já responderam
-    // deixariam de ser contados como enviados.
-    const sentToday = allJobs.filter((j) => j.sent_at && new Date(j.sent_at) >= hoje).length
+    // Acumulados exatos (server-side, sem janela): entregues/lidos/fila/cancelados.
+    const [nDelivered, nRead, nSched, nCancel, nFail, nSuperv, nSentAll, nRespAll] = await Promise.all([
+      cnt((q) => q.eq("status", "delivered")),
+      cnt((q) => q.eq("status", "read")),
+      cnt((q) => q.in("status", ["scheduled", "pending_validation"])),
+      cnt((q) => q.eq("status", "cancelled_human")),
+      cnt((q) => q.eq("status", "failed")),
+      cnt((q) => q.eq("status", "supervision_applied")),
+      cnt((q) => q.in("status", ["sent", "delivered", "read", "responded"])),
+      cnt((q) => q.eq("status", "responded")),
+    ])
+    const counts: Record<string, number> = {
+      delivered: nDelivered,
+      read: nRead,
+      scheduled: nSched,
+      cancelled_human: nCancel,
+      failed: nFail,
+      supervision_applied: nSuperv,
+    }
+    // Taxa de resposta DO DIA (mesma base do "Ver dia"): respondidos/enviados.
+    const responseRate = sentToday > 0 ? (respToday / sentToday) * 100 : 0
+    const totalBase = nSched + sentToday + nDelivered + nRead + respToday + nCancel + nFail
+    const cancelRate = totalBase > 0 ? (nCancel / totalBase) * 100 : 0
+    const failureRate = totalBase > 0 ? (nFail / totalBase) * 100 : 0
 
     // Fila de follow-up: enviados que ainda não responderam (candidatos a uma próxima automação).
-    const followUpPool = (counts.sent ?? 0) + (counts.delivered ?? 0) + (counts.read ?? 0)
+    const followUpPool = Math.max(0, nSentAll - nRespAll)
 
     // Tempo mediano até responder (minutos), entre os que responderam.
     const responseMinutes = allJobs
@@ -224,16 +251,16 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
 
     return {
       active_automations: (automationsRes.count ?? 0),
-      leads_analyzed_today: todayJobs.length,
-      leads_eligible_today: (todayCounts.scheduled ?? 0) + (todayCounts.pending_validation ?? 0),
-      messages_scheduled: (counts.scheduled ?? 0) + (counts.pending_validation ?? 0),
+      leads_analyzed_today: criadosHoje,
+      leads_eligible_today: elegiveisHoje,
+      messages_scheduled: nSched,
       messages_sent_today: sentToday,
-      messages_delivered: (counts.delivered ?? 0),
-      messages_read: (counts.read ?? 0),
-      leads_responded: (counts.responded ?? 0),
-      cancelled_by_human: (counts.cancelled_human ?? 0),
-      send_failures: (counts.failed ?? 0),
-      supervisions_applied: (counts.supervision_applied ?? 0),
+      messages_delivered: nDelivered,
+      messages_read: nRead,
+      leads_responded: respToday,
+      cancelled_by_human: nCancel,
+      send_failures: nFail,
+      supervisions_applied: nSuperv,
       response_rate: Math.round(responseRate * 10) / 10,
       cancel_rate: Math.round(cancelRate * 10) / 10,
       failure_rate: Math.round(failureRate * 10) / 10,
