@@ -28,13 +28,12 @@ const PIPELINE_PROB: Record<LeadStatus, number> = {
   "imovel necessidade": 0.3,
   permuta: 0.4,
   "visita agendada": 0.45,
-  "reuniao agendada": 0.5,
   negociando: 0.75,
   fechado: 1,
   perdido: 0,
 }
-const ETAPAS_PIPELINE: LeadStatus[] = ["novo", "em_atendimento", "em_followup", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "reuniao agendada", "negociando"]
-const FUNIL: LeadStatus[] = ["novo", "em_atendimento", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "reuniao agendada", "negociando", "fechado"]
+const ETAPAS_PIPELINE: LeadStatus[] = ["novo", "em_atendimento", "em_followup", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "negociando"]
+const FUNIL: LeadStatus[] = ["novo", "em_atendimento", "escolhendo opcoes", "imovel necessidade", "permuta", "visita agendada", "negociando", "fechado"]
 
 function ymdLocal(d: Date) {
   return d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })

@@ -230,7 +230,7 @@ export function KanbanBoard({
       notify(`Seu lead ${lead.nome} foi movido para "${STATUS_LABEL[newStatus]}"`, { tipo: "pipeline", paraUsuarioId: lead.corretorId, leadId: lead.id })
     }
 
-    if (newStatus === "reuniao agendada") {
+    if (newStatus === "visita agendada") {
       setVData(new Date().toISOString().slice(0, 10))
       setVHora("10:00")
       setVCorretor(lead.corretorId || currentCorretorId)

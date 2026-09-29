@@ -29,7 +29,6 @@ export const SYSTEM_STAGE_KEYS: ReadonlySet<string> = new Set([
   "atendimento_humano",
   "em_followup",
   "visita agendada",
-  "reuniao agendada",
   "negociando",
   "fechado",
   "perdido",

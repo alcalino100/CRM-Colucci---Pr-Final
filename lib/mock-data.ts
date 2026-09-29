@@ -16,7 +16,6 @@ export type LeadStatus =
   | "em_followup"
   | "escolhendo opcoes"
   | "visita agendada"
-  | "reuniao agendada"
   | "negociando"
   | "fechado"
   | "imovel necessidade"

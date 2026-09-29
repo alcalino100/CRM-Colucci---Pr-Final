@@ -87,7 +87,7 @@ export default function AgendaPage() {
       return
     }
     addVisit({ leadId: lead.id, data, hora, corretorId: lead.corretorId, imovelRef: refs.trim(), referencias: refs.trim(), observacoes: obs })
-    updateLead(lead.id, { status: "reuniao agendada" })
+    updateLead(lead.id, { status: "visita agendada" })
     addInteraction(lead.id, { corretor: userName(lead.corretorId), texto: `Visita agendada via agenda para ${data.split("-").reverse().join("/")} às ${hora}.` })
     toast("Visita agendada. Status do lead atualizado.")
     setSelected(data)
