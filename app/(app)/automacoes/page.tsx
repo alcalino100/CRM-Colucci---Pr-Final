@@ -27,6 +27,17 @@ export default function AutomacoesPage() {
   const [dia, setDia] = useState(hojeBRT)
   const [diaStats, setDiaStats] = useState<{ enviadas: number; respondidas: number; taxa: number; criados: number } | null>(null)
   const [diaBusy, setDiaBusy] = useState(false)
+  // Por linha: enviadas/respondidas/taxa/fila de cada número WhatsApp no dia (BRT).
+  const [diaLinhas, setDiaLinhas] = useState<{ connId: string; nome: string; numero: string; enviadas: number; respondidas: number; taxa: number; fila: number }[] | null>(null)
+
+  // Hash estável idêntico ao do worker (escolherConexaoAutomacao): prevê a linha
+  // de cada lead na roleta fixa sem precisar esperar o envio.
+  function indiceLinha(leadId: string, n: number): number {
+    let h = 0
+    const s = String(leadId ?? "")
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+    return n > 0 ? h % n : 0
+  }
 
   const carregarDia = async (isoDia: string) => {
     setDiaBusy(true)
@@ -35,10 +46,14 @@ export default function AutomacoesPage() {
       const fdt = new Date(`${isoDia}T12:00:00Z`)
       fdt.setDate(fdt.getDate() + 1)
       const fim = `${fdt.toISOString().slice(0, 10)}T03:00:00Z`
-      const [sEnv, sResp, sCri] = await Promise.all([
+      const [sEnv, sResp, sCri, sJobsDia, sRespDia, sInst] = await Promise.all([
         supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("sent_at", ini).lt("sent_at", fim),
         supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("responded_at", ini).lt("responded_at", fim),
         supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("created_at", ini).lt("created_at", fim),
+        // Linhas detalhadas do dia p/ rateio por conexão (volumes diários: centenas).
+        supabase.from("automation_jobs").select("id,automation_id,metadata,responded_at").gte("sent_at", ini).lt("sent_at", fim).limit(5000),
+        supabase.from("automation_jobs").select("id,automation_id,metadata").gte("responded_at", ini).lt("responded_at", fim).limit(5000),
+        supabase.from("whatsapp_instancias").select("id,instance_name,numero").limit(100),
       ])
       const enviadas = (sEnv as { count: number | null }).count ?? 0
       const respondidas = (sResp as { count: number | null }).count ?? 0
@@ -48,6 +63,59 @@ export default function AutomacoesPage() {
         taxa: enviadas ? Math.round((respondidas / enviadas) * 1000) / 10 : 0,
         criados: (sCri as { count: number | null }).count ?? 0,
       })
+      // Rateio por linha: conexão carimbada no envio (metadata); legado sem
+      // metadata cai na conexão única da automação (mesma regra do worker).
+      try {
+        const instRows = ((sInst as { data: any[] | null }).data ?? []) as { id: string; instance_name: string; numero: string | null }[]
+        const nomeInst = new Map(instRows.map((r) => [r.id, r]))
+        const connLegado = new Map(automations.map((a) => [a.id, a.whatsapp_connection_id ?? null]))
+        const connDe = (j: { automation_id: string; metadata?: any }): string | null =>
+          (j.metadata as Record<string, unknown> | null)?.["connection_id"] as string ??
+          connLegado.get(j.automation_id) ?? null
+        const agg = new Map<string, { enviadas: number; respondidas: number }>()
+        const jobsDia = ((sJobsDia as { data: any[] | null }).data ?? []) as { automation_id: string; metadata?: any }[]
+        for (const j of jobsDia) {
+          const c = connDe(j)
+          if (!c) continue
+          const e = agg.get(c) ?? { enviadas: 0, respondidas: 0 }
+          e.enviadas += 1
+          agg.set(c, e)
+        }
+        const respDia = ((sRespDia as { data: any[] | null }).data ?? []) as { automation_id: string; metadata?: any }[]
+        for (const j of respDia) {
+          const c = connDe(j)
+          if (!c) continue
+          const e = agg.get(c) ?? { enviadas: 0, respondidas: 0 }
+          e.respondidas += 1
+          agg.set(c, e)
+        }
+        // Fila prevista por linha (roleta fixa aplicada aos agendados).
+        const filaPorConn = new Map<string, number>()
+        for (const j of jobs) {
+          if (!["scheduled", "pending_validation", "retrying"].includes(j.status)) continue
+          const a = automations.find((x) => x.id === j.automation_id)
+          const lista = (a?.trigger_config as Record<string, unknown> | undefined)?.["connection_ids"]
+          const conns = Array.isArray(lista) && lista.length > 1 ? (lista as string[]) : a?.whatsapp_connection_id ? [a.whatsapp_connection_id] : []
+          if (!conns.length) continue
+          const c = conns[indiceLinha(j.lead_id, conns.length)]
+          filaPorConn.set(c, (filaPorConn.get(c) ?? 0) + 1)
+        }
+        const linhas = [...agg.entries()].map(([connId, v]) => {
+          const inst = nomeInst.get(connId)
+          return {
+            connId,
+            nome: inst?.instance_name ?? "Linha",
+            numero: inst?.numero ? String(inst.numero).replace(/^55/, "") : "",
+            enviadas: v.enviadas,
+            respondidas: v.respondidas,
+            taxa: v.enviadas ? Math.round((v.respondidas / v.enviadas) * 1000) / 10 : 0,
+            fila: filaPorConn.get(connId) ?? 0,
+          }
+        }).sort((x, y) => y.enviadas - x.enviadas)
+        setDiaLinhas(linhas)
+      } catch {
+        setDiaLinhas(null)
+      }
     } catch {
       setDiaStats(null)
     }
@@ -57,7 +125,7 @@ export default function AutomacoesPage() {
   useEffect(() => {
     carregarDia(dia)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dia, storeReady])
+  }, [dia, storeReady, jobs.length])
 
   useEffect(() => {
     if (!storeReady) return
@@ -275,6 +343,34 @@ export default function AutomacoesPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {diaLinhas && diaLinhas.length > 0 && (
+            <div className="mt-5 border-t border-border pt-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Por linha · WhatsApp</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {diaLinhas.map((l) => (
+                  <div key={l.connId} className="rounded-lg border border-border/60 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold">{l.nome}</p>
+                      {l.numero && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{l.numero}</span>}
+                    </div>
+                    <div className="mt-2 grid grid-cols-4 gap-2 text-center">
+                      {[
+                        { v: l.enviadas, l: "Enviadas" },
+                        { v: l.respondidas, l: "Responderam" },
+                        { v: `${l.taxa}%`, l: "Taxa" },
+                        { v: l.fila, l: "Na fila" },
+                      ].map((s) => (
+                        <div key={s.l}>
+                          <p className="text-lg font-bold leading-tight tabular-nums">{s.v}</p>
+                          <p className="text-[11px] text-muted-foreground">{s.l}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
