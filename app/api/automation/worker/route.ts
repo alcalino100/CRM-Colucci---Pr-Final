@@ -151,13 +151,15 @@ async function criarJobsFollowup(automation: any, results: { created: number }, 
       continue
     }
 
-    // Guarda mínima (targeting do follow-up): lead em atendimento/followup/novo, de tráfego pago, não fechado/arquivado.
+    // Guarda mínima (targeting do follow-up): lead em atendimento/followup/automação/novo, de tráfego pago, não fechado/arquivado.
+    // Inclui em_automacao porque a automação-mãe estaciona o lead nesse estágio após a msg1 —
+    // sem isso, os leads represavam em em_automacao e o follow-up nunca os alcançava (skip eterno).
     const { data: lead } = await wsupabase
       .from("leads")
       .select("id, nome, status, origem, corretor_id, arquivado_em, fechado_em")
       .eq("id", pj.lead_id)
       .maybeSingle()
-    if (!lead || !["novo", "em_atendimento", "em_followup"].includes(lead.status) || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) {
+    if (!lead || !["novo", "em_atendimento", "em_automacao", "em_followup"].includes(lead.status) || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) {
       await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead?.nome ?? pj.lead_id.slice(0,8)}: status=${lead?.status} origem=${lead?.origem} arquivado=${!!lead?.arquivado_em} fechado=${!!lead?.fechado_em}` })
       continue
     }
@@ -592,9 +594,10 @@ export async function runWorker() {
           .eq("id", job.lead_id)
           .maybeSingle()
 
-        // Automações normais exigem em_atendimento/em_automacao; follow-up aceita em_atendimento/em_followup
+        // Automações normais exigem em_atendimento/em_automacao; follow-up aceita em_atendimento/em_automacao/em_followup
+        // (em_automacao incluído: é onde a mãe estaciona o lead após a msg1)
         const isFollowup = automation.trigger_type === "no_response_followup"
-        const validStatuses = isFollowup ? ["em_atendimento", "em_followup"] : ["em_atendimento", "em_automacao"]
+        const validStatuses = isFollowup ? ["em_atendimento", "em_automacao", "em_followup"] : ["em_atendimento", "em_automacao"]
         const temTagFollowUp = tagsFollowUp.size > 0 && tagsDoLead(lead.referencias).some((t) => tagsFollowUp.has(t))
         if (!lead || !validStatuses.includes(lead.status) || (lead.origem !== "Tráfego Pago" && !temTagFollowUp) || lead.fechado_em || lead.arquivado_em) {
           await cancelJob(job.id, "Lead não atende mais às condições", "system")
