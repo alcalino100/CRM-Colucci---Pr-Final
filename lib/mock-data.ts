@@ -15,6 +15,7 @@ export type LeadStatus =
   | "atendimento_humano"
   | "em_followup"
   | "escolhendo opcoes"
+  | "visita agendada"
   | "reuniao agendada"
   | "negociando"
   | "fechado"

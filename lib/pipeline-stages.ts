@@ -28,6 +28,7 @@ export const SYSTEM_STAGE_KEYS: ReadonlySet<string> = new Set([
   "atendimento_ia",
   "atendimento_humano",
   "em_followup",
+  "visita agendada",
   "reuniao agendada",
   "negociando",
   "fechado",
@@ -47,7 +48,7 @@ export function slugifyKey(v: string): string {
 
 // Etapas invisíveis ao corretor (default = comportamento atual do kanban).
 // Mutável via banco; o kanban lê este Set em vez de literais.
-export const CORRETOR_HIDDEN: Set<string> = new Set(["em_followup", "em_automacao", "atendimento_ia", "perdido"])
+export const CORRETOR_HIDDEN: Set<string> = new Set(["em_followup", "em_automacao", "atendimento_ia"])
 
 function isLeadStatus(k: string): k is LeadStatus {
   return (LEAD_STATUSES as string[]).includes(k)

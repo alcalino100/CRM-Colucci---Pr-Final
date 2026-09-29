@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { DollarSign, Users, MessageCircle, Search, CalendarCheck, Handshake, Trophy, Banknote, Percent, TrendingUp, TrendingDown, ArrowRight } from "lucide-react"
+import { DollarSign, Users, MessageCircle, Search, MapPin, CalendarCheck, Handshake, Trophy, Banknote, Percent, TrendingUp, TrendingDown, ArrowRight } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives"
 import { cn } from "@/lib/utils"
 import type { Lead, LeadStatus } from "@/lib/mock-data"
@@ -12,7 +12,8 @@ const FUNIL_STAGES: { status: LeadStatus; label: string; icon: any; color: strin
   { status: "novo", label: "Leads Cadastrados", icon: Users, color: "#0ea5e9", gradient: "from-sky-400 to-sky-500" },
   { status: "em_atendimento", label: "Em Atendimento", icon: MessageCircle, color: "#4f46e5", gradient: "from-indigo-400 to-indigo-500" },
   { status: "escolhendo opcoes", label: "Separando Opções", icon: Search, color: "#6366f1", gradient: "from-violet-400 to-violet-500" },
-  { status: "reuniao agendada", label: "Reunião Agendada", icon: CalendarCheck, color: "#f59e0b", gradient: "from-amber-400 to-amber-500" },
+  { status: "visita agendada", label: "Visita Agendada", icon: MapPin, color: "#f59e0b", gradient: "from-amber-400 to-amber-500" },
+  { status: "reuniao agendada", label: "Reunião Agendada", icon: CalendarCheck, color: "#6366f1", gradient: "from-indigo-400 to-indigo-500" },
   { status: "negociando", label: "Negociando", icon: Handshake, color: "#b22222", gradient: "from-red-400 to-red-600" },
   { status: "fechado", label: "Fechados", icon: Trophy, color: "#16a34a", gradient: "from-emerald-400 to-emerald-600" },
 ]
