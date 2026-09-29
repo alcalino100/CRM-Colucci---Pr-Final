@@ -715,9 +715,12 @@ export async function runWorker() {
           .is("metadata->>connection_id" as never, null)
           .eq("automation_id", automation.id)
         const usandoRoleta = Array.isArray(automation?.trigger_config?.connection_ids) && automation.trigger_config.connection_ids.length > 1
-        const todayCount = usandoRoleta
-          ? (todayCountConn ?? 0)
-          : (todayCountConn ?? 0) + (todayCountLegado ?? 0)
+        // Na roleta, o legado (sem metadata = era da conexão única) pertence à
+        // conexão original; a linha nova conta só o que ela mesma enviou.
+        const ehConexaoOriginal = connectionId === automation?.whatsapp_connection_id
+        const todayCount = !usandoRoleta
+          ? (todayCountConn ?? 0) + (todayCountLegado ?? 0)
+          : (todayCountConn ?? 0) + (ehConexaoOriginal ? (todayCountLegado ?? 0) : 0)
 
         const maxDaily = automation.limits_config.max_daily_sends ?? 50
         if ((todayCount ?? 0) >= maxDaily) {
