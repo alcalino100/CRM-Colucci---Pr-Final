@@ -102,12 +102,27 @@ async function acharLeadVinculado(telefone: string | undefined, instanceName: st
     .select("id, telefone, origem, status, corretor_id, referencias")
     .or(variantes.map((v) => `telefone.ilike.%${v}%`).join(","))
     .limit(20)
-  const instancia = instanceName
-    ? (await db().from("whatsapp_instancias").select("corretor_id").eq("instance_name", instanceName).maybeSingle()).data
-    : null
-  const corretorId = (instancia as any)?.corretor_id ?? null
+  // Família do agente: 1 operação pode ter N números (ex. Patricia + patricia2).
+  // Expande os donos aceitos para todas as instâncias vinculadas ao MESMO agente —
+  // assim o lead é vinculado pelo telefone em qualquer número da família.
+  // Com 1 instância por agente, comporta-se exatamente como antes (zero impacto).
+  let corretorIds: Set<string> | null = null
+  if (instanceName) {
+    const instancia = (await db().from("whatsapp_instancias").select("corretor_id").eq("instance_name", instanceName).maybeSingle()).data
+    const proprio = (instancia as any)?.corretor_id ?? null
+    try {
+      const agente = await agenteParaInstancia(instanceName)
+      const vinculadas: string[] = agente ? getBoundInstances(agente.config) : []
+      if (agente && vinculadas.length > 1) {
+        const { data: irmas } = await db().from("whatsapp_instancias").select("corretor_id").in("instance_name", vinculadas)
+        const ids = [proprio, ...((irmas ?? []).map((r: any) => r.corretor_id))].filter(Boolean) as string[]
+        if (ids.length) corretorIds = new Set(ids)
+      }
+    } catch { /* fallback abaixo */ }
+    if (!corretorIds && proprio) corretorIds = new Set([proprio])
+  }
   return (candidatos ?? [])
-    .filter((l: any) => !corretorId || !l.corretor_id || l.corretor_id === corretorId)
+    .filter((l: any) => !corretorIds || !l.corretor_id || corretorIds.has(l.corretor_id))
     .find((l: any) => normalizePhone(l.telefone) === normalizePhone(telefone)) ?? null
 }
 

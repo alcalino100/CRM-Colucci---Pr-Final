@@ -237,6 +237,21 @@ interface RejectionBreakdown {
 }
 
 // Núcleo do worker — chamado pelo botão manual (POST) e pelo cron (GET autenticado).
+// Roleta fixa por lead: quando a automação lista N conexões em
+// trigger_config.connection_ids, cada lead usa SEMPRE a mesma (hash do id) —
+// o lead reconhece o número e a carga divide ~50/50. Sem a lista, usa a
+// conexão única de sempre (zero impacto para as demais automações).
+function escolherConexaoAutomacao(automation: any, lead: { id: string }): string | null {
+  const lista = automation?.trigger_config?.connection_ids
+  if (Array.isArray(lista) && lista.length > 1 && lead?.id) {
+    const s = String(lead.id)
+    let h = 0
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+    return lista[h % lista.length] ?? null
+  }
+  return automation?.whatsapp_connection_id ?? null
+}
+
 export async function runWorker() {
   const runStart = Date.now()
   try {
@@ -659,7 +674,7 @@ export async function runWorker() {
           imobiliaria: nomeImobiliaria,
         })
 
-        const connectionId = automation.whatsapp_connection_id
+        const connectionId = escolherConexaoAutomacao(automation, lead)
         if (!connectionId) {
           // Sem conexão: PULA sem cancelar (a fila sobrevive a erro humano de
           // configuração). Logado 1× por automação por rodada, não por job.
