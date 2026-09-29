@@ -167,7 +167,14 @@ async function criarJobsFollowup(automation: any, results: { created: number }, 
     // Honra as MESMAS condições em dados da automação (telefone válido, não-perdido,
     // não-bloqueado, etc.) — mesmo motor usado pela reativação. Assim o follow-up herda
     // todas as guardas configuradas na regra, e não só as fixas acima.
-    const { eligible } = await evaluateConditions(lead.id, automation.conditions, automation.id)
+    // EXCEÇÃO: regras de `status` são ignoradas aqui — o targeting de estágio do follow-up
+    // pertence ao gate fixo acima (novo/em_atendimento/em_automacao/em_followup). Uma regra
+    // `status == em_atendimento` nos dados travaria para sempre os leads que a mãe
+    // estacionou em em_automacao (foi o que represou 319 leads).
+    const condicoes = automation.conditions?.rules
+      ? { ...automation.conditions, rules: automation.conditions.rules.filter((r: { field?: string }) => r.field !== "status") }
+      : automation.conditions
+    const { eligible } = await evaluateConditions(lead.id, condicoes, automation.id)
     if (!eligible) {
       await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead.nome}: condições da automação não atendidas` })
       continue
