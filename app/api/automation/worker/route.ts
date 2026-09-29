@@ -692,18 +692,32 @@ export async function runWorker() {
           continue
         }
 
-        // Teto diário GLOBAL (todas as automações somadas — é a conta do WhatsApp
-        // que está em jogo, não cada automação). Conta sent+delivered+read+responded:
-        // só 'sent' subcontava, pois resposta evoluía o status e liberava vaga!
-        // Dia em BRT (00:00 BRT = 03:00Z), não meia-noite UTC do servidor.
+        // Teto diário POR CONEXÃO (cada número WhatsApp tem sua cota — ex. 25/dia
+        // na linha 1 + 25/dia na linha 2 = 50/dia no total). Conta
+        // sent+delivered+read+responded do dia (BRT). A conexão de cada envio é
+        // registrada em metadata.connection_id; envios antigos sem metadata contam
+        // na conexão única da automação (compatibilidade).
         const fmtDia = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" })
         const [anoB, mesB, diaB] = fmtDia.format(new Date()).split("-").map(Number)
         const todayStart = new Date(Date.UTC(anoB, mesB - 1, diaB, 3, 0, 0))
-        const { count: todayCount } = await wsupabase
+        const { count: todayCountConn } = await wsupabase
           .from("automation_jobs")
           .select("id", { count: "exact", head: true })
           .gte("sent_at", todayStart.toISOString())
           .in("status", ["sent", "delivered", "read", "responded"])
+          .eq("metadata->>connection_id" as never, connectionId as never)
+        // Legado: envios de hoje sem metadata pertencem à conexão única (antes da roleta).
+        const { count: todayCountLegado } = await wsupabase
+          .from("automation_jobs")
+          .select("id", { count: "exact", head: true })
+          .gte("sent_at", todayStart.toISOString())
+          .in("status", ["sent", "delivered", "read", "responded"])
+          .is("metadata->>connection_id" as never, null)
+          .eq("automation_id", automation.id)
+        const usandoRoleta = Array.isArray(automation?.trigger_config?.connection_ids) && automation.trigger_config.connection_ids.length > 1
+        const todayCount = usandoRoleta
+          ? (todayCountConn ?? 0)
+          : (todayCountConn ?? 0) + (todayCountLegado ?? 0)
 
         const maxDaily = automation.limits_config.max_daily_sends ?? 50
         if ((todayCount ?? 0) >= maxDaily) {
@@ -734,6 +748,8 @@ export async function runWorker() {
             provider_message_id: result.provider_message_id,
             provider_response: result.raw_response,
             attempts: (job.attempts ?? 0) + 1,
+            // Carimba a conexão usada — alimenta o teto diário por número.
+            metadata: { ...((job.metadata as Record<string, unknown> | null) ?? {}), connection_id: connectionId },
           }
 
           if (automation.supervision_enabled && automation.supervisor_user_id) {
