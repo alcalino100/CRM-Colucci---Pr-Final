@@ -118,6 +118,16 @@ export default function PerfilPage() {
       <WhatsappConnectionCard corretorId={user.id} corretorNome={user.nome} compact />
 
       <Card>
+        <CardHeader>
+          <CardTitle>Linhas da Patricia · QR de reconexão</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <WhatsappConnectionCard titulo="Patricia · Linha 1" instanceNameFixo="patricia-6c2875b4" compact />
+          <WhatsappConnectionCard titulo="Patricia · Linha 2" instanceNameFixo="patricia2" compact />
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader className="flex-row items-center gap-2">
           <KeyRound className="size-4 text-primary" />
           <CardTitle>Alterar senha</CardTitle>

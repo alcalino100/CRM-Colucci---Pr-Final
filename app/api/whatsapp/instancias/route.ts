@@ -23,7 +23,9 @@ export async function GET() {
   return NextResponse.json({ data })
 }
 
-// Garante a instância do corretor (upsert por corretor_id)
+// Garante a instância do corretor (upsert por corretor_id).
+// NUNCA renomeia linha existente: nomes custom (ex. patricia2) são preservados —
+// renomear quebra whitelist da IA, Evolution e roleta (tudo amarra por nome).
 export async function POST(request: Request) {
   let body: { corretorId?: string; corretorNome?: string }
   try {
@@ -32,6 +34,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 })
   }
   if (!body.corretorId) return NextResponse.json({ error: "Corretor não informado." }, { status: 400 })
+
+  const { data: existente } = await wsupabase
+    .from("whatsapp_instancias")
+    .select("*")
+    .eq("corretor_id", body.corretorId)
+    .maybeSingle()
+  if (existente) return NextResponse.json({ data: existente })
 
   // Resolve o nome pelo banco quando não vier no corpo, para nomear a instância
   let nome = body.corretorNome

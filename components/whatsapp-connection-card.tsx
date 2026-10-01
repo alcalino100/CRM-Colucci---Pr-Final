@@ -11,10 +11,14 @@ export function WhatsappConnectionCard({
   corretorId,
   corretorNome,
   compact = false,
+  titulo,
+  instanceNameFixo,
 }: {
-  corretorId: string
-  corretorNome: string
+  corretorId?: string
+  corretorNome?: string
   compact?: boolean
+  titulo?: string
+  instanceNameFixo?: string
 }) {
   const [estado, setEstado] = useState<Estado>("idle")
   const [qrCode, setQrCode] = useState<string | null>(null)
@@ -36,18 +40,23 @@ export function WhatsappConnectionCard({
     }
   }, [])
 
-  // Ao montar: garante a instância (nomeada com o corretor) e carrega o status atual
+  // Ao montar: garante a instância (nomeada com o corretor) e carrega o status atual.
+  // Com instanceNameFixo (linhas compartilhadas ex. patricia2), pula o ensure —
+  // garante que o nome custom nunca seja renomeado — e usa o nome direto.
   useEffect(() => {
     let ativo = true
     ;(async () => {
       try {
-        const ensure = await fetch("/api/whatsapp/instancias", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ corretorId, corretorNome }),
-        })
-        const ej = await ensure.json()
-        const name: string | undefined = ej?.data?.instance_name
+        let name: string | undefined = instanceNameFixo ?? undefined
+        if (!name) {
+          const ensure = await fetch("/api/whatsapp/instancias", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ corretorId, corretorNome }),
+          })
+          const ej = await ensure.json()
+          name = ej?.data?.instance_name
+        }
         if (!ativo || !name) {
           if (ativo) setCarregandoStatus(false)
           return
@@ -70,7 +79,7 @@ export function WhatsappConnectionCard({
       ativo = false
       stopPolling()
     }
-  }, [corretorId, corretorNome, stopPolling])
+  }, [corretorId, corretorNome, instanceNameFixo, stopPolling])
 
   const iniciarPolling = useCallback(
     (name: string) => {
@@ -102,14 +111,20 @@ export function WhatsappConnectionCard({
     setEstado("gerando_qr")
     setErro(null)
     try {
-      // Garante a instância no banco (nomeada com o corretor) e obtém o nome oficial
-      const ensure = await fetch("/api/whatsapp/instancias", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ corretorId, corretorNome }),
-      })
-      const ej = await ensure.json()
-      const name: string | undefined = ej?.data?.instance_name ?? instanceName ?? undefined
+      // Garante a instância no banco (nomeada com o corretor) e obtém o nome oficial.
+      // Linha fixa (patricia2 etc.): usa o nome direto, sem ensure.
+      let name: string | undefined = instanceNameFixo ?? undefined
+      if (!name) {
+        const ensure = await fetch("/api/whatsapp/instancias", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ corretorId, corretorNome }),
+        })
+        const ej = await ensure.json()
+        name = ej?.data?.instance_name ?? instanceName ?? undefined
+      } else if (!instanceName) {
+        setInstanceName(name)
+      }
       if (!name) {
         setEstado("erro")
         setErro("Não foi possível preparar a instância do corretor.")
@@ -200,7 +215,7 @@ export function WhatsappConnectionCard({
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2">
             <MessageCircle className="size-4 text-emerald-600" />
-            {compact ? "Meu WhatsApp" : corretorNome}
+            {titulo ?? (compact ? "Meu WhatsApp" : corretorNome)}
           </CardTitle>
           <div className="flex items-center gap-1.5">
             {estado === "conectado" ? (
@@ -280,7 +295,7 @@ export function WhatsappConnectionCard({
 
       <Dialog open={confirmar} onClose={() => (!desconectando ? setConfirmar(false) : undefined)} title="Desconectar WhatsApp">
         <p className="text-sm text-muted-foreground">
-          Tem certeza que deseja desconectar o WhatsApp de {corretorNome}? Será necessário ler o QR Code novamente para reconectar.
+          Tem certeza que deseja desconectar o WhatsApp de {titulo ?? corretorNome}? Será necessário ler o QR Code novamente para reconectar.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" onClick={() => setConfirmar(false)} disabled={desconectando}>Cancelar</Button>

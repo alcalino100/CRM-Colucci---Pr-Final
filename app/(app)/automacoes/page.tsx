@@ -73,6 +73,12 @@ export default function AutomacoesPage() {
           (j.metadata as Record<string, unknown> | null)?.["connection_id"] as string ??
           connLegado.get(j.automation_id) ?? null
         const agg = new Map<string, { enviadas: number; respondidas: number }>()
+        // Semeia TODAS as conexões das automações (linhas aparecem mesmo zeradas).
+        for (const a of automations) {
+          const lista = (a?.trigger_config as Record<string, unknown> | undefined)?.["connection_ids"]
+          const conns = Array.isArray(lista) && lista.length ? (lista as string[]) : a?.whatsapp_connection_id ? [a.whatsapp_connection_id] : []
+          for (const c of conns) if (!agg.has(c)) agg.set(c, { enviadas: 0, respondidas: 0 })
+        }
         const jobsDia = ((sJobsDia as { data: any[] | null }).data ?? []) as { automation_id: string; metadata?: any }[]
         for (const j of jobsDia) {
           const c = connDe(j)
