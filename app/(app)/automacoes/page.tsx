@@ -359,7 +359,13 @@ export default function AutomacoesPage() {
                   <div key={l.connId} className="rounded-lg border border-border/60 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-semibold">{l.nome}</p>
-                      {l.numero && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{l.numero}</span>}
+                      <div className="flex shrink-0 items-center gap-2">
+                        {l.numero && <span className="text-xs tabular-nums text-muted-foreground">{l.numero}</span>}
+                        <span className={cn(
+                          "rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums",
+                          l.enviadas >= 20 ? "bg-emerald-100 text-emerald-700" : l.enviadas >= 10 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700",
+                        )}>{l.enviadas}/20</span>
+                      </div>
                     </div>
                     <div className="mt-2 grid grid-cols-4 gap-2 text-center">
                       {[
@@ -374,6 +380,10 @@ export default function AutomacoesPage() {
                         </div>
                       ))}
                     </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className={cn("h-full rounded-full transition-all", l.enviadas >= 20 ? "bg-emerald-500" : l.enviadas >= 10 ? "bg-amber-500" : "bg-red-500")} style={{ width: `${Math.min(100, (l.enviadas / 20) * 100)}%` }} />
+                    </div>
+                    <p className="mt-1 text-right text-[11px] text-muted-foreground">meta 20 · teto 25/dia</p>
                   </div>
                 ))}
               </div>

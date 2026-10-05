@@ -343,16 +343,77 @@ export async function runWorker() {
 
     // FASE 1: Avaliar leads elegíveis e criar jobs
     for (const automation of automacoesNormais) {
+      // FILA MÍNIMA (20/linha/dia, teto 25): projeta o dia por conexão
+      // (enviados + agendados p/ hoje) e aprofunda a avaliação (páginas de 150,
+      // até 600) até cada linha projetar o mínimo — havendo elegíveis.
+      // Guardas de elegibilidade continuam soberanas; aqui só se busca fundo.
+      const META_MINIMA_LINHA = 20
+      const LIMITE_AVALIACAO = 600
+      const TAM_PAGINA = 150
+      const listaConexoes = Array.isArray(automation?.trigger_config?.connection_ids) && automation.trigger_config.connection_ids.length > 1
+        ? (automation.trigger_config.connection_ids as string[])
+        : automation?.whatsapp_connection_id ? [automation.whatsapp_connection_id as string] : []
+      const projetado = new Map<string, number>(listaConexoes.map((c) => [c, 0]))
+      try {
+        const fmtD = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" })
+        const [aB, mB, dB] = fmtD.format(new Date()).split("-").map(Number)
+        const iniDia = new Date(Date.UTC(aB, mB - 1, dB, 3, 0, 0)).toISOString()
+        const fimDia = new Date(Date.UTC(aB, mB - 1, dB + 1, 3, 0, 0)).toISOString()
+        const { data: envHoje } = await wsupabase.from("automation_jobs")
+          .select("metadata").eq("automation_id", automation.id)
+          .gte("sent_at", iniDia).in("status", ["sent", "delivered", "read", "responded"]).limit(5000)
+        for (const j of (envHoje ?? []) as { metadata?: Record<string, unknown> }[]) {
+          const c = String(j.metadata?.["connection_id"] ?? automation.whatsapp_connection_id ?? "")
+          if (c && projetado.has(c)) projetado.set(c, (projetado.get(c) ?? 0) + 1)
+        }
+        const { data: agHoje } = await wsupabase.from("automation_jobs")
+          .select("lead_id").eq("automation_id", automation.id)
+          .in("status", ["scheduled", "retrying", "blocked_hour"]).lt("scheduled_at", fimDia).limit(5000)
+        for (const j of (agHoje ?? []) as { lead_id: string }[]) {
+          const c = escolherConexaoAutomacao(automation, { id: j.lead_id })
+          if (c && projetado.has(c)) projetado.set(c, (projetado.get(c) ?? 0) + 1)
+        }
+      } catch { /* projeção best-effort: sem ela, avalia 1 página como antes */ }
+      const metaBatida = () => listaConexoes.length === 0 || listaConexoes.every((c) => (projetado.get(c) ?? 0) >= META_MINIMA_LINHA)
+      let avaliadosFase = 0
+      let pagina = 0
       // Teto por rodada: avaliar tudo (700+ leads × N queries) estoura os 300s.
       // Mais antigos primeiro = fila justa; o resto entra nas próximas rodadas (30min).
-      const { data: leads, error: leadsErr } = await wsupabase
+      let leads: any[] | null = null
+      let leadsErr: { message?: string } | null = null
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+      const { data: leadsPag, error: leadsErrPag } = await wsupabase
         .from("leads")
         .select("id, nome, telefone, temperatura, status, origem, corretor_id, criado_em, gestor_responsavel, arquivado_em, fechado_em, referencias")
         .in("status", ["em_atendimento", "em_automacao"])
         .is("arquivado_em", null)
         .is("fechado_em", null)
         .order("atualizado_em", { ascending: true, nullsFirst: false })
-        .limit(150)
+        .range(pagina * TAM_PAGINA, pagina * TAM_PAGINA + TAM_PAGINA - 1)
+      leads = leadsPag
+      leadsErr = leadsErrPag
+      if (leadsErr) {
+        await createLog({
+          automation_id: automation.id,
+          event_type: "lead_not_eligible",
+          event_title: "Erro ao buscar leads",
+          event_description: leadsErr.message ?? "erro desconhecido",
+        })
+        break
+      }
+      if (!leads || leads.length === 0) {
+        if (pagina === 0) {
+          rejections.no_leads_found++
+          await createLog({
+            automation_id: automation.id,
+            event_type: "lead_not_eligible",
+            event_title: "Nenhum lead encontrado",
+            event_description: "Nenhum lead com status=em_atendimento/em_automacao, não arquivado, não fechado",
+          })
+        }
+        break
+      }
 
       if (leadsErr) {
         await createLog({
@@ -489,6 +550,8 @@ export async function runWorker() {
         })
         if (!error) {
           results.created++
+          const linhaJob = escolherConexaoAutomacao(automation, lead)
+          if (linhaJob && projetado.has(linhaJob)) projetado.set(linhaJob, (projetado.get(linhaJob) ?? 0) + 1)
           await createLog({
             automation_id: automation.id,
             lead_id: lead.id,
@@ -513,6 +576,22 @@ export async function runWorker() {
             event_description: error.message,
           })
         }
+      } // fim dos leads da página
+      avaliadosFase += leads.length
+      if (leads.length < TAM_PAGINA) break // esgotou o pool
+      if (avaliadosFase >= LIMITE_AVALIACAO) break // teto de segurança da rodada
+      if (metaBatida()) break // fila mínima atingida nas linhas
+      pagina++
+      } // fim da paginação (fila mínima)
+      // Shortfall: nem com busca funda bateu o mínimo — registra p/ o dashboard.
+      if (!metaBatida() && listaConexoes.length > 0) {
+        await createLog({
+          automation_id: automation.id,
+          event_type: "fila_minima_shortfall",
+          event_title: `Fila mínima não atingida (${META_MINIMA_LINHA}/linha)`,
+          event_description: `Projetado hoje: ${listaConexoes.map((c) => `${c.slice(0, 8)}=${projetado.get(c) ?? 0}`).join(", ")} | avaliados: ${avaliadosFase} | rejeições: IA=${rejections.ia_in_conversa} cond=${rejections.conditions_not_met} jobAtivo=${rejections.has_active_job} humanaRecente=${rejections.human_interaction_recent}`,
+          payload: { projetado: Object.fromEntries(projetado), avaliados: avaliadosFase, meta: META_MINIMA_LINHA },
+        })
       }
 
       // Log de resumo da automação
