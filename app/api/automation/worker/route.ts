@@ -415,27 +415,6 @@ export async function runWorker() {
         break
       }
 
-      if (leadsErr) {
-        await createLog({
-          automation_id: automation.id,
-          event_type: "lead_not_eligible",
-          event_title: "Erro ao buscar leads",
-          event_description: leadsErr.message,
-        })
-        continue
-      }
-
-      if (!leads || leads.length === 0) {
-        rejections.no_leads_found++
-        await createLog({
-          automation_id: automation.id,
-          event_type: "lead_not_eligible",
-          event_title: "Nenhum lead encontrado",
-          event_description: "Nenhum lead com status=em_atendimento/em_automacao, não arquivado, não fechado",
-        })
-        continue
-      }
-
       for (const lead of leads) {
         results.evaluated++
 
