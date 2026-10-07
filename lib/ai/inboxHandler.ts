@@ -237,6 +237,10 @@ export async function pausarIaMensagemManual({ telefone, instanceName, textoOutb
     let convHandoff: string | undefined
     if (agente) {
       const { data: conv } = await db().from("conversations_ia").select("id,ai_responding").eq("ai_id", agente.id).eq("contact_id", key).maybeSingle()
+      // Já pausada: 1ª mensagem manual fez o handoff completo (resumo, etapa,
+      // aviso); as seguintes são só mensagens — sem re-log, re-mover ou re-avisar.
+      // (Sem isso, uma rajada humana gera N pausas/logs em minutos.)
+      if (conv?.id && !conv.ai_responding) return
       if (conv?.id) {
         // Eco da própria IA (o envio de uma resposta gera um evento fromMe na Evolution).
         // Se o texto que saiu é igual à última resposta da IA, NÃO é atendimento manual —
