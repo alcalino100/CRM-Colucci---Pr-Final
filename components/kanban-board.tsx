@@ -130,6 +130,12 @@ export function KanbanBoard({
     }
     setSubmitting(true)
     const fields: (keyof LeadFormValues)[] = ["nome", "telefone", "email", "imovelRef", "origem", "observacoes", "status", "valorNegociacao", "corretorId", "temperatura"]
+    // Data de fechamento: compara só o dia (ISO vs yyyy-mm-dd) e audita.
+    const diaAntes = editLead.fechadoEm ? new Date(editLead.fechadoEm).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : ""
+    const diaDepois = v.fechadoEm ? new Date(v.fechadoEm).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : ""
+    if (v.status === "fechado" && diaDepois && diaAntes !== diaDepois) {
+      logAudit({ leadId: editLead.id, leadNome: editLead.nome, usuarioNome, tipo: "fechamento", descricao: `Data de fechamento ajustada: ${diaAntes.split("-").reverse().join("/")} → ${diaDepois.split("-").reverse().join("/")} (gestor)` })
+    }
     for (const f of fields) {
       const before = (editLead as any)[f]
       const after = (v as any)[f]

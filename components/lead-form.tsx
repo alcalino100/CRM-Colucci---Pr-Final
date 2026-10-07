@@ -25,6 +25,7 @@ export interface LeadFormValues {
   status: LeadStatus
   valorNegociacao?: number
   corretorId: string
+  fechadoEm?: string
 }
 
 const schema = z.object({
@@ -78,6 +79,7 @@ export function LeadForm({
     status: initial?.status ?? "novo",
     valorNegociacao: initial?.valorNegociacao,
     corretorId: initial?.corretorId ?? defaultCorretorId,
+    fechadoEm: initial?.fechadoEm ? new Date(initial.fechadoEm).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : "",
   })
   const [refInput, setRefInput] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -132,7 +134,12 @@ export function LeadForm({
     setErrors(errs)
     if (Object.values(errs).some(Boolean)) return
     const principal = v.referencias.find((r) => r.principal)?.ref ?? v.referencias[0]?.ref ?? ""
-    onSubmit({ ...v, imovelRef: principal, valorNegociacao: showValor ? v.valorNegociacao : undefined })
+    // Data de fechamento: só gestor ajusta, só em lead fechado. Meio-dia UTC =
+    // 09h BRT (mesmo dia civil). Sem toque, preserva a atual (nunca zera).
+    const fechadoEmISO = v.status === "fechado"
+      ? (isGestor && v.fechadoEm ? `${v.fechadoEm}T12:00:00.000Z` : (initial?.fechadoEm ?? undefined))
+      : undefined
+    onSubmit({ ...v, imovelRef: principal, valorNegociacao: showValor ? v.valorNegociacao : undefined, fechadoEm: fechadoEmISO })
   }
 
   const err = (k: string) => errors[k] && <span className="text-xs text-destructive">{errors[k]}</span>
@@ -218,6 +225,13 @@ export function LeadForm({
             <Label htmlFor="valor">Valor da negociação (R$) *</Label>
             <Input id="valor" type="number" value={v.valorNegociacao ?? ""} onChange={(e) => set("valorNegociacao", Number(e.target.value))} aria-label="Valor da negociação" />
             {err("valorNegociacao")}
+          </div>
+        )}
+        {v.status === "fechado" && isGestor && (
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="datafech">Data do fechamento</Label>
+            <Input id="datafech" type="date" value={v.fechadoEm ?? ""} onChange={(e) => set("fechadoEm", e.target.value)} aria-label="Data do fechamento" />
+            <p className="text-xs text-muted-foreground">Ajuste de gestor: corrige o mês do fechamento sem mover o lead.</p>
           </div>
         )}
       </div>
