@@ -263,6 +263,8 @@ export async function notifyGestorWhatsApp(text: string, destino: "numero" | "gr
 }
 
 // Avisa o gestor que uma instância (de um corretor) caiu + registra no CRM.
+// Alerta em DOIS lugares: (1) painel do CRM (notificacoes — aparece para
+// o dono da instância e para gestores), (2) WhatsApp do gestor.
 export async function notifyDisconnection(instanceName: string): Promise<void> {
   try {
     const { data: inst } = await wsupabase
@@ -271,8 +273,9 @@ export async function notifyDisconnection(instanceName: string): Promise<void> {
       .eq("instance_name", instanceName)
       .maybeSingle()
     let nome = instanceName
-    if (inst?.corretor_id) {
-      const { data: corretor } = await wsupabase.from("usuarios").select("nome").eq("id", inst.corretor_id).maybeSingle()
+    const corretorId = inst?.corretor_id ?? null
+    if (corretorId) {
+      const { data: corretor } = await wsupabase.from("usuarios").select("nome").eq("id", corretorId).maybeSingle()
       if (corretor?.nome) nome = corretor.nome
     }
     const horario = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
@@ -286,11 +289,23 @@ export async function notifyDisconnection(instanceName: string): Promise<void> {
       "⚠️ Providencie a reconexão o quanto antes!",
     ].join("\n")
     await notifyGestorWhatsApp(texto, "todos")
-    await wsupabase.from("notificacoes").insert({
-      mensagem: `WhatsApp de ${nome} foi desconectado (${instanceName}).`,
+    // Alerta no painel: para o DONO da instância (corretor) e para todos os gestores.
+    const notifs: Record<string, unknown>[] = []
+    if (corretorId) {
+      notifs.push({
+        mensagem: `🚨 Seu WhatsApp desconectou (${instanceName}). Reconecte em Meu Perfil → Meu WhatsApp.`,
+        tipo: "whatsapp_desconectado",
+        modulo: "vendas",
+        para_usuario_id: corretorId,
+      })
+    }
+    notifs.push({
+      mensagem: `🚨 WhatsApp de ${nome} desconectou (${instanceName}).`,
       tipo: "whatsapp_desconectado",
+      modulo: "vendas",
       para_role: "gestor",
     })
+    await wsupabase.from("notificacoes").insert(notifs)
   } catch {
     /* notificação é best-effort */
   }

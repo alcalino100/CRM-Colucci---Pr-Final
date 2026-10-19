@@ -57,12 +57,18 @@ export async function GET(request: Request) {
         }
 
         // Persiste para sustentar o status entre sessões
+        const { data: anterior } = await wsupabase.from("whatsapp_instancias").select("status").eq("instance_name", instanceName).maybeSingle()
         const patch: Record<string, unknown> = { status, atualizado_em: new Date().toISOString() }
         if (status === "conectado") {
           patch.qr_code = null
           if (numero) patch.numero = numero
         }
         await wsupabase.from("whatsapp_instancias").update(patch).eq("instance_name", instanceName)
+        // Instância que estava conectada e caiu: alerta o gestor (WhatsApp + painel)
+        // e o dono da instância (painel). Só dispara quando o status muda.
+        if (status === "desconectado" && anterior?.status === "conectado") {
+          void notifyDisconnection(instanceName)
+        }
       }
     } catch {
       /* mantém o valor do banco */
