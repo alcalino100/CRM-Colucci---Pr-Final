@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox, ChevronDown, Bot, Crown } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
-import { ROLE_LABEL, isAdminRole, isGestorNivel, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
+import { ROLE_LABEL, isAdminRole, isGestorNivel, isSomenteLeitura, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
 import { BRAND_DEFAULTS, applyBrand, getInitialBrand, isMasterEmail, loadBrand, type BrandSettings } from "@/lib/master"
 import { ToastProvider } from "@/components/ui/primitives"
 import { BRTClock } from "@/lib/timezone"
@@ -158,13 +158,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const itemsLocacao = NAV_LOCACAO.filter((n) => podeLocacao(user.role) && canNivel(n.roles))
   const itemsAutomacoes = NAV_AUTOMACOES.filter((n) => isAdminRole(user.role))
   const itemsIA = NAV_IA.filter((n) => isGestorNivel(user.role))
-  const items2 = NAV2.filter((n) => isAdminRole(user.role))
+  const items2 = NAV2.filter((n) => isAdminRole(user.role) && !isSomenteLeitura(user.role))
   // Gestor de módulo (ex.: gestor_locacao) vê Gestão de Acessos na seção do seu módulo
   const isModuleGestor = isGestorNivel(user.role) && !isAdminRole(user.role)
   if (isModuleGestor) {
     if (podeVendas(user.role)) items.push(ACESSOS_LINK)
     if (podeLocacao(user.role)) itemsLocacao.push(ACESSOS_LINK)
-  } else if (isAdminRole(user.role)) {
+  } else if (isAdminRole(user.role) && !isSomenteLeitura(user.role)) {
     // Admin legado e master gerenciam toda a equipe pela seção Administração
     items2.push(ACESSOS_LINK)
   }

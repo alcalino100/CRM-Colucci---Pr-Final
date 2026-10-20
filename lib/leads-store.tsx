@@ -21,7 +21,7 @@ import {
   type Visit,
 } from "./mock-data"
 import bcrypt from "bcryptjs"
-import { isCorretorDe, isGestorNivel, isMaster, modulosRole } from "./roles"
+import { isCorretorDe, isGestorNivel, isMaster, isSomenteLeitura, modulosRole } from "./roles"
 import { supabase } from "./supabase/client"
 import { useAuth } from "./auth-context"
 import { normalizePhone, normalizeStatus } from "./labels"
@@ -432,6 +432,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     error && (error.code === "23505" || /telefone_normalizado/i.test(error.message ?? ""))
 
   const addLead: Store["addLead"] = async (l) => {
+    if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
     if (isTelefoneBloqueado(l.telefone)) {
       return { ok: false, error: "Telefone interno da empresa não pode ser cadastrado como lead." }
     }
@@ -463,6 +464,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   }
 
   const updateLead: Store["updateLead"] = async (id, patch) => {
+    if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
     const agora = new Date().toISOString()
     const row = leadPatchToRow(patch)
     // Marca a data de fechamento / de negociação quando o lead ENTRAR nessas etapas
@@ -491,6 +493,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   }
 
   const updateLeadsBulk: Store["updateLeadsBulk"] = async (ids, patch) => {
+    if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
     if (ids.length === 0) return { ok: true, updated: 0 }
     const agora = new Date().toISOString()
     const row = leadPatchToRow(patch)
@@ -521,6 +524,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   }
 
   const deleteLead: Store["deleteLead"] = async (id, motivo, motivoDetalhe) => {
+    if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
     // Somente gestores podem excluir leads
     if (!isGestorNivel(user?.role ?? "corretor")) return { ok: false, error: "Apenas gestores podem excluir leads." }
     const motivoTrim = (motivo ?? "").trim()
@@ -566,6 +570,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   // ---------- Visitas ----------
   const addVisit: Store["addVisit"] = async (v) => {
+    if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
     await supabase.from("visitas").insert({
       lead_id: v.leadId,
       data: v.data,

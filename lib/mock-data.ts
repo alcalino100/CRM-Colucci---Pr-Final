@@ -6,6 +6,7 @@ export type Role =
   | "gestor_vendas" // somente Vendas (nível gestor)
   | "corretor_locacao" // somente Locação
   | "gestor_locacao" // somente Locação (nível gestor)
+  | "visitante" // modo apresentação (somente leitura, vê tudo)
 export type Modulo = "vendas" | "locacao"
 export type LeadStatus =
   | "novo"
@@ -48,6 +49,7 @@ export interface User {
   email: string
   senha: string
   role: Role
+  somenteLeitura?: boolean
   ativo: boolean
   criadoEm: string
   avatar?: string

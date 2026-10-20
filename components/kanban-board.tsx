@@ -12,7 +12,7 @@ import { useSaleCelebration, SESSION_ID } from "@/components/sale-celebration"
 import { supabase } from "@/lib/supabase/client"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
-import { isGestorNivel } from "@/lib/roles"
+import { isGestorNivel, isSomenteLeitura } from "@/lib/roles"
 import { LEAD_STATUSES, MOTIVOS_EXCLUSAO, STATUS_ACCENT, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, brl, comTagsEntradaAutomacao, normalizePhone, refsTexto } from "@/lib/labels"
 import { CORRETOR_HIDDEN } from "@/lib/pipeline-stages"
 import { ORIGENS, type Lead, type LeadStatus, type Origem, type Temperatura } from "@/lib/mock-data"
@@ -44,6 +44,7 @@ export function KanbanBoard({
 }) {
   const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, assumirLead, visits, corretores, userName } = useLeads()
   const { user } = useAuth()
+  const visitante = isSomenteLeitura(user?.role)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -119,6 +120,7 @@ export function KanbanBoard({
   }
 
   function handleEditSubmit(v: LeadFormValues) {
+    if (visitante) return
     if (!editLead) return
     if (v.status === "fechado" && editLead.status !== "fechado") {
       // Fechamento só é gravado pelo fluxo obrigatório (REF + tipo do imóvel vendido)
@@ -203,6 +205,7 @@ export function KanbanBoard({
   const [fTipo, setFTipo] = useState("")
 
   function onDragEnd(result: DropResult) {
+    if (visitante) return
     const { source, destination, draggableId } = result
     if (!destination || destination.droppableId === source.droppableId) return
     const newStatus = destination.droppableId as LeadStatus

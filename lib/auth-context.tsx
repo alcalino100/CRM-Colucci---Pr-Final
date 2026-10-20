@@ -45,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       nome: data.nome,
       email: data.email,
       role: data.role as Role,
+      somenteLeitura: data.role === "visitante",
       ativo: data.ativo,
       criadoEm: data.criadoEm,
     }

@@ -10,6 +10,7 @@ export const ROLE_LIST: Role[] = [
   "gestor_vendas",
   "corretor_locacao",
   "gestor_locacao",
+  "visitante",
 ]
 
 export const ROLE_LABEL: Record<Role, string> = {
@@ -20,6 +21,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   gestor_vendas: "Gestor de Vendas",
   corretor_locacao: "Corretor de Locação",
   gestor_locacao: "Gestor de Locação",
+  visitante: "Visitante (somente leitura)",
 }
 
 // Agrupamento para os selects de perfil (Gestão de Acessos / Admin)
@@ -28,16 +30,21 @@ export const ROLE_GROUPS: { label: string; roles: Role[] }[] = [
   { label: "Vendas + Locação", roles: ["corretor", "gestor"] },
   { label: "Somente Vendas", roles: ["corretor_vendas", "gestor_vendas"] },
   { label: "Somente Locação", roles: ["corretor_locacao", "gestor_locacao"] },
+  { label: "Apresentação", roles: ["visitante"] },
 ]
 
 export function nivelRole(role: Role): Nivel {
   if (role === "gestor_master") return "master"
+  if (role === "visitante") return "gestor"
   if (role === "corretor" || role === "corretor_vendas" || role === "corretor_locacao") return "corretor"
   return "gestor"
 }
 
 export function isGestorNivel(role: Role): boolean {
   return nivelRole(role) !== "corretor"
+}
+export function isSomenteLeitura(role: Role | undefined | null): boolean {
+  return role === "visitante"
 }
 
 export function isMaster(role: Role): boolean {

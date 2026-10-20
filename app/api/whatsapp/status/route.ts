@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { evolutionConfig, mapConnectionState, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
+import { evolutionConfig, mapConnectionState, notifyDisconnection, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

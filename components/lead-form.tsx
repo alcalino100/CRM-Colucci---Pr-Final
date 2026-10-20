@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input, Label, Select, Textarea } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
-import { isGestorNivel } from "@/lib/roles"
+import { isGestorNivel, isSomenteLeitura } from "@/lib/roles"
 import { LEAD_STATUSES, STATUS_LABEL, TEMPERATURAS, TEMP_LABEL } from "@/lib/labels"
 import { ORIGENS, type Lead, type LeadRef, type LeadStatus, type Origem, type Temperatura } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
@@ -86,6 +86,7 @@ export function LeadForm({
   const { corretores, checkPhoneDuplicate, userName } = useLeads()
   const { user } = useAuth()
   const isGestor = isGestorNivel(user?.role ?? "corretor")
+  const visitante = isSomenteLeitura(user?.role)
   const [phoneDup, setPhoneDup] = useState<{ nome: string; corretorId: string; status: LeadStatus } | null>(null)
   const showValor = ["negociando", "fechado"].includes(v.status)
 
@@ -287,7 +288,7 @@ export function LeadForm({
       </div>
       <div className="mt-2 flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>Cancelar</Button>
-        <Button type="submit" disabled={submitting}>{submitting ? "Salvando..." : "Salvar"}</Button>
+        <Button type="submit" disabled={submitting || visitante}>{submitting ? "Salvando..." : visitante ? "Modo apresentação" : "Salvar"}</Button>
       </div>
     </form>
   )

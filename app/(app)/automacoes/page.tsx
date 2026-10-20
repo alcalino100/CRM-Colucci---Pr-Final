@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, Badge, Skeleton } from "@/com
 import { useAutomation, type DashboardMetrics } from "@/lib/automation-store"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
+import { isSomenteLeitura } from "@/lib/roles"
 import { AUTOMATION_STATUS_LABEL, AUTOMATION_STATUS_VARIANT, AUTOMATION_JOB_STATUS_LABEL, AUTOMATION_JOB_STATUS_VARIANT, type AutomationJob } from "@/lib/automation-types"
 import { fmtDateTime } from "@/lib/labels"
 import { cn } from "@/lib/utils"
@@ -15,6 +16,7 @@ import { EmergencyPauseButton } from "@/components/automation/EmergencyPauseButt
 
 export default function AutomacoesPage() {
   const { user } = useAuth()
+  const visitante = isSomenteLeitura(user?.role)
   const { automations, jobs, ready: storeReady, loadDashboardMetrics, toggleAutomation } = useAutomation()
   const { users, leads } = useLeads()
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
@@ -246,11 +248,11 @@ export default function AutomacoesPage() {
           <p className="text-sm text-muted-foreground">Dashboard de automações e métricas de envio</p>
         </div>
         <div className="flex gap-2">
-          <EmergencyPauseButton />
-          <button onClick={runWorker} disabled={workerRunning}
+          {!visitante && <EmergencyPauseButton />}
+          {!visitante && <button onClick={runWorker} disabled={workerRunning}
             className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50">
             <Play className="size-4" /> {workerRunning ? "Executando..." : "Executar Worker"}
-          </button>
+          </button>}
           <Link href="/automacoes/regras" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">
             <Zap className="size-4" /> Ver Regras
           </Link>
@@ -489,7 +491,7 @@ export default function AutomacoesPage() {
                         {a.trigger_type === "no_response_followup" ? "Follow-up (sem resposta)" : a.trigger_type === "lead_inactive" ? "Lead inativo" : a.trigger_type} · Espera {a.wait_config.amount} {a.wait_config.unit}
                       </p>
                     </div>
-                    {a.status !== "draft" && (
+                    {a.status !== "draft" && !visitante && (
                       <button
                         onClick={() => toggleAutomation(a.id)}
                         className={cn(
