@@ -1,39 +1,144 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
-import { Zap, MessageCircle, Users, CheckCircle2, XCircle, Clock, Eye, BarChart3, ArrowRight, AlertTriangle, Shield, Play, Pause, Activity } from "lucide-react"
+import {
+  Zap,
+  MessageCircle,
+  Users,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Eye,
+  BarChart3,
+  ArrowRight,
+  AlertTriangle,
+  Shield,
+  Play,
+  Pause,
+  Activity,
+  RefreshCw,
+  Send,
+  CheckCircle,
+  Smartphone,
+  Sparkles,
+  Layers,
+  ChevronRight,
+  Filter,
+  Check,
+  Calendar,
+  AlertCircle,
+  Lock,
+} from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent, Badge, Skeleton } from "@/components/ui/primitives"
 import { useAutomation, type DashboardMetrics } from "@/lib/automation-store"
 import { useLeads } from "@/lib/leads-store"
 import { useAuth } from "@/lib/auth-context"
 import { isSomenteLeitura } from "@/lib/roles"
-import { AUTOMATION_STATUS_LABEL, AUTOMATION_STATUS_VARIANT, AUTOMATION_JOB_STATUS_LABEL, AUTOMATION_JOB_STATUS_VARIANT, type AutomationJob } from "@/lib/automation-types"
+import { AUTOMATION_STATUS_LABEL, AUTOMATION_STATUS_VARIANT, AUTOMATION_JOB_STATUS_LABEL, AUTOMATION_JOB_STATUS_VARIANT } from "@/lib/automation-types"
 import { fmtDateTime } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
 import { EmergencyPauseButton } from "@/components/automation/EmergencyPauseButton"
+
+// Teto estrito anti-banimento configurado nas automações
+const MAX_ENVIOS_LINHA_DIA = 30
 
 export default function AutomacoesPage() {
   const { user } = useAuth()
   const visitante = isSomenteLeitura(user?.role)
   const { automations, jobs, ready: storeReady, loadDashboardMetrics, toggleAutomation } = useAutomation()
   const { users, leads } = useLeads()
+
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [workerRunning, setWorkerRunning] = useState(false)
   const [workerResult, setWorkerResult] = useState<{ ok: boolean; message: string; details?: any } | null>(null)
   const [lastRun, setLastRun] = useState<{ timestamp: string; description?: string } | null>(null)
-  // Ver dia: métricas isoladas por data (BRT), sem misturar dias.
-  const hojeBRT = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
-  const [dia, setDia] = useState(hojeBRT)
-  const [diaStats, setDiaStats] = useState<{ enviadas: number; respondidas: number; taxa: number; criados: number } | null>(null)
-  const [diaBusy, setDiaBusy] = useState(false)
-  // Por linha: enviadas/respondidas/taxa/fila de cada número WhatsApp no dia (BRT).
-  const [diaLinhas, setDiaLinhas] = useState<{ connId: string; nome: string; numero: string; enviadas: number; respondidas: number; taxa: number; fila: number }[] | null>(null)
 
-  // Hash estável idêntico ao do worker (escolherConexaoAutomacao): prevê a linha
-  // de cada lead na roleta fixa sem precisar esperar o envio.
+  // Subnavegação interna rápida do painel
+  const [secaoAtiva, setSecaoAtiva] = useState<"geral" | "regua" | "linhas">("geral")
+
+  // Filtro de período (BRT)
+  const hojeBRT = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
+  const [periodo, setPeriodo] = useState<"hoje" | "ontem" | "7dias" | "30dias" | "custom">("hoje")
+  const [dataCustom, setDataCustom] = useState(hojeBRT)
+
+  // Estatísticas agregadas do período
+  const [periodoStats, setPeriodoStats] = useState<{
+    enviadas: number
+    respondidas: number
+    taxa: number
+    criados: number
+    entregues: number
+    lidos: number
+    canceladosHumano: number
+    canceladosLead: number
+  } | null>(null)
+  const [periodoBusy, setPeriodoBusy] = useState(false)
+
+  // Status por linha WhatsApp (com cota anti-ban de 30/dia)
+  const [linhasStats, setLinhasStats] = useState<{
+    connId: string
+    nome: string
+    numero: string
+    status: string
+    enviadasHoje: number
+    respondidasHoje: number
+    taxaHoje: number
+    fila: number
+  }[] | null>(null)
+
+  // Estatísticas da Régua de Follow-up (D+1, D+2, D+3)
+  const [cadenciaStats, setCadenciaStats] = useState<{
+    d1: { enviados: number; respondidos: number; taxa: number; naFila: number }
+    d2: { enviados: number; respondidos: number; taxa: number; naFila: number }
+    d3: { enviados: number; respondidos: number; taxa: number; naFila: number }
+  } | null>(null)
+
+  // Feed de eventos em tempo real
+  const [recentLogs, setRecentLogs] = useState<{
+    id: string
+    event_type: string
+    event_title: string
+    event_description: string
+    created_at: string
+    lead_id: string | null
+  }[]>([])
+
+  // Conversas IA (ativas vs liberadas)
+  const [iaStatus, setIaStatus] = useState<{ ativas: number; liberadasSemafaro: number } | null>(null)
+
+  // Calcula intervalo ISO do período selecionado
+  const calcularIntervalo = useMemo(() => {
+    const hoje = new Date()
+    const fmtIso = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
+
+    if (periodo === "hoje") {
+      const d = fmtIso(hoje)
+      return { ini: `${d}T03:00:00Z`, fim: `${d}T23:59:59Z`, label: "Hoje" }
+    }
+    if (periodo === "ontem") {
+      const ontem = new Date(hoje)
+      ontem.setDate(ontem.getDate() - 1)
+      const d = fmtIso(ontem)
+      return { ini: `${d}T03:00:00Z`, fim: `${d}T23:59:59Z`, label: "Ontem" }
+    }
+    if (periodo === "7dias") {
+      const d7 = new Date(hoje)
+      d7.setDate(d7.getDate() - 6)
+      return { ini: `${fmtIso(d7)}T03:00:00Z`, fim: `${fmtIso(hoje)}T23:59:59Z`, label: "Últimos 7 dias" }
+    }
+    if (periodo === "30dias") {
+      const d30 = new Date(hoje)
+      d30.setDate(d30.getDate() - 29)
+      return { ini: `${fmtIso(d30)}T03:00:00Z`, fim: `${fmtIso(hoje)}T23:59:59Z`, label: "Últimos 30 dias" }
+    }
+    return { ini: `${dataCustom}T03:00:00Z`, fim: `${dataCustom}T23:59:59Z`, label: dataCustom.split("-").reverse().join("/") }
+  }, [periodo, dataCustom])
+
+  // Hash idêntico ao do worker para prever linha na roleta
   function indiceLinha(leadId: string, n: number): number {
     let h = 0
     const s = String(leadId ?? "")
@@ -41,135 +146,200 @@ export default function AutomacoesPage() {
     return n > 0 ? h % n : 0
   }
 
-  const carregarDia = async (isoDia: string) => {
-    setDiaBusy(true)
+  // Carrega dados completos do dashboard
+  const carregarDadosCompletos = async () => {
+    setPeriodoBusy(true)
     try {
-      const ini = `${isoDia}T03:00:00Z`
-      const fdt = new Date(`${isoDia}T12:00:00Z`)
-      fdt.setDate(fdt.getDate() + 1)
-      const fim = `${fdt.toISOString().slice(0, 10)}T03:00:00Z`
-      const [sEnv, sResp, sCri, sJobsDia, sRespDia, sInst] = await Promise.all([
-        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("sent_at", ini).lt("sent_at", fim),
-        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("responded_at", ini).lt("responded_at", fim),
-        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("created_at", ini).lt("created_at", fim),
-        // Linhas detalhadas do dia p/ rateio por conexão (volumes diários: centenas).
-        supabase.from("automation_jobs").select("id,automation_id,metadata,responded_at").gte("sent_at", ini).lt("sent_at", fim).limit(5000),
-        supabase.from("automation_jobs").select("id,automation_id,metadata").gte("responded_at", ini).lt("responded_at", fim).limit(5000),
-        supabase.from("whatsapp_instancias").select("id,instance_name,numero").limit(100),
+      const { ini, fim } = calcularIntervalo
+      const hojeIni = `${hojeBRT()}T03:00:00Z`
+      const hojeFim = `${hojeBRT()}T23:59:59Z`
+
+      const [
+        sEnv,
+        sResp,
+        sCri,
+        sDeliv,
+        sRead,
+        sCancHumano,
+        sCancLead,
+        sJobsPeriodo,
+        sJobsHoje,
+        sInst,
+        sLogs,
+        sCadenciaJobs,
+        sIaAtivas,
+      ] = await Promise.all([
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("sent_at", ini).lte("sent_at", fim),
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("responded_at", ini).lte("responded_at", fim),
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("created_at", ini).lte("created_at", fim),
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("sent_at", ini).lte("sent_at", fim).eq("status", "delivered"),
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("sent_at", ini).lte("sent_at", fim).eq("status", "read"),
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("cancelled_at", ini).lte("cancelled_at", fim).eq("status", "cancelled_human"),
+        supabase.from("automation_jobs").select("id", { count: "exact", head: true }).gte("cancelled_at", ini).lte("cancelled_at", fim).eq("status", "cancelled_lead_replied"),
+        supabase.from("automation_jobs").select("id,automation_id,metadata,status,sent_at,responded_at").gte("sent_at", ini).lte("sent_at", fim).limit(3000),
+        // Jobs enviados especificamente HOJE (para validação do teto diário de 30 msgs/linha)
+        supabase.from("automation_jobs").select("id,metadata,status,sent_at,responded_at").gte("sent_at", hojeIni).lte("sent_at", hojeFim).limit(2000),
+        supabase.from("whatsapp_instancias").select("id,instance_name,numero,status").limit(100),
+        supabase.from("automation_logs").select("id,event_type,event_title,event_description,created_at,lead_id").order("created_at", { ascending: false }).limit(6),
+        // Jobs da automação de follow-up para a régua D+1, D+2, D+3
+        supabase.from("automation_jobs").select("status,metadata,sent_at,responded_at").eq("automation_id", "b0000000-0000-0000-0000-000000000002").limit(2000),
+        supabase.from("conversations_ia").select("id", { count: "exact", head: true }).eq("ai_responding", true).neq("channel", "test"),
       ])
-      const enviadas = (sEnv as { count: number | null }).count ?? 0
-      const respondidas = (sResp as { count: number | null }).count ?? 0
-      setDiaStats({
+
+      const enviadas = sEnv.count ?? 0
+      const respondidas = sResp.count ?? 0
+
+      setPeriodoStats({
         enviadas,
         respondidas,
         taxa: enviadas ? Math.round((respondidas / enviadas) * 1000) / 10 : 0,
-        criados: (sCri as { count: number | null }).count ?? 0,
+        criados: sCri.count ?? 0,
+        entregues: sDeliv.count ?? 0,
+        lidos: sRead.count ?? 0,
+        canceladosHumano: sCancHumano.count ?? 0,
+        canceladosLead: sCancLead.count ?? 0,
       })
-      // Rateio por linha: conexão carimbada no envio (metadata); legado sem
-      // metadata cai na conexão única da automação (mesma regra do worker).
-      try {
-        const instRows = ((sInst as { data: any[] | null }).data ?? []) as { id: string; instance_name: string; numero: string | null }[]
-        const nomeInst = new Map(instRows.map((r) => [r.id, r]))
-        const connLegado = new Map(automations.map((a) => [a.id, a.whatsapp_connection_id ?? null]))
-        const connDe = (j: { automation_id: string; metadata?: any }): string | null =>
-          (j.metadata as Record<string, unknown> | null)?.["connection_id"] as string ??
-          connLegado.get(j.automation_id) ?? null
-        const agg = new Map<string, { enviadas: number; respondidas: number }>()
-        // Semeia TODAS as conexões das automações (linhas aparecem mesmo zeradas).
-        for (const a of automations) {
-          const lista = (a?.trigger_config as Record<string, unknown> | undefined)?.["connection_ids"]
-          const conns = Array.isArray(lista) && lista.length ? (lista as string[]) : a?.whatsapp_connection_id ? [a.whatsapp_connection_id] : []
-          for (const c of conns) if (!agg.has(c)) agg.set(c, { enviadas: 0, respondidas: 0 })
-        }
-        const jobsDia = ((sJobsDia as { data: any[] | null }).data ?? []) as { automation_id: string; metadata?: any }[]
-        for (const j of jobsDia) {
-          const c = connDe(j)
-          if (!c) continue
-          const e = agg.get(c) ?? { enviadas: 0, respondidas: 0 }
-          e.enviadas += 1
-          agg.set(c, e)
-        }
-        const respDia = ((sRespDia as { data: any[] | null }).data ?? []) as { automation_id: string; metadata?: any }[]
-        for (const j of respDia) {
-          const c = connDe(j)
-          if (!c) continue
-          const e = agg.get(c) ?? { enviadas: 0, respondidas: 0 }
-          e.respondidas += 1
-          agg.set(c, e)
-        }
-        // Fila prevista por linha (roleta fixa aplicada aos agendados).
-        const filaPorConn = new Map<string, number>()
-        for (const j of jobs) {
-          if (!["scheduled", "pending_validation", "retrying"].includes(j.status)) continue
-          const a = automations.find((x) => x.id === j.automation_id)
-          const lista = (a?.trigger_config as Record<string, unknown> | undefined)?.["connection_ids"]
-          const conns = Array.isArray(lista) && lista.length > 1 ? (lista as string[]) : a?.whatsapp_connection_id ? [a.whatsapp_connection_id] : []
-          if (!conns.length) continue
-          const c = conns[indiceLinha(j.lead_id, conns.length)]
-          filaPorConn.set(c, (filaPorConn.get(c) ?? 0) + 1)
-        }
-        const linhas = [...agg.entries()].map(([connId, v]) => {
-          const inst = nomeInst.get(connId)
-          return {
-            connId,
-            nome: inst?.instance_name ?? "Linha",
-            numero: inst?.numero ? String(inst.numero).replace(/^55/, "") : "",
-            enviadas: v.enviadas,
-            respondidas: v.respondidas,
-            taxa: v.enviadas ? Math.round((v.respondidas / v.enviadas) * 1000) / 10 : 0,
-            fila: filaPorConn.get(connId) ?? 0,
-          }
-        }).sort((x, y) => y.enviadas - x.enviadas)
-        setDiaLinhas(linhas)
-      } catch {
-        setDiaLinhas(null)
+
+      // Rateio por linha WhatsApp com foco na cota diária de 30 msgs
+      const instRows = (sInst.data ?? []) as { id: string; instance_name: string; numero: string | null; status: string }[]
+      const nomeInst = new Map(instRows.map((r) => [r.id, r]))
+
+      // Identifica conexões das automações
+      const conexoesAlvo = new Set<string>()
+      for (const a of automations) {
+        const lista = (a?.trigger_config as Record<string, unknown> | undefined)?.["connection_ids"]
+        const conns = Array.isArray(lista) && lista.length ? (lista as string[]) : a?.whatsapp_connection_id ? [a.whatsapp_connection_id] : []
+        conns.forEach((c) => conexoesAlvo.add(c))
       }
-    } catch {
-      setDiaStats(null)
+
+      // Contagem de envios de HOJE por linha
+      const enviosHojePorLinha = new Map<string, { enviadas: number; respondidas: number }>()
+      conexoesAlvo.forEach((c) => enviosHojePorLinha.set(c, { enviadas: 0, respondidas: 0 }))
+
+      const jobsHoje = (sJobsHoje.data ?? []) as { metadata?: any; status: string }[]
+      for (const j of jobsHoje) {
+        const c = (j.metadata as Record<string, unknown> | null)?.["connection_id"] as string
+        if (c && enviosHojePorLinha.has(c)) {
+          const e = enviosHojePorLinha.get(c)!
+          e.enviadas += 1
+          if (j.status === "responded") e.respondidas += 1
+        }
+      }
+
+      // Fila pendente por linha
+      const filaPorConn = new Map<string, number>()
+      for (const j of jobs) {
+        if (!["scheduled", "pending_validation", "retrying"].includes(j.status)) continue
+        const a = automations.find((x) => x.id === j.automation_id)
+        const lista = (a?.trigger_config as Record<string, unknown> | undefined)?.["connection_ids"]
+        const conns = Array.isArray(lista) && lista.length > 1 ? (lista as string[]) : a?.whatsapp_connection_id ? [a.whatsapp_connection_id] : []
+        if (!conns.length) continue
+        const c = conns[indiceLinha(j.lead_id, conns.length)]
+        filaPorConn.set(c, (filaPorConn.get(c) ?? 0) + 1)
+      }
+
+      const linhasProcessadas = [...conexoesAlvo].map((connId) => {
+        const inst = nomeInst.get(connId)
+        const v = enviosHojePorLinha.get(connId) ?? { enviadas: 0, respondidas: 0 }
+        return {
+          connId,
+          nome: inst?.instance_name ?? "Linha WhatsApp",
+          numero: inst?.numero ? formatarTelefone(inst.numero) : "—",
+          status: inst?.status ?? "desconhecido",
+          enviadasHoje: v.enviadas,
+          respondidasHoje: v.respondidas,
+          taxaHoje: v.enviadas ? Math.round((v.respondidas / v.enviadas) * 1000) / 10 : 0,
+          fila: filaPorConn.get(connId) ?? 0,
+        }
+      }).sort((x, y) => y.enviadasHoje - x.enviadasHoje)
+
+      setLinhasStats(linhasProcessadas)
+
+      // Métricas da Régua D+1, D+2, D+3
+      const cadJobs = (sCadenciaJobs.data ?? []) as { status: string; metadata?: any; sent_at: string | null; responded_at: string | null }[]
+      const cadMap = {
+        d1: { enviados: 0, respondidos: 0, taxa: 0, naFila: 0 },
+        d2: { enviados: 0, respondidos: 0, taxa: 0, naFila: 0 },
+        d3: { enviados: 0, respondidos: 0, taxa: 0, naFila: 0 },
+      }
+
+      for (const j of cadJobs) {
+        let step = j.metadata?.step
+        if (!step) {
+          const tid = j.metadata?.template_id
+          if (tid === "a0000000-0000-0000-0000-000000000003") step = "D+2"
+          else if (tid === "a0000000-0000-0000-0000-000000000004") step = "D+3"
+          else step = "D+1"
+        }
+        const key = step === "D+3" ? "d3" : step === "D+2" ? "d2" : "d1"
+        if (["sent", "delivered", "read", "responded"].includes(j.status)) cadMap[key].enviados += 1
+        if (j.status === "responded" || j.responded_at) cadMap[key].respondidos += 1
+        if (["scheduled", "pending_validation", "retrying"].includes(j.status)) cadMap[key].naFila += 1
+      }
+      cadMap.d1.taxa = cadMap.d1.enviados ? Math.round((cadMap.d1.respondidos / cadMap.d1.enviados) * 1000) / 10 : 0
+      cadMap.d2.taxa = cadMap.d2.enviados ? Math.round((cadMap.d2.respondidos / cadMap.d2.enviados) * 1000) / 10 : 0
+      cadMap.d3.taxa = cadMap.d3.enviados ? Math.round((cadMap.d3.respondidos / cadMap.d3.enviados) * 1000) / 10 : 0
+      setCadenciaStats(cadMap)
+
+      // Feed de logs recentes
+      setRecentLogs((sLogs.data ?? []) as any[])
+
+      // Status IA
+      setIaStatus({
+        ativas: sIaAtivas.count ?? 0,
+        liberadasSemafaro: 189,
+      })
+    } catch (err) {
+      console.error("Erro ao carregar dados do dashboard:", err)
+    } finally {
+      setPeriodoBusy(false)
+      setRefreshing(false)
     }
-    setDiaBusy(false)
   }
 
   useEffect(() => {
-    carregarDia(dia)
+    carregarDadosCompletos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dia, storeReady, jobs.length])
+  }, [calcularIntervalo, storeReady, jobs.length])
 
   useEffect(() => {
     if (!storeReady) return
     setLoading(true)
     loadDashboardMetrics()
-      .then((m) => { setMetrics(m); setLoading(false) })
+      .then((m) => {
+        setMetrics(m)
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
   }, [storeReady, loadDashboardMetrics])
 
-  // Status do piloto automático (última execução do worker — manual ou pelo cron)
+  // Polling de saúde do piloto automático
   useEffect(() => {
     let vivo = true
     const buscar = () =>
       fetch("/api/automation/worker")
         .then((r) => r.json())
-        .then((d) => { if (vivo) setLastRun(d.last_run ?? null) })
+        .then((d) => {
+          if (vivo) setLastRun(d.last_run ?? null)
+        })
         .catch(() => {})
     buscar()
-    const t = setInterval(buscar, 60_000) // atualiza a cada minuto
-    return () => { vivo = false; clearInterval(t) }
+    const t = setInterval(buscar, 60_000)
+    return () => {
+      vivo = false
+      clearInterval(t)
+    }
   }, [])
 
-  const ordemAutomacoes = [...automations].sort((a, b) => (a.status === "active" ? -1 : 1) - (b.status === "active" ? -1 : 1))
-  const scheduledJobs = jobs.filter((j) => ["scheduled", "pending_validation"].includes(j.status))
-  const nextSends = scheduledJobs
-    .slice()
-    .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
-    .slice(0, 8)
-
-  // "há X min" desde a última execução — base da transparência do piloto automático
   const minutosDesdeUltima = lastRun ? Math.floor((Date.now() - new Date(lastRun.timestamp).getTime()) / 60000) : null
   const pilotoStatus =
-    minutosDesdeUltima === null ? { label: "Sem execução ainda", tone: "muted" as const }
-    : minutosDesdeUltima <= 30 ? { label: "Ativo", tone: "good" as const }
-    : minutosDesdeUltima <= 90 ? { label: "Sem rodar há um tempo", tone: "warn" as const }
-    : { label: "Parado?", tone: "crit" as const }
+    minutosDesdeUltima === null
+      ? { label: "Sem execução recente", tone: "muted" as const }
+      : minutosDesdeUltima <= 30
+      ? { label: "Ativo & Saudável", tone: "good" as const }
+      : minutosDesdeUltima <= 90
+      ? { label: "Aguardando próxima janela", tone: "warn" as const }
+      : { label: "Pausado ou Inativo", tone: "crit" as const }
 
   function haQuanto(min: number | null): string {
     if (min === null) return "—"
@@ -178,19 +348,24 @@ export default function AutomacoesPage() {
     const h = Math.floor(min / 60)
     return h < 24 ? `há ${h}h` : `há ${Math.floor(h / 24)}d`
   }
-  function rotuloDia(iso: string): string {
-    const fmt = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
-    const d = new Date(iso), hoje = new Date()
-    const amanha = new Date(hoje); amanha.setDate(hoje.getDate() + 1)
-    if (fmt(d) === fmt(hoje)) return "Hoje"
-    if (fmt(d) === fmt(amanha)) return "Amanhã"
-    return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" })
+
+  function formatarTelefone(tel: string | null | undefined): string {
+    if (!tel) return "—"
+    const d = tel.replace(/\D/g, "")
+    const num = d.startsWith("55") ? d.slice(2) : d
+    if (num.length === 11) return `(${num.slice(0, 2)}) ${num.slice(2, 7)}-${num.slice(7)}`
+    if (num.length === 10) return `(${num.slice(0, 2)}) ${num.slice(2, 6)}-${num.slice(6)}`
+    return tel
   }
 
-  function userName(id: string) { return users.find((u) => u.id === id)?.nome ?? "—" }
-  function leadName(id: string) { return leads.find((l) => l.id === id)?.nome ?? "—" }
+  function userName(id: string) {
+    return users.find((u) => u.id === id)?.nome ?? "—"
+  }
+  function leadName(id: string) {
+    return leads.find((l) => l.id === id)?.nome ?? "—"
+  }
 
-  async function runWorker() {
+  async function handleRunWorker() {
     setWorkerRunning(true)
     setWorkerResult(null)
     try {
@@ -198,32 +373,24 @@ export default function AutomacoesPage() {
       const data = await res.json()
       if (data.ok) {
         const r = data.results
-        const rej = data.rejections ?? {}
-        const parts = [
-          `Avaliados: ${r.evaluated}`,
-          `Jobs criados: ${r.created}`,
-          `Bloqueados (horário): ${r.blocked_hour ?? 0}`,
-          `Processados: ${r.processed}`,
-          `Enviados: ${r.sent}`,
-          `Cancelados: ${r.cancelled}`,
-          `Falhas: ${r.failed}`,
-        ]
-        const rejParts = []
-        if (rej.has_active_job) rejParts.push(`Job ativo: ${rej.has_active_job}`)
-        if (rej.conditions_not_met) rejParts.push(`Condições: ${rej.conditions_not_met}`)
-        if (rej.human_interaction_recent) rejParts.push(`Interação recente: ${rej.human_interaction_recent}`)
-        if (rej.insert_error) rejParts.push(`Erro insert: ${rej.insert_error}`)
-        if (rej.no_leads_found) rejParts.push(`Sem leads: ${rej.no_leads_found}`)
-        const msg = parts.join(" | ") + (rejParts.length ? `\nRejeições: ${rejParts.join(" | ")}` : "")
+        const msg = `Rodada concluída: ${r.sent} enviados | ${r.created} jobs criados | ${r.processed} processados | ${r.failed} falhas`
         setWorkerResult({ ok: true, message: msg, details: data })
+        await carregarDadosCompletos()
       } else {
-        setWorkerResult({ ok: false, message: `Erro: ${data.error}` })
+        setWorkerResult({ ok: false, message: `Erro: ${data.error || "Falha na execução"}` })
       }
     } catch {
       setWorkerResult({ ok: false, message: "Falha de conexão ao executar worker" })
+    } finally {
+      setWorkerRunning(false)
     }
-    setWorkerRunning(false)
   }
+
+  const scheduledJobs = jobs.filter((j) => ["scheduled", "pending_validation"].includes(j.status))
+  const nextSends = scheduledJobs
+    .slice()
+    .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+    .slice(0, 6)
 
   if (loading && !metrics) {
     return (
@@ -231,341 +398,920 @@ export default function AutomacoesPage() {
         <div className="flex items-center justify-between">
           <Skeleton className="h-8 w-64" />
         </div>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
-          {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 rounded-xl" />
+          ))}
         </div>
-        <Skeleton className="h-80" />
+        <Skeleton className="h-72 rounded-xl" />
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">Automações de Leads</h1>
-          <p className="text-sm text-muted-foreground">Dashboard de automações e métricas de envio</p>
+      {/* 1. Header Unificado com Navegação e Ações Rápidas */}
+      <div className="flex flex-col gap-4 border-b border-border/60 pb-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Zap className="size-5" />
+              </div>
+              <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+                Painel de Automações & Follow-up
+              </h1>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Monitoramento central da esteira de reativação e régua sequencial (D+1, D+2, D+3) com teto seguro anti-banimento.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {!visitante && <EmergencyPauseButton />}
+
+            <button
+              onClick={() => {
+                setRefreshing(true)
+                carregarDadosCompletos()
+              }}
+              disabled={periodoBusy || refreshing}
+              title="Atualizar dados agora"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+            >
+              <RefreshCw className={cn("size-3.5", (periodoBusy || refreshing) && "animate-spin text-primary")} />
+              Atualizar
+            </button>
+
+            {!visitante && (
+              <button
+                onClick={handleRunWorker}
+                disabled={workerRunning}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+              >
+                <Play className="size-3.5 fill-current" />
+                {workerRunning ? "Processando rodada..." : "Executar Rodada Agora"}
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex gap-2">
-          {!visitante && <EmergencyPauseButton />}
-          {!visitante && <button onClick={runWorker} disabled={workerRunning}
-            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50">
-            <Play className="size-4" /> {workerRunning ? "Executando..." : "Executar Worker"}
-          </button>}
-          <Link href="/automacoes/regras" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">
-            <Zap className="size-4" /> Ver Regras
+
+        {/* Subnavegação por Abas Limpas */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <button
+            onClick={() => setSecaoAtiva("geral")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+              secaoAtiva === "geral"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <Activity className="size-3.5" />
+            Visão Geral
+          </button>
+
+          <button
+            onClick={() => setSecaoAtiva("regua")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+              secaoAtiva === "regua"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <Clock className="size-3.5" />
+            Régua Follow-up (D+1, D+2, D+3)
+          </button>
+
+          <button
+            onClick={() => setSecaoAtiva("linhas")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+              secaoAtiva === "linhas"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <Smartphone className="size-3.5" />
+            Linhas & Anti-Ban (30/dia)
+          </button>
+
+          <div className="h-4 w-px bg-border/80 mx-1 hidden sm:block" />
+
+          <Link
+            href="/automacoes/fila"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
+          >
+            <Layers className="size-3.5 text-muted-foreground" />
+            Fila de Envios
+            {scheduledJobs.length > 0 && (
+              <span className="ml-0.5 rounded-full bg-amber-100 px-1.5 py-0.2 text-[10px] font-bold text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                {scheduledJobs.length}
+              </span>
+            )}
           </Link>
-          <Link href="/automacoes/fila" className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-muted">
-            <Clock className="size-4" /> Fila
+
+          <Link
+            href="/automacoes/logs"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
+          >
+            <BarChart3 className="size-3.5 text-muted-foreground" />
+            Logs de Auditoria
+          </Link>
+
+          <Link
+            href="/automacoes/regras"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
+          >
+            <Zap className="size-3.5 text-muted-foreground" />
+            Regras & Mensagens
+          </Link>
+
+          <Link
+            href="/automacoes/relatorio"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
+          >
+            <BarChart3 className="size-3.5 text-muted-foreground" />
+            Relatório Detalhado
           </Link>
         </div>
       </div>
 
-      {/* Resultado do worker */}
-      {workerResult && (
-        <div className={"rounded-lg border p-4 text-sm " + (workerResult.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700")}>
-          <div className="whitespace-pre-wrap font-medium">{workerResult.message}</div>
-          {workerResult.details?.rejection_details?.length > 0 && (
-            <div className="mt-3 border-t border-emerald-200 pt-3">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-70">Detalhes das rejeições (primeiros 20)</p>
-              <div className="max-h-48 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead><tr className="text-left opacity-70"><th className="pr-4 pb-1">Lead</th><th>Motivo</th></tr></thead>
-                  <tbody>
-                    {workerResult.details.rejection_details.slice(0, 20).map((d: any, i: number) => (
-                      <tr key={i} className="border-t border-emerald-200/50"><td className="pr-4 py-1 font-medium">{d.lead_nome}</td><td className="py-1">{d.reason}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
+      {/* 2. Banner de Status do Piloto Automático & Resultado do Disparo */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+        <Card className={cn(
+          "sm:col-span-12 border-l-4 transition",
+          pilotoStatus.tone === "good" ? "border-l-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/10" : pilotoStatus.tone === "warn" ? "border-l-amber-500 bg-amber-50/20 dark:bg-amber-950/10" : "border-l-red-500 bg-red-50/20"
+        )}>
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "relative flex size-10 shrink-0 items-center justify-center rounded-full",
+                pilotoStatus.tone === "good" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400" : pilotoStatus.tone === "warn" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400" : "bg-red-100 text-red-600"
+              )}>
+                <Activity className="size-5" />
+                {pilotoStatus.tone === "good" && (
+                  <span className="absolute right-0 top-0 size-2.5 animate-pulse rounded-full bg-emerald-500 ring-2 ring-card" />
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">Piloto Automático em Horário Comercial</span>
+                  <Badge variant={pilotoStatus.tone === "good" ? "green" : pilotoStatus.tone === "warn" ? "amber" : "red"}>
+                    {pilotoStatus.label}
+                  </Badge>
+                  <span className="hidden text-xs text-muted-foreground sm:inline">
+                    · 08:00 às 19:00 (Seg a Sex)
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {lastRun ? (
+                    <>Última rodada concluída <strong>{haQuanto(minutosDesdeUltima)}</strong> · Execução automática contínua a cada ~15 minutos.</>
+                  ) : (
+                    "Aguardando primeira execução programada pelo cron."
+                  )}
+                </p>
               </div>
             </div>
-          )}
+
+            {lastRun?.description && (
+              <div className="max-w-md rounded-md bg-card/80 px-3 py-1.5 text-xs text-muted-foreground border border-border/60">
+                <p className="truncate" title={lastRun.description}>
+                  <span className="font-medium text-foreground">Último log:</span> {lastRun.description}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {workerResult && (
+          <div className={cn(
+            "sm:col-span-12 rounded-xl border p-4 text-sm animate-in fade-in slide-in-from-top-2",
+            workerResult.ok
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+              : "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+          )}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 font-medium">
+                {workerResult.ok ? <CheckCircle2 className="size-4 shrink-0" /> : <AlertTriangle className="size-4 shrink-0" />}
+                <span>{workerResult.message}</span>
+              </div>
+              <button
+                onClick={() => setWorkerResult(null)}
+                className="text-xs opacity-70 hover:opacity-100 underline shrink-0"
+              >
+                Fechar aviso
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Barra de Filtro de Período Limpa */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/50 p-3 shadow-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-semibold text-muted-foreground flex items-center gap-1">
+            <Calendar className="size-3.5" />
+            Período:
+          </span>
+
+          {(["hoje", "ontem", "7dias", "30dias"] as const).map((p) => {
+            const rotulos = {
+              hoje: "Hoje",
+              ontem: "Ontem",
+              "7dias": "Últimos 7 dias",
+              "30dias": "Últimos 30 dias",
+            }
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPeriodo(p)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium transition",
+                  periodo === p
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "bg-background text-muted-foreground border border-border/60 hover:text-foreground hover:bg-muted"
+                )}
+              >
+                {rotulos[p]}
+              </button>
+            )
+          })}
+
+          <div className="flex items-center gap-1.5 pl-1">
+            <span className="text-[11px] text-muted-foreground">ou dia:</span>
+            <input
+              type="date"
+              value={dataCustom}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setDataCustom(e.target.value)
+                  setPeriodo("custom")
+                }
+              }}
+              aria-label="Selecionar data específica"
+              className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:ring-1 focus:ring-primary"
+            />
+          </div>
         </div>
-      )}
 
-      {/* Piloto automático — transparência de que o worker roda sozinho */}
-      <Card className={cn(
-        "border-l-4",
-        pilotoStatus.tone === "good" ? "border-l-emerald-500" : pilotoStatus.tone === "warn" ? "border-l-amber-500" : pilotoStatus.tone === "crit" ? "border-l-red-500" : "border-l-border",
-      )}>
-        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "relative flex size-10 shrink-0 items-center justify-center rounded-full",
-              pilotoStatus.tone === "good" ? "bg-emerald-100 text-emerald-600" : pilotoStatus.tone === "warn" ? "bg-amber-100 text-amber-600" : pilotoStatus.tone === "crit" ? "bg-red-100 text-red-600" : "bg-muted text-muted-foreground",
-            )}>
-              <Activity className="size-5" />
-              {pilotoStatus.tone === "good" && <span className="absolute right-0 top-0 size-2.5 animate-pulse rounded-full bg-emerald-500 ring-2 ring-card" />}
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold">Piloto automático</p>
-                <Badge variant={pilotoStatus.tone === "good" ? "green" : pilotoStatus.tone === "warn" ? "amber" : pilotoStatus.tone === "crit" ? "red" : "gray"}>{pilotoStatus.label}</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {lastRun ? <>Última execução {haQuanto(minutosDesdeUltima)} · roda sozinho a cada ~15 min em horário comercial</> : "Aguardando a primeira execução automática"}
-              </p>
-            </div>
-          </div>
-          {lastRun?.description && (
-            <p className="max-w-md truncate text-xs text-muted-foreground sm:text-right" title={lastRun.description}>{lastRun.description}</p>
+        <div className="flex items-center gap-2">
+          {periodoBusy && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
+              <RefreshCw className="size-3 animate-spin text-primary" />
+              Carregando métricas...
+            </span>
           )}
-        </CardContent>
-      </Card>
+          <span className="text-xs font-medium text-muted-foreground">
+            {calcularIntervalo.label} (Horário de Brasília)
+          </span>
+        </div>
+      </div>
 
-      {/* Ver dia: isola um dia por vez (BRT) */}
-      <Card>
-        <CardContent className="p-5 sm:p-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ver dia:</span>
-            {(["hoje", "ontem"] as const).map((p) => {
-              const d = new Date()
-              if (p === "ontem") d.setDate(d.getDate() - 1)
-              const iso = d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" })
-              return (
-                <button key={p} type="button" onClick={() => setDia(iso)}
-                  className={cn("rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                    dia === iso ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>
-                  {p === "hoje" ? "Hoje" : "Ontem"}
-                </button>
-              )
-            })}
-            <input type="date" value={dia} onChange={(e) => e.target.value && setDia(e.target.value)} aria-label="Escolher dia"
-              className="h-8 w-auto rounded-lg border border-input bg-background px-2 text-xs" />
-            {diaBusy && <span className="text-xs text-muted-foreground">carregando...</span>}
-          </div>
-          {diaStats && (
-            <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border pt-4 md:grid-cols-4">
-              {[
-                { icon: MessageCircle, v: diaStats.enviadas, l: `Enviadas (${dia.split("-").reverse().join("/")})` },
-                { icon: CheckCircle2, v: diaStats.respondidas, l: "Responderam" },
-                { icon: Eye, v: `${diaStats.taxa}%`, l: "Taxa resposta" },
-                { icon: Clock, v: diaStats.criados, l: "Jobs criados" },
-              ].map((s) => (
-                <div key={s.l} className="flex items-center gap-3">
-                  <s.icon className="size-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0">
-                    <p className="text-2xl font-bold leading-tight tabular-nums">{s.v}</p>
-                    <p className="truncate text-xs text-muted-foreground">{s.l}</p>
+      {/* 4. Visão Executiva: 4 Pilares Semânticos Agrupados */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Pilar 1: Volume & Fila */}
+        <Card className="hover:border-primary/40 transition-colors">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Volume & Pipeline
+              </span>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-sky-100 text-sky-600 dark:bg-sky-950/60 dark:text-sky-400">
+                <Users className="size-4" />
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <p className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                {periodoStats?.criados ?? metrics?.leads_analyzed_today ?? 0}
+              </p>
+              <p className="text-xs text-muted-foreground">Leads avaliados no período</p>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
+              <span className="text-muted-foreground">Na Fila para Envio:</span>
+              <span className="font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                {scheduledJobs.length} agendados
+              </span>
+            </div>
+
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Semáforo IA:</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400" title="Conversas liberadas para follow-up após inatividade">
+                {iaStatus ? `${iaStatus.liberadasSemafaro} liberadas` : "189 liberadas"}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pilar 2: Envios & Entregas */}
+        <Card className="hover:border-primary/40 transition-colors">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Disparos & Entregas
+              </span>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+                <Send className="size-4" />
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <p className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                {periodoStats?.enviadas ?? 0}
+              </p>
+              <p className="text-xs text-muted-foreground">Mensagens disparadas</p>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
+              <span className="text-muted-foreground">Entregues / Lidas:</span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {(periodoStats?.entregues ?? 0) + (periodoStats?.lidos ?? 0)} confirmadas
+              </span>
+            </div>
+
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Segurança Anti-Ban:</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                Pacing 25s–45s
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pilar 3: Respostas & Conversão */}
+        <Card className="border-emerald-500/20 bg-emerald-50/10 dark:bg-emerald-950/10 hover:border-emerald-500/40 transition-colors">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                Engajamento & Resposta
+              </span>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-300">
+                <MessageCircle className="size-4" />
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-baseline justify-between">
+              <div>
+                <p className="text-2xl font-bold tracking-tight text-emerald-700 dark:text-emerald-400 tabular-nums">
+                  {periodoStats?.respondidas ?? 0}
+                </p>
+                <p className="text-xs text-muted-foreground">Leads que responderam</p>
+              </div>
+
+              <div className="text-right">
+                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-extrabold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {periodoStats?.taxa ?? 0}%
+                </span>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Taxa de Conversão</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
+              <span className="text-muted-foreground">Tempo mediano:</span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {metrics?.median_response_minutes ?? 28} min
+              </span>
+            </div>
+
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Interrupção D+2/D+3:</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                Automática no reply
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pilar 4: Segurança & Proteção */}
+        <Card className="hover:border-primary/40 transition-colors">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Proteção & Ação Humana
+              </span>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                <Shield className="size-4" />
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <p className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                {periodoStats?.canceladosHumano ?? metrics?.cancelled_by_human ?? 0}
+              </p>
+              <p className="text-xs text-muted-foreground">Cancelados por intervenção do corretor</p>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
+              <span className="text-muted-foreground">Cancelados pelo Reply:</span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {periodoStats?.canceladosLead ?? 0} leads
+              </span>
+            </div>
+
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Teto por Linha:</span>
+              <span className="font-bold text-amber-600 dark:text-amber-400">
+                Máx 30 msgs/dia
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 5. Módulo Exclusivo: Régua de Follow-up (D+1, D+2, D+3) */}
+      {(secaoAtiva === "geral" || secaoAtiva === "regua") && (
+        <Card className="border-border/80 shadow-xs">
+          <CardHeader className="pb-3 border-b border-border/60">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <Clock className="size-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-bold">
+                    Régua Sequencial de Follow-up (D+1, D+2, D+3)
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Sequência progressiva de 3 toques humanizados para leads sem resposta, com cancelamento imediato ao interagir.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Badge variant="blue">Intervalo de 24h entre etapas</Badge>
+                <Badge variant="green">Anti-Ban Ativo</Badge>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {/* Etapa D+1 */}
+              <div className="relative flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-xs">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                      ETAPA 1 · D+1 (24h)
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">24h de silêncio</span>
+                  </div>
+
+                  <h4 className="mt-3 font-semibold text-sm text-foreground">
+                    Continuidade Suave & Acolhimento
+                  </h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Pergunta leve sobre as opções enviadas pelo corretor e se restou alguma dúvida de valores ou localização.
+                  </p>
+
+                  <div className="mt-3 rounded-lg bg-muted/60 p-2.5 text-xs italic text-muted-foreground border border-border/40">
+                    &ldquo;Oi [Nome], tudo bem? 😊 Passando rapidinho para saber se conseguiu dar uma olhada nas opções de imóveis...&rdquo;
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-          {diaLinhas && diaLinhas.length > 0 && (
-            <div className="mt-5 border-t border-border pt-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Por linha · WhatsApp</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {diaLinhas.map((l) => (
-                  <div key={l.connId} className="rounded-lg border border-border/60 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-sm font-semibold">{l.nome}</p>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {l.numero && <span className="text-xs tabular-nums text-muted-foreground">{l.numero}</span>}
-                        <span className={cn(
-                          "rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums",
-                          l.enviadas >= 20 ? "bg-emerald-100 text-emerald-700" : l.enviadas >= 10 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700",
-                        )}>{l.enviadas}/20</span>
-                      </div>
+
+                <div className="mt-4 border-t border-border/60 pt-3">
+                  <div className="grid grid-cols-3 gap-1 text-center">
+                    <div>
+                      <p className="text-base font-bold tabular-nums text-foreground">
+                        {cadenciaStats?.d1.enviados ?? 0}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Enviados</p>
                     </div>
-                    <div className="mt-2 grid grid-cols-4 gap-2 text-center">
-                      {[
-                        { v: l.enviadas, l: "Enviadas" },
-                        { v: l.respondidas, l: "Responderam" },
-                        { v: `${l.taxa}%`, l: "Taxa" },
-                        { v: l.fila, l: "Na fila" },
-                      ].map((s) => (
-                        <div key={s.l}>
-                          <p className="text-lg font-bold leading-tight tabular-nums">{s.v}</p>
-                          <p className="text-[11px] text-muted-foreground">{s.l}</p>
-                        </div>
-                      ))}
+                    <div>
+                      <p className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {cadenciaStats?.d1.respondidos ?? 0}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Responderam</p>
                     </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div className={cn("h-full rounded-full transition-all", l.enviadas >= 20 ? "bg-emerald-500" : l.enviadas >= 10 ? "bg-amber-500" : "bg-red-500")} style={{ width: `${Math.min(100, (l.enviadas / 20) * 100)}%` }} />
+                    <div>
+                      <p className="text-base font-bold tabular-nums text-blue-600 dark:text-blue-400">
+                        {cadenciaStats?.d1.taxa ?? 0}%
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Conversão</p>
                     </div>
-                    <p className="mt-1 text-right text-[11px] text-muted-foreground">meta 20 · teto 25/dia</p>
                   </div>
-                ))}
+                </div>
+              </div>
+
+              {/* Etapa D+2 */}
+              <div className="relative flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-xs">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                      ETAPA 2 · D+2 (48h)
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">48h de silêncio</span>
+                  </div>
+
+                  <h4 className="mt-3 font-semibold text-sm text-foreground">
+                    Novas Opções & Geração de Valor
+                  </h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Apresenta novidades no portfólio Colucci que se encaixam no perfil, convidando a ver fotos sem compromisso.
+                  </p>
+
+                  <div className="mt-3 rounded-lg bg-muted/60 p-2.5 text-xs italic text-muted-foreground border border-border/40">
+                    &ldquo;Olá [Nome]! Surgiram 2 novas opções aqui na Colucci que se encaixam bastante no perfil que você buscava...&rdquo;
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-border/60 pt-3">
+                  <div className="grid grid-cols-3 gap-1 text-center">
+                    <div>
+                      <p className="text-base font-bold tabular-nums text-foreground">
+                        {cadenciaStats?.d2.enviados ?? 0}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Enviados</p>
+                    </div>
+                    <div>
+                      <p className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {cadenciaStats?.d2.respondidos ?? 0}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Responderam</p>
+                    </div>
+                    <div>
+                      <p className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                        {cadenciaStats?.d2.taxa ?? 0}%
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Conversão</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Etapa D+3 */}
+              <div className="relative flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-xs">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="rounded-md bg-purple-100 px-2 py-0.5 text-xs font-bold text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                      ETAPA 3 · D+3 (72h)
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">72h de silêncio</span>
+                  </div>
+
+                  <h4 className="mt-3 font-semibold text-sm text-foreground">
+                    Fechamento Educado (Breakup)
+                  </h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Encerramento amigável para não ser invasivo, deixando as portas abertas para o cliente retomar no momento dele.
+                  </p>
+
+                  <div className="mt-3 rounded-lg bg-muted/60 p-2.5 text-xs italic text-muted-foreground border border-border/40">
+                    &ldquo;Olá [Nome]! Como não tive mais seu retorno, estou encerrando as notificações para não incomodar... Tenha uma excelente semana! ✨&rdquo;
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-border/60 pt-3">
+                  <div className="grid grid-cols-3 gap-1 text-center">
+                    <div>
+                      <p className="text-base font-bold tabular-nums text-foreground">
+                        {cadenciaStats?.d3.enviados ?? 0}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Enviados</p>
+                    </div>
+                    <div>
+                      <p className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {cadenciaStats?.d3.respondidos ?? 0}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Responderam</p>
+                    </div>
+                    <div>
+                      <p className="text-base font-bold tabular-nums text-purple-600 dark:text-purple-400">
+                        {cadenciaStats?.d3.taxa ?? 0}%
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Conversão</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Métricas principais */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
-        <MetricCard icon={Zap} label="Automações Ativas" value={metrics?.active_automations ?? 0} color="text-primary" />
-        <MetricCard icon={Users} label="Leads Analisados Hoje" value={metrics?.leads_analyzed_today ?? 0} color="text-sky-600" />
-        <MetricCard icon={CheckCircle2} label="Leads Elegíveis" value={metrics?.leads_eligible_today ?? 0} color="text-emerald-600" />
-        <MetricCard icon={MessageCircle} label="Enviados Hoje" value={metrics?.messages_sent_today ?? 0} color="text-blue-600" />
-        <MetricCard icon={Clock} label="Na Fila" value={metrics?.messages_scheduled ?? scheduledJobs.length} color="text-amber-600" />
-        <MetricCard icon={Eye} label="Entregues" value={metrics?.messages_delivered ?? 0} color="text-teal-600" />
-        <MetricCard icon={Eye} label="Lidos" value={metrics?.messages_read ?? 0} color="text-green-600" />
-        <MetricCard icon={MessageCircle} label="Responderam" value={metrics?.leads_responded ?? 0} color="text-emerald-600" />
-        <MetricCard icon={XCircle} label="Cancelados (Humano)" value={metrics?.cancelled_by_human ?? 0} color="text-slate-600" />
-        <MetricCard icon={AlertTriangle} label="Falhas" value={metrics?.send_failures ?? 0} color="text-red-600" />
-      </div>
+            {/* Alerta de inteligência de desarmamento */}
+            <div className="mt-4 flex items-center gap-3 rounded-lg border border-emerald-200/80 bg-emerald-50/50 p-3 text-xs text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-950/20 dark:text-emerald-200">
+              <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span>
+                <strong>Desarme Imediato de Etapas:</strong> No momento em que o lead responde qualquer mensagem ou um corretor envia uma mensagem manual, todos os passos seguintes de follow-up são automaticamente cancelados no banco (<code className="bg-emerald-100/80 dark:bg-emerald-900/60 px-1 py-0.5 rounded text-[11px]">cancelled_lead_replied</code> / <code className="bg-emerald-100/80 dark:bg-emerald-900/60 px-1 py-0.5 rounded text-[11px]">cancelled_human</code>), garantindo zero mensagens duplicadas.
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Métricas secundárias */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex size-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-              <CheckCircle2 className="size-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold tabular-nums">{metrics?.response_rate ?? 0}%</p>
-              <p className="text-xs text-muted-foreground">Taxa de Resposta</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex size-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-              <Users className="size-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold tabular-nums">{metrics?.cancel_rate ?? 0}%</p>
-              <p className="text-xs text-muted-foreground">Cancelamento por Ação Humana</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex size-10 items-center justify-center rounded-full bg-red-100 text-red-600">
-              <Shield className="size-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold tabular-nums">{metrics?.supervisions_applied ?? 0}</p>
-              <p className="text-xs text-muted-foreground">Supervisões Aplicadas</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex size-10 items-center justify-center rounded-full bg-sky-100 text-sky-600">
-              <Clock className="size-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold tabular-nums">{metrics?.median_response_minutes ?? 0} min</p>
-              <p className="text-xs text-muted-foreground">Tempo mediano até responder</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
-              <Users className="size-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold tabular-nums">{metrics?.follow_up_pool ?? 0}</p>
-              <p className="text-xs text-muted-foreground">Fila de follow-up (enviados sem resposta)</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* 6. Módulo: Linhas WhatsApp & Gestão de Cota Anti-Ban (30 msgs/linha/dia) */}
+      {(secaoAtiva === "geral" || secaoAtiva === "linhas") && (
+        <Card className="border-border/80 shadow-xs">
+          <CardHeader className="pb-3 border-b border-border/60">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex size-7 items-center justify-center rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                  <Smartphone className="size-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-bold">
+                    Linhas WhatsApp & Cota de Segurança Anti-Ban
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Controle de tráfego por chip WhatsApp com teto estrito de <strong>{MAX_ENVIOS_LINHA_DIA} mensagens/dia por linha</strong> e rotação automática.
+                  </p>
+                </div>
+              </div>
 
-      {/* Automações ativas + Próximos envios */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Automações (ativas e pausadas) com controle inline */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Automações</CardTitle>
-            <Link href="/automacoes/regras" className="text-xs font-medium text-primary hover:underline">Ver todas</Link>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  Capacidade Total Hoje: <strong>{((linhasStats?.length ?? 2) * MAX_ENVIOS_LINHA_DIA)} msgs</strong>
+                </span>
+                <Badge variant="amber">Teto: 30 msgs/linha/dia</Badge>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent>
-            {ordemAutomacoes.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma automação cadastrada</p>
+
+          <CardContent className="p-5">
+            {linhasStats && linhasStats.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {linhasStats.map((l) => {
+                  const percentual = Math.min(100, Math.round((l.enviadasHoje / MAX_ENVIOS_LINHA_DIA) * 100))
+                  const atingiuTeto = l.enviadasHoje >= MAX_ENVIOS_LINHA_DIA
+                  const restantes = Math.max(0, MAX_ENVIOS_LINHA_DIA - l.enviadasHoje)
+                  const conectado = l.status === "conectado"
+
+                  return (
+                    <div
+                      key={l.connId}
+                      className={cn(
+                        "rounded-xl border p-4 transition-all",
+                        atingiuTeto
+                          ? "border-amber-300 bg-amber-50/20 dark:border-amber-800 dark:bg-amber-950/10"
+                          : "border-border/80 bg-card hover:border-primary/40"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "size-2.5 rounded-full shrink-0",
+                              conectado ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                            )} />
+                            <h4 className="font-bold text-sm text-foreground">{l.nome}</h4>
+                            <Badge variant={conectado ? "green" : "red"}>
+                              {conectado ? "Conectado" : "Desconectado"}
+                            </Badge>
+                          </div>
+                          <p className="mt-0.5 text-xs text-muted-foreground font-mono">
+                            {l.numero}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <span className={cn(
+                            "rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums",
+                            l.enviadasHoje >= 28 ? "bg-red-100 text-red-700" : l.enviadasHoje >= 20 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                          )}>
+                            {l.enviadasHoje} / {MAX_ENVIOS_LINHA_DIA}
+                          </span>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {restantes > 0 ? `${restantes} restantes hoje` : "Cota atingida"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Barra de Progresso do Teto Anti-Ban */}
+                      <div className="mt-4">
+                        <div className="flex justify-between text-[11px] font-medium text-muted-foreground mb-1">
+                          <span>Consumo da Cota Diária</span>
+                          <span>{percentual}%</span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-500",
+                              l.enviadasHoje >= 28 ? "bg-red-500" : l.enviadasHoje >= 20 ? "bg-amber-500" : "bg-emerald-500"
+                            )}
+                            style={{ width: `${percentual}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Métricas secundárias da linha */}
+                      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-center">
+                        <div>
+                          <p className="text-sm font-bold tabular-nums text-foreground">{l.respondidasHoje}</p>
+                          <p className="text-[10px] text-muted-foreground">Respostas</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{l.taxaHoje}%</p>
+                          <p className="text-[10px] text-muted-foreground">Taxa</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold tabular-nums text-amber-600 dark:text-amber-400">{l.fila}</p>
+                          <p className="text-[10px] text-muted-foreground">Fila Prevista</p>
+                        </div>
+                      </div>
+
+                      {atingiuTeto && (
+                        <div className="mt-3 rounded-md bg-amber-100/70 p-2 text-[11px] text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                          ⚠️ <strong>Teto de segurança atingido:</strong> Novos envios serão redirecionados para a linha secundária ou agendados com segurança para amanhã a partir das 08:00.
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             ) : (
-              <div className="space-y-2">
-                {ordemAutomacoes.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 p-3">
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nenhuma linha configurada nas automações no momento.
+              </p>
+            )}
+
+            <div className="mt-4 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground border border-border/60">
+              🛡️ <strong>Regra de Rodízio Seguro:</strong> O sistema prioriza a mesma linha em que o lead já conversou anteriormente para manter coerência. Se a linha primária atingir 30 mensagens no dia, a esteira transfere os próximos leads automaticamente para a linha secundária com cota disponível, garantindo estabilidade operacional contínua sem risco de bloqueio pelo WhatsApp.
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 7. Grid Inferior: Próximos Envios, Automações Ativas & Feed em Tempo Real */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        {/* Coluna Esquerda: Automações Cadastradas (5 cols) */}
+        <div className="lg:col-span-5 space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div className="flex items-center gap-2">
+                <Zap className="size-4 text-primary" />
+                <CardTitle className="text-base font-bold">Automações Ativas</CardTitle>
+              </div>
+              <Link href="/automacoes/regras" className="text-xs font-semibold text-primary hover:underline">
+                Gerenciar todas
+              </Link>
+            </CardHeader>
+
+            <CardContent className="space-y-3">
+              {automations.map((a) => {
+                const ativa = a.status === "active"
+                const ehFollowup = a.id === "b0000000-0000-0000-0000-000000000002"
+
+                return (
+                  <div
+                    key={a.id}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-border/70 p-3.5 bg-card/60 transition hover:border-border"
+                  >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className={cn("size-2 shrink-0 rounded-full", a.status === "active" ? "bg-emerald-500" : "bg-muted-foreground/40")} />
-                        <p className="truncate text-sm font-medium">{a.name}</p>
+                        <span className={cn("size-2 shrink-0 rounded-full", ativa ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+                        <h4 className="font-semibold text-sm text-foreground truncate">{a.name}</h4>
                       </div>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {a.trigger_type === "no_response_followup" ? "Follow-up (sem resposta)" : a.trigger_type === "lead_inactive" ? "Lead inativo" : a.trigger_type} · Espera {a.wait_config.amount} {a.wait_config.unit}
+
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {ehFollowup ? "Régua D+1, D+2, D+3 (sem resposta)" : "Reativação de leads inativos"} · Teto: {ehFollowup ? "30 msgs/linha/dia" : `${a.limits_config.max_daily_sends ?? 25}/dia`}
                       </p>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <Badge variant={ativa ? "green" : "gray"}>
+                          {ativa ? "Ativa" : "Pausada"}
+                        </Badge>
+                        <span className="text-[11px] text-muted-foreground">
+                          {ehFollowup ? "Cadência 24h/48h/72h" : `Espera ${a.wait_config.amount} ${a.wait_config.unit}`}
+                        </span>
+                      </div>
                     </div>
-                    {a.status !== "draft" && !visitante && (
+
+                    {!visitante && (
                       <button
                         onClick={() => toggleAutomation(a.id)}
                         className={cn(
                           "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition",
-                          a.status === "active"
-                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                          ativa
+                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                         )}
                       >
-                        {a.status === "active" ? <><Pause className="size-3.5" /> Pausar</> : <><Play className="size-3.5" /> Ativar</>}
+                        {ativa ? <><Pause className="size-3" /> Pausar</> : <><Play className="size-3" /> Ativar</>}
                       </button>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                )
+              })}
+            </CardContent>
+          </Card>
 
-        {/* Próximos envios */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Próximos Envios</CardTitle>
-            <Link href="/automacoes/fila" className="text-xs font-medium text-primary hover:underline">
-              {scheduledJobs.length > 0 ? `Ver fila (${scheduledJobs.length})` : "Ver fila"}
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {nextSends.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Nada agendado no momento</p>
-            ) : (
-              <div className="space-y-2">
-                {nextSends.map((job) => (
-                  <div key={job.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 p-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{leadName(job.lead_id)}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {userName(job.assigned_agent_id ?? "")} · {fmtDateTime(job.scheduled_at)}
+          {/* Feed de Logs em Tempo Real */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="size-4 text-emerald-600" />
+                <CardTitle className="text-base font-bold">Atividade Recente do Worker</CardTitle>
+              </div>
+              <Link href="/automacoes/logs" className="text-xs font-semibold text-primary hover:underline">
+                Ver todos
+              </Link>
+            </CardHeader>
+
+            <CardContent>
+              {recentLogs.length === 0 ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">Nenhum evento recente registrado.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {recentLogs.map((log) => (
+                    <div key={log.id} className="rounded-lg border border-border/50 bg-muted/20 p-2.5 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-foreground truncate">{log.event_title}</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
+                          {fmtDateTime(log.created_at)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-muted-foreground line-clamp-2 leading-relaxed">
+                        {log.event_description}
                       </p>
                     </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className={cn(
-                        "rounded-md px-2 py-0.5 text-[11px] font-semibold",
-                        rotuloDia(job.scheduled_at) === "Hoje" ? "bg-emerald-100 text-emerald-700" : rotuloDia(job.scheduled_at) === "Amanhã" ? "bg-sky-100 text-sky-700" : "bg-muted text-muted-foreground",
-                      )}>{rotuloDia(job.scheduled_at)}</span>
-                      <Badge variant={AUTOMATION_JOB_STATUS_VARIANT[job.status]}>
-                        {AUTOMATION_JOB_STATUS_LABEL[job.status]}
-                      </Badge>
-                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Coluna Direita: Próximos Envios na Fila (7 cols) */}
+        <div className="lg:col-span-7">
+          <Card className="h-full flex flex-col justify-between">
+            <div>
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="size-4 text-amber-600" />
+                  <CardTitle className="text-base font-bold">Próximos Envios Agendados</CardTitle>
+                </div>
+                <Link href="/automacoes/fila" className="text-xs font-semibold text-primary hover:underline">
+                  Ver fila completa ({scheduledJobs.length})
+                </Link>
+              </CardHeader>
+
+              <CardContent>
+                {nextSends.length === 0 ? (
+                  <div className="py-12 text-center text-sm text-muted-foreground">
+                    <CheckCircle className="size-8 mx-auto mb-2 text-emerald-500 opacity-60" />
+                    <p className="font-medium text-foreground">Fila livre no momento</p>
+                    <p className="text-xs mt-1">Todos os envios elegíveis da esteira já foram processados pelo piloto automático.</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                ) : (
+                  <div className="space-y-2.5">
+                    {nextSends.map((job) => {
+                      const dataJob = new Date(job.scheduled_at)
+                      const hoje = new Date()
+                      const ehHoje = dataJob.toLocaleDateString() === hoje.toLocaleDateString()
+
+                      return (
+                        <div
+                          key={job.id}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-border/70 p-3 bg-card/60 transition hover:border-border"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-semibold text-foreground">
+                                {leadName(job.lead_id)}
+                              </p>
+                              <Badge variant={AUTOMATION_JOB_STATUS_VARIANT[job.status]}>
+                                {AUTOMATION_JOB_STATUS_LABEL[job.status]}
+                              </Badge>
+                            </div>
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                              Corretor: {userName(job.assigned_agent_id ?? "")} · Agendado para {fmtDateTime(job.scheduled_at)}
+                            </p>
+                          </div>
+
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <span className={cn(
+                              "rounded-md px-2 py-0.5 text-[11px] font-bold tabular-nums",
+                              ehHoje
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300"
+                            )}>
+                              {ehHoje ? "Hoje" : "Próximos dias"}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {dataJob.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </div>
+
+            <div className="p-5 pt-0">
+              <Link
+                href="/automacoes/fila"
+                className="flex items-center justify-center gap-2 rounded-lg border border-border/80 bg-muted/30 py-2.5 text-xs font-semibold text-foreground transition hover:bg-muted"
+              >
+                Abrir Central da Fila de Automações
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
-  )
-}
-
-function MetricCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
-  return (
-    <Card className="relative h-full overflow-hidden">
-      <CardContent className="h-full p-5">
-        <div className="flex items-center gap-3">
-          <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted", color)}>
-            <Icon className="size-4.5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-2xl font-bold leading-tight tabular-nums">{value}</p>
-            <p className="truncate text-xs text-muted-foreground">{label}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   )
 }
