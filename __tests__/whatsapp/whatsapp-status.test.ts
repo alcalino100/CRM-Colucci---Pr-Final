@@ -60,9 +60,9 @@ describe("WhatsApp Status & Realtime Alert Logic", () => {
 
   it("deve ordenar instâncias desconectadas primeiro para priorização visual do gestor", () => {
     const list: WhatsAppInstance[] = [
-      { id: "1", corretor_id: null, instance_name: "inst-a", status: "conectado", corretorNome: "Aline" },
-      { id: "2", corretor_id: null, instance_name: "inst-b", status: "desconectado", corretorNome: "Bernardo" },
-      { id: "3", corretor_id: null, instance_name: "patricia-1", status: "desconectado", isPatricia: true, corretorNome: "Patricia" },
+      { id: "1", corretor_id: null, instance_name: "inst-a", status: "conectado", corretorNome: "Aline", numero: null },
+      { id: "2", corretor_id: null, instance_name: "inst-b", status: "desconectado", corretorNome: "Bernardo", numero: null },
+      { id: "3", corretor_id: null, instance_name: "patricia-1", status: "desconectado", isPatricia: true, corretorNome: "Patricia", numero: null },
     ]
 
     const sorted = [...list].sort((a, b) => {

@@ -101,101 +101,93 @@ function tagsDoLead(referencias: unknown): string[] {
   return out
 }
 
-// Cria jobs de follow-up: pega os leads que receberam a mensagem da automação-mãe e não
-// responderam há mais de N horas, e agenda um novo envio (a fase de processamento cuida do
-// disparo). Garante no máximo 1 follow-up por lead e só para leads ainda elegíveis.
-// A automação de follow-up é identificada por trigger_type = "no_response_followup" e traz
-// em trigger_config: { parent_automation_id, no_response_hours }.
-async function criarJobsFollowup(automation: any, results: { created: number }, skipIA: Set<string> | null): Promise<void> {
-  const cfg = automation.trigger_config ?? {}
-  const parentId: string | undefined = cfg.parent_automation_id
-  const horas: number = cfg.no_response_hours ?? 24
-  if (!parentId) {
+// =============================================================================
+// CADÊNCIA D+1, D+2, D+3 — Templates e Limites Anti-Ban
+// =============================================================================
+export const TEMPLATE_D1 = "a0000000-0000-0000-0000-000000000002" // Follow-up D+1 (24h)
+export const TEMPLATE_D2 = "a0000000-0000-0000-0000-000000000003" // Follow-up D+2 (48h)
+export const TEMPLATE_D3 = "a0000000-0000-0000-0000-000000000004" // Follow-up D+3 (72h)
+export const MAX_ENVIOS_LINHA_DIA = 30 // Limite estrito anti-banimento (máximo 30 msgs/linha/dia)
+
+// Auto-pausa conversas IA inativas há mais de 1 hora para liberar o semáforo de follow-up
+async function liberarConversasIAInativas(): Promise<number> {
+  try {
+    const umaHoraAtras = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { data: presas } = await wsupabase
+      .from("conversations_ia")
+      .select("id")
+      .eq("ai_responding", true)
+      .neq("channel", "test")
+      .lt("last_message_at", umaHoraAtras)
+      .limit(300)
+
+    if (!presas || presas.length === 0) return 0
+    const ids = presas.map((c) => c.id)
+    for (let i = 0; i < ids.length; i += 100) {
+      await wsupabase.from("conversations_ia").update({ ai_responding: false }).in("id", ids.slice(i, i + 100))
+    }
     await createLog({
-      automation_id: automation.id,
-      event_type: "lead_not_eligible",
-      event_title: "Follow-up sem automação-mãe configurada",
-      event_description: "trigger_config.parent_automation_id ausente.",
+      automation_id: null,
+      event_type: "ia_inativa_auto_pausa",
+      event_title: `Auto-pausa IA: ${ids.length} conversas liberadas para follow-up`,
+      event_description: `Conversas sem resposta do lead há mais de 1h tiveram ai_responding desmarcado para permitir a régua D+1, D+2 e D+3.`,
     })
-    return
+    return ids.length
+  } catch {
+    return 0
   }
+}
 
-  const cutoff = new Date(Date.now() - horas * 3600_000).toISOString()
+// Cria jobs da esteira de Follow-up D+1 (24h), D+2 (48h) e D+3 (72h):
+// Garante progressão sequencial sem pular etapas, com teto de 30 msgs/linha/dia
+// e cancelamento automático se o cliente responder ou houver interação humana.
+async function criarJobsFollowup(automation: any, results: { created: number }, skipIA: Set<string> | null): Promise<void> {
+  const agora = Date.now()
+  const cutoff24h = new Date(agora - 24 * 3600_000).toISOString()
+  const cutoff48h = new Date(agora - 48 * 3600_000).toISOString()
+  const scheduledAt = calculateScheduledAt(automation.wait_config)
 
-  // Jobs da automação-mãe: enviados, sem resposta, antigos o suficiente.
-  const { data: parentJobs, error: pjErr } = await wsupabase
+  // -------------------------------------------------------------------------
+  // PASSO 3: Identificar leads que precisam de D+3 (receberam D+2 há >= 24h sem resposta)
+  // -------------------------------------------------------------------------
+  const { data: d2Jobs } = await wsupabase
     .from("automation_jobs")
-    .select("lead_id, sent_at")
-    .eq("automation_id", parentId)
+    .select("id, lead_id, sent_at, metadata")
+    .eq("automation_id", automation.id)
     .in("status", ["sent", "delivered", "read"])
     .is("responded_at", null)
-    .lte("sent_at", cutoff)
+    .lte("sent_at", cutoff24h)
+    .limit(100)
 
-  await createLog({
-    automation_id: automation.id,
-    event_type: "lead_evaluated",
-    event_title: "Follow-up: busca de jobs-mãe",
-    event_description: `parentId=${parentId} | cutoff=${cutoff} | parentJobs encontrados: ${parentJobs?.length ?? 0} | erro: ${pjErr?.message ?? "nenhum"}`,
-    payload: { parent_jobs_count: parentJobs?.length ?? 0, cutoff },
-  })
+  for (const d2 of d2Jobs ?? []) {
+    const meta = (d2.metadata ?? {}) as Record<string, unknown>
+    if (meta.step !== 2 && meta.followup_stage !== "D+2") continue
 
-  for (const pj of parentJobs ?? []) {
-    // Máximo 1 follow-up por lead: pula se já existir qualquer job de follow-up para ele.
-    const { count } = await wsupabase
+    // Verifica se já existe D+3 para este lead
+    const { count: jaTemD3 } = await wsupabase
       .from("automation_jobs")
       .select("id", { count: "exact", head: true })
       .eq("automation_id", automation.id)
-      .eq("lead_id", pj.lead_id)
-    if ((count ?? 0) > 0) {
-      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${pj.lead_id.slice(0,8)}: já possui job de follow-up` })
+      .eq("lead_id", d2.lead_id)
+      .eq("metadata->>step" as never, "3" as never)
+
+    if ((jaTemD3 ?? 0) > 0) continue
+
+    // Verifica se houve interação humana recente após o envio do D+2
+    const ultima = await getLastHumanInteraction(d2.lead_id)
+    if (ultima.timestamp && new Date(ultima.timestamp).getTime() > new Date(d2.sent_at).getTime()) {
       continue
     }
 
-    // Guarda mínima (targeting do follow-up): lead em atendimento/followup/automação/novo, de tráfego pago, não fechado/arquivado.
-    // Inclui em_automacao porque a automação-mãe estaciona o lead nesse estágio após a msg1 —
-    // sem isso, os leads represavam em em_automacao e o follow-up nunca os alcançava (skip eterno).
     const { data: lead } = await wsupabase
       .from("leads")
-      .select("id, nome, status, origem, corretor_id, arquivado_em, fechado_em")
-      .eq("id", pj.lead_id)
+      .select("id, nome, status, corretor_id, arquivado_em, fechado_em")
+      .eq("id", d2.lead_id)
       .maybeSingle()
-    if (!lead || !["novo", "em_atendimento", "em_automacao", "em_followup"].includes(lead.status) || lead.origem !== "Tráfego Pago" || lead.fechado_em || lead.arquivado_em) {
-      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead?.nome ?? pj.lead_id.slice(0,8)}: status=${lead?.status} origem=${lead?.origem} arquivado=${!!lead?.arquivado_em} fechado=${!!lead?.fechado_em}` })
-      continue
-    }
 
-    // Honra as MESMAS condições em dados da automação (telefone válido, não-perdido,
-    // não-bloqueado, etc.) — mesmo motor usado pela reativação. Assim o follow-up herda
-    // todas as guardas configuradas na regra, e não só as fixas acima.
-    // EXCEÇÃO: regras de `status` são ignoradas aqui — o targeting de estágio do follow-up
-    // pertence ao gate fixo acima (novo/em_atendimento/em_automacao/em_followup). Uma regra
-    // `status == em_atendimento` nos dados travaria para sempre os leads que a mãe
-    // estacionou em em_automacao (foi o que represou 319 leads).
-    const condicoes = automation.conditions?.rules
-      ? { ...automation.conditions, rules: automation.conditions.rules.filter((r: { field?: string }) => r.field !== "status") }
-      : automation.conditions
-    const { eligible } = await evaluateConditions(lead.id, condicoes, automation.id)
-    if (!eligible) {
-      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead.nome}: condições da automação não atendidas` })
-      continue
-    }
+    if (!lead || lead.fechado_em || lead.arquivado_em || lead.status === "perdido") continue
 
-    // Corretor assumiu? Se houve interação humana registrada DEPOIS do envio da 1ª mensagem,
-    // não faz follow-up — evita atropelar quem já está cuidando do lead.
-    const ultima = await getLastHumanInteraction(lead.id)
-    if (ultima.timestamp && new Date(ultima.timestamp).getTime() > new Date(pj.sent_at).getTime()) {
-      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead.nome}: interação humana recente (${ultima.event ?? "ação"})` })
-      continue
-    }
-
-    // Semáforo IA x Automação: lead com conversa IA ativa é atendido pela IA, não pelo follow-up.
-    if (leadTemIAAtiva(skipIA, lead)) {
-      await createLog({ automation_id: automation.id, event_type: "lead_not_eligible", event_title: "Follow-up skip", event_description: `Lead ${lead.nome}: conversa IA ativa — automação coordenada com a IA` })
-      continue
-    }
-
-    const scheduledAt = calculateScheduledAt(automation.wait_config)
-    const { error } = await wsupabase.from("automation_jobs").insert({
+    const { error: insErr } = await wsupabase.from("automation_jobs").insert({
       automation_id: automation.id,
       lead_id: lead.id,
       assigned_agent_id: lead.corretor_id || null,
@@ -203,26 +195,237 @@ async function criarJobsFollowup(automation: any, results: { created: number }, 
       status: "scheduled",
       scheduled_at: scheduledAt,
       eligible_at: new Date().toISOString(),
-      max_attempts: automation.limits_config?.max_sends_per_lead ?? 1,
+      max_attempts: 1,
+      metadata: {
+        step: 3,
+        followup_stage: "D+3",
+        template_id: TEMPLATE_D3,
+        previous_job_id: d2.id,
+      },
     })
-    if (!error) {
+
+    if (!insErr) {
       results.created++
-      // Mover lead para em_followup (se ainda estiver em_atendimento)
+      await createLog({
+        automation_id: automation.id,
+        lead_id: lead.id,
+        event_type: "job_created",
+        event_title: `Follow-up D+3 (Breakup) agendado: ${lead.nome}`,
+        event_description: `Lead sem resposta após D+2 — agendado D+3 (Fechamento Educado) para ${new Date(scheduledAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`,
+        new_status: "scheduled",
+        payload: { step: 3, scheduled_at: scheduledAt },
+      })
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // PASSO 2: Identificar leads que precisam de D+2 (receberam D+1 há >= 24h sem resposta)
+  // -------------------------------------------------------------------------
+  const { data: d1Jobs } = await wsupabase
+    .from("automation_jobs")
+    .select("id, lead_id, sent_at, metadata")
+    .eq("automation_id", automation.id)
+    .in("status", ["sent", "delivered", "read"])
+    .is("responded_at", null)
+    .lte("sent_at", cutoff24h)
+    .limit(100)
+
+  for (const d1 of d1Jobs ?? []) {
+    const meta = (d1.metadata ?? {}) as Record<string, unknown>
+    if (meta.step && meta.step !== 1) continue
+
+    // Verifica se já existe D+2 para este lead
+    const { count: jaTemD2 } = await wsupabase
+      .from("automation_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("automation_id", automation.id)
+      .eq("lead_id", d1.lead_id)
+      .eq("metadata->>step" as never, "2" as never)
+
+    if ((jaTemD2 ?? 0) > 0) continue
+
+    // Verifica se houve interação humana recente após o envio do D+1
+    const ultima = await getLastHumanInteraction(d1.lead_id)
+    if (ultima.timestamp && new Date(ultima.timestamp).getTime() > new Date(d1.sent_at).getTime()) {
+      continue
+    }
+
+    const { data: lead } = await wsupabase
+      .from("leads")
+      .select("id, nome, status, corretor_id, arquivado_em, fechado_em")
+      .eq("id", d1.lead_id)
+      .maybeSingle()
+
+    if (!lead || lead.fechado_em || lead.arquivado_em || lead.status === "perdido") continue
+
+    const { error: insErr } = await wsupabase.from("automation_jobs").insert({
+      automation_id: automation.id,
+      lead_id: lead.id,
+      assigned_agent_id: lead.corretor_id || null,
+      supervisor_user_id: automation.supervisor_user_id,
+      status: "scheduled",
+      scheduled_at: scheduledAt,
+      eligible_at: new Date().toISOString(),
+      max_attempts: 1,
+      metadata: {
+        step: 2,
+        followup_stage: "D+2",
+        template_id: TEMPLATE_D2,
+        previous_job_id: d1.id,
+      },
+    })
+
+    if (!insErr) {
+      results.created++
+      await createLog({
+        automation_id: automation.id,
+        lead_id: lead.id,
+        event_type: "job_created",
+        event_title: `Follow-up D+2 agendado: ${lead.nome}`,
+        event_description: `Lead sem resposta após D+1 — agendado D+2 (Novas Opções) para ${new Date(scheduledAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`,
+        new_status: "scheduled",
+        payload: { step: 2, scheduled_at: scheduledAt },
+      })
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // PASSO 1: Identificar leads que precisam de D+1 (>= 24h de silêncio sem resposta)
+  // Combina leads que vieram da automação-mãe E leads parados no funil
+  // -------------------------------------------------------------------------
+  const parentId: string | undefined = automation.trigger_config?.parent_automation_id
+  let parentLeadIds: string[] = []
+  if (parentId) {
+    const { data: pj } = await wsupabase
+      .from("automation_jobs")
+      .select("lead_id")
+      .eq("automation_id", parentId)
+      .in("status", ["sent", "delivered", "read"])
+      .is("responded_at", null)
+      .lte("sent_at", cutoff24h)
+      .limit(100)
+    parentLeadIds = (pj ?? []).map((p) => p.lead_id)
+  }
+
+  // Leads gerais em atendimento/follow-up sem movimentação há >= 24h
+  const { data: leadsParados } = await wsupabase
+    .from("leads")
+    .select("id")
+    .in("status", ["novo", "em_atendimento", "em_followup", "atendimento_ia", "em_automacao"])
+    .is("arquivado_em", null)
+    .is("fechado_em", null)
+    .lte("atualizado_em", cutoff24h)
+    .order("atualizado_em", { ascending: true })
+    .limit(100)
+
+  const candidatorIds = Array.from(
+    new Set([...parentLeadIds, ...(leadsParados ?? []).map((l) => l.id)])
+  )
+
+  for (const leadId of candidatorIds) {
+    // Pula se já existir qualquer job desta automação de follow-up para o lead
+    const { count: jaTemAlgumJob } = await wsupabase
+      .from("automation_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("automation_id", automation.id)
+      .eq("lead_id", leadId)
+
+    if ((jaTemAlgumJob ?? 0) > 0) continue
+
+    const { data: lead } = await wsupabase
+      .from("leads")
+      .select("id, nome, status, origem, corretor_id, arquivado_em, fechado_em, telefone")
+      .eq("id", leadId)
+      .maybeSingle()
+
+    if (!lead || lead.fechado_em || lead.arquivado_em || lead.status === "perdido") continue
+    if (!lead.telefone || lead.telefone.replace(/\D/g, "").length < 10) continue
+
+    // Verifica se houve interação humana recente nas últimas 24h
+    const ultima = await getLastHumanInteraction(lead.id)
+    if (ultima.timestamp && new Date(ultima.timestamp).getTime() > agora - 24 * 3600_000) {
+      continue
+    }
+
+    // Semáforo IA: pula se conversa IA estiver ativa
+    if (leadTemIAAtiva(skipIA, lead)) {
+      continue
+    }
+
+    const { error: insErr } = await wsupabase.from("automation_jobs").insert({
+      automation_id: automation.id,
+      lead_id: lead.id,
+      assigned_agent_id: lead.corretor_id || null,
+      supervisor_user_id: automation.supervisor_user_id,
+      status: "scheduled",
+      scheduled_at: scheduledAt,
+      eligible_at: new Date().toISOString(),
+      max_attempts: 1,
+      metadata: {
+        step: 1,
+        followup_stage: "D+1",
+        template_id: TEMPLATE_D1,
+      },
+    })
+
+    if (!insErr) {
+      results.created++
       await wsupabase
         .from("leads")
         .update({ status: "em_followup" })
         .eq("id", lead.id)
-        .eq("status", "em_atendimento")
+        .in("status", ["novo", "em_atendimento"])
+
       await createLog({
         automation_id: automation.id,
-        job_id: null,
         lead_id: lead.id,
         event_type: "job_created",
-        event_title: "Follow-up agendado",
-        event_description: `Lead ${lead.nome} sem resposta há ${horas}h — follow-up agendado para ${new Date(scheduledAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.`,
+        event_title: `Follow-up D+1 agendado: ${lead.nome}`,
+        event_description: `Lead sem resposta há mais de 24h — agendado D+1 (Continuidade) para ${new Date(scheduledAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`,
         new_status: "scheduled",
-        payload: { parent_automation_id: parentId, scheduled_at: scheduledAt },
+        payload: { step: 1, scheduled_at: scheduledAt },
       })
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // PASSO 4: Encerramento de leads que concluíram D+3 sem retorno após 48h
+  // -------------------------------------------------------------------------
+  const { data: d3Encerrar } = await wsupabase
+    .from("automation_jobs")
+    .select("id, lead_id, sent_at")
+    .eq("automation_id", automation.id)
+    .eq("metadata->>step" as never, "3" as never)
+    .in("status", ["sent", "delivered", "read"])
+    .is("responded_at", null)
+    .lte("sent_at", cutoff48h)
+    .limit(50)
+
+  for (const fin of d3Encerrar ?? []) {
+    try {
+      const { data: leadAtual } = await wsupabase
+        .from("leads")
+        .select("id, observacoes, status")
+        .eq("id", fin.lead_id)
+        .maybeSingle()
+
+      if (leadAtual && leadAtual.status === "em_followup") {
+        const obs = `${leadAtual.observacoes ?? ""}\n[Follow-up] Régua completa D+1, D+2 e D+3 finalizada sem retorno do cliente.`.trim()
+        await wsupabase
+          .from("leads")
+          .update({ status: "frio", observacoes: obs })
+          .eq("id", fin.lead_id)
+
+        await createLog({
+          automation_id: automation.id,
+          lead_id: fin.lead_id,
+          event_type: "followup_regua_concluida",
+          event_title: "Régua D+1, D+2, D+3 concluída sem resposta",
+          event_description: "Lead recebeu todos os 3 follow-ups sem interação e foi movido para Frio.",
+        })
+      }
+    } catch {
+      /* best-effort */
     }
   }
 }
@@ -255,6 +458,9 @@ function escolherConexaoAutomacao(automation: any, lead: { id: string }): string
 export async function runWorker() {
   const runStart = Date.now()
   try {
+    // 0. Auto-pausa conversas IA inativas há mais de 1h (destrava o semáforo de leads parados)
+    await liberarConversasIAInativas()
+
     const automations = await getActiveAutomations()
     // Auto-cura: jobs presos em "processing" (rodada morta no meio) voltam à
     // fila se travados há +30min. Sem isso acumulam para sempre e a fila morre.
@@ -708,7 +914,12 @@ export async function runWorker() {
           continue
         }
 
-        if (!automation.message_template_id) {
+        // Suporta template dinâmico por etapa da régua (D+1, D+2, D+3) ou o template padrão da regra
+        const targetTemplateId =
+          ((job.metadata as Record<string, unknown> | null)?.["template_id"] as string | undefined) ||
+          automation.message_template_id
+
+        if (!targetTemplateId) {
           await cancelJob(job.id, "Template de mensagem não configurado", "system")
           results.cancelled++
           continue
@@ -717,11 +928,11 @@ export async function runWorker() {
         const { data: template } = await wsupabase
           .from("automation_message_templates")
           .select("*")
-          .eq("id", automation.message_template_id)
+          .eq("id", targetTemplateId)
           .maybeSingle()
 
         if (!template) {
-          await cancelJob(job.id, "Template de mensagem não encontrado", "system")
+          await cancelJob(job.id, `Template de mensagem ${targetTemplateId} não encontrado`, "system")
           results.cancelled++
           continue
         }
@@ -738,59 +949,59 @@ export async function runWorker() {
           imobiliaria: nomeImobiliaria,
         })
 
-        const connectionId = escolherConexaoAutomacao(automation, lead)
-        if (!connectionId) {
-          // Sem conexão: PULA sem cancelar (a fila sobrevive a erro humano de
-          // configuração). Logado 1× por automação por rodada, não por job.
-          await wsupabase.from("automation_jobs").update({ status: "scheduled" }).eq("id", job.id)
-          await releaseLock(job.id)
-          if (!semConexaoAvisada.has(automation.id)) {
-            semConexaoAvisada.add(automation.id)
-            await createLog({
-              automation_id: automation.id,
-              event_type: "worker_sem_conexao",
-              event_title: `Automação sem conexão WhatsApp: ${automation.name}`,
-              event_description: "whatsapp_connection_id vazio (zerado fora do app?). Jobs mantidos na fila — configure a conexão para retomar.",
-            })
-          }
-          continue
-        }
-
-        // Teto diário POR CONEXÃO (cada número WhatsApp tem sua cota — ex. 25/dia
-        // na linha 1 + 25/dia na linha 2 = 50/dia no total). Conta
-        // sent+delivered+read+responded do dia (BRT). A conexão de cada envio é
-        // registrada em metadata.connection_id; envios antigos sem metadata contam
-        // na conexão única da automação (compatibilidade).
+        // Teto de segurança anti-banimento: MÁXIMO 30 msgs/linha/dia (em horário de Brasília)
         const fmtDia = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" })
         const [anoB, mesB, diaB] = fmtDia.format(new Date()).split("-").map(Number)
         const todayStart = new Date(Date.UTC(anoB, mesB - 1, diaB, 3, 0, 0))
-        const { count: todayCountConn } = await wsupabase
-          .from("automation_jobs")
-          .select("id", { count: "exact", head: true })
-          .gte("sent_at", todayStart.toISOString())
-          .in("status", ["sent", "delivered", "read", "responded"])
-          .eq("metadata->>connection_id" as never, connectionId as never)
-        // Legado: envios de hoje sem metadata pertencem à conexão única (antes da roleta).
-        const { count: todayCountLegado } = await wsupabase
-          .from("automation_jobs")
-          .select("id", { count: "exact", head: true })
-          .gte("sent_at", todayStart.toISOString())
-          .in("status", ["sent", "delivered", "read", "responded"])
-          .is("metadata->>connection_id" as never, null)
-          .eq("automation_id", automation.id)
-        const usandoRoleta = Array.isArray(automation?.trigger_config?.connection_ids) && automation.trigger_config.connection_ids.length > 1
-        // Na roleta, o legado (sem metadata = era da conexão única) pertence à
-        // conexão original; a linha nova conta só o que ela mesma enviou.
-        const ehConexaoOriginal = connectionId === automation?.whatsapp_connection_id
-        const todayCount = !usandoRoleta
-          ? (todayCountConn ?? 0) + (todayCountLegado ?? 0)
-          : (todayCountConn ?? 0) + (ehConexaoOriginal ? (todayCountLegado ?? 0) : 0)
 
-        const maxDaily = automation.limits_config.max_daily_sends ?? 50
-        if ((todayCount ?? 0) >= maxDaily) {
-          // Teto do dia: mantém scheduled (tenta de novo amanhã) em vez de
-          // marcar blocked_limit terminal — senão a fila apodrece para sempre.
+        const listaConexoes: string[] =
+          Array.isArray(automation?.trigger_config?.connection_ids) && automation.trigger_config.connection_ids.length > 0
+            ? (automation.trigger_config.connection_ids as string[])
+            : automation?.whatsapp_connection_id ? [automation.whatsapp_connection_id as string] : []
+
+        const countEnviosHojeLinha = async (cId: string): Promise<number> => {
+          const { count } = await wsupabase
+            .from("automation_jobs")
+            .select("id", { count: "exact", head: true })
+            .gte("sent_at", todayStart.toISOString())
+            .in("status", ["sent", "delivered", "read", "responded"])
+            .eq("metadata->>connection_id" as never, cId as never)
+          return count ?? 0
+        }
+
+        let connectionId: string | null = null
+
+        // 1. Tenta a conexão preferencial do lead (para manter o mesmo número na conversa)
+        const pref = escolherConexaoAutomacao(automation, lead)
+        if (pref) {
+          const enviosPref = await countEnviosHojeLinha(pref)
+          if (enviosPref < MAX_ENVIOS_LINHA_DIA) {
+            connectionId = pref
+          }
+        }
+
+        // 2. Se a preferencial já atingiu 30, tenta a linha secundária com cota disponível
+        if (!connectionId && listaConexoes.length > 0) {
+          for (const c of listaConexoes) {
+            const enviosC = await countEnviosHojeLinha(c)
+            if (enviosC < MAX_ENVIOS_LINHA_DIA) {
+              connectionId = c
+              break
+            }
+          }
+        }
+
+        if (!connectionId) {
+          // Todas as linhas disponíveis atingiram o teto estrito anti-ban de 30 msgs/dia!
+          // Mantém o job em 'scheduled' para envio seguro amanhã sem risco de banimento.
           await releaseLock(job.id)
+          await createLog({
+            automation_id: automation.id,
+            job_id: job.id,
+            event_type: "limite_linha_diario_atingido",
+            event_title: `Teto de segurança anti-ban atingido (${MAX_ENVIOS_LINHA_DIA} msgs/linha)`,
+            event_description: `Todas as linhas disponíveis atingiram o limite de ${MAX_ENVIOS_LINHA_DIA} mensagens hoje. Envio mantido na fila para amanhã a partir das 08:00.`,
+          })
           continue
         }
 
@@ -898,8 +1109,8 @@ export async function runWorker() {
 
           results.sent++
           enviadosNestaRodada++
-          // Respiro anti-ban entre um lead e outro (conta do WhatsApp agradece).
-          await new Promise((r) => setTimeout(r, 15000 + Math.random() * 10000))
+          // Respiro anti-ban humanizado entre envios (25 a 45 segundos simulando digitação real).
+          await new Promise((r) => setTimeout(r, 25000 + Math.random() * 20000))
 
           // Ordem do fluxo: enviou a reativação → lead vai para Em Automação + tag.
           // (Só reativação lead_inactive; follow-up tem regra própria de etapa.)

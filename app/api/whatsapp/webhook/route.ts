@@ -213,6 +213,21 @@ async function transicaoRespostaAutomacao(leadId: string, texto: string): Promis
       .eq("id", (lead as { id: string }).id)
       .eq("status", status)
     if (upErr) return
+
+    // Resposta do lead interrompe os próximos passos de follow-up (D+2, D+3)
+    try {
+      await wsupabase
+        .from("automation_jobs")
+        .update({ status: "responded", responded_at: new Date().toISOString() })
+        .eq("lead_id", (lead as { id: string }).id)
+        .in("status", ["sent", "delivered", "read"])
+
+      await wsupabase
+        .from("automation_jobs")
+        .update({ status: "cancelled_lead_replied" })
+        .eq("lead_id", (lead as { id: string }).id)
+        .in("status", ["scheduled", "retrying", "blocked_hour"])
+    } catch { /* best-effort */ }
     const nome = String((lead as { nome?: unknown }).nome ?? "Lead")
     const motivo = recusa
       ? `respondeu "NÃO" à reativação — vai para nova tentativa (follow-up)`
