@@ -23,6 +23,7 @@ const PIPELINE_PROB: Record<LeadStatus, number> = {
   "em_atendimento": 0.2,
   em_automacao: 0.15,
   "atendimento_ia": 0.12,
+  "atendimento_humano": 0.2,
   "em_followup": 0.15,
   "escolhendo opcoes": 0.3,
   "imovel necessidade": 0.3,

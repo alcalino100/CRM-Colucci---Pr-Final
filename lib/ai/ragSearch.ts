@@ -2,8 +2,10 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import OpenAI from "openai"
 
-function db() {
-  return createClient(SUPABASE_URL, SUPABASE_KEY)
+let _ragDb: any = null
+function db(): any {
+  if (!_ragDb) _ragDb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  return _ragDb
 }
 
 export type ChunkHit = { chunk_text: string; similarity: number; document_id: string }

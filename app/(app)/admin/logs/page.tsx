@@ -45,7 +45,7 @@ export default function LogsPage() {
   const [metaErro, setMetaErro] = useState("")
 
   useEffect(() => {
-    if (!isAdminRole(user?.role ?? "corretor")) return
+    if (!user || !isAdminRole(user.role)) return
     fetch(`/api/meta/event-logs?usuario_id=${user.id}&limite=50`)
       .then((r) => r.json())
       .then((j) => {

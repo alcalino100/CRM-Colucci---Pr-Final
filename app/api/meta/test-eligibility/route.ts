@@ -116,7 +116,7 @@ export async function POST(req: Request) {
           for (const m of lj.data || []) {
             const sc = (m.shortcode || "") as string
             const perm = (m.permalink || "") as string
-            if (sc === code || perm.includes(code)) {
+            if (code && (sc === code || perm.includes(code))) {
               foundId = m.id
               foundPermalink = perm
               break

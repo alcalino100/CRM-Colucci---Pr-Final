@@ -254,7 +254,7 @@ export default function LocacaoContratosPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
                   <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="#71717a" tickLine={false} axisLine={false} />
                   <YAxis tick={{ fontSize: 12 }} stroke="#71717a" tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(v: number) => brl(v)} />
+                  <Tooltip formatter={(v: any) => brl(Number(v) || 0)} />
                   <Bar dataKey="total" radius={[4, 4, 0, 0]}>
                     {porMes.map((_, i) => <Cell key={i} fill={cor} />)}
                   </Bar>

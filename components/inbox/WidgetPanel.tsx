@@ -24,7 +24,7 @@ export function WidgetPanel(){
   const [desvinculando, setDesvinculando] = useState(false)
   const [excluindo, setExcluindo] = useState(false)
   const [salvandoStatus, setSalvandoStatus] = useState(false)
-  const [motivoExcluir, setMotivoExcluir] = useState(MOTIVOS_EXCLUSAO[0])
+  const [motivoExcluir, setMotivoExcluir] = useState<string>(MOTIVOS_EXCLUSAO[0])
   const [detalheExcluir, setDetalheExcluir] = useState("")
   const [acaoIniciando, setAcaoIniciando] = useState<string | null>(null)
   type Sugestao = { id: string; created_at: string; telefone: string; instance: string | null; sugestao: string }
@@ -75,6 +75,7 @@ export function WidgetPanel(){
   const proxima = conv.proximaTentativaISO ? new Date(conv.proximaTentativaISO).toLocaleTimeString("pt-BR", {hour:"2-digit", minute:"2-digit"}) : "-"
 
   async function toggleIA(){
+    if(!conv) return
     try{
       const r = await fetch("/api/whatsapp/chat/ia-pause",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ telefone: conv.telefone, pausado: iaLigada })})
       const j = await r.json()
@@ -87,7 +88,7 @@ export function WidgetPanel(){
   }
 
   async function salvarTags(t: string[]){
-    if(!leadId) { toast("Sem lead vinculado — associe a um lead para salvar tags","error"); return }
+    if(!conv || !leadId) { toast("Sem lead vinculado — associe a um lead para salvar tags","error"); return }
     setSalvandoTags(true)
     try{
       const r = await fetch(`/api/leads/${encodeURIComponent(leadId)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ tags: t })})
@@ -115,6 +116,7 @@ export function WidgetPanel(){
   }
 
   async function vincularLead(criarNovo: boolean){
+    if(!conv) return
     setBuscando(true)
     try{
       const rPhone = normalizePhone(conv.telefone)
@@ -147,6 +149,7 @@ export function WidgetPanel(){
   }
 
   async function iniciarAcao(acao: "ia" | "automacao"){
+    if(!conv) return
     setAcaoIniciando(acao)
     try{
       const instanciaSelecionada = useInboxStore.getState().instanciaSelecionada
@@ -192,7 +195,7 @@ export function WidgetPanel(){
   }
 
   async function mudarStatus(s: string){
-    if(!leadId) return
+    if(!conv || !leadId) return
     setSalvandoStatus(true)
     try{
       const r = await fetch(`/api/leads/${encodeURIComponent(leadId)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ status: s })})
@@ -206,6 +209,7 @@ export function WidgetPanel(){
   }
 
   async function desvincularLead(){
+    if(!conv) return
     setDesvinculando(true)
     try{
       const st = useInboxStore.getState()
@@ -219,7 +223,7 @@ export function WidgetPanel(){
   }
 
   async function excluirLead(){
-    if(!leadId) return
+    if(!conv || !leadId) return
     const det = detalheExcluir.trim()
     if(!det) { toast("Descreva o detalhe do motivo para excluir","error"); return }
     setExcluindo(true)

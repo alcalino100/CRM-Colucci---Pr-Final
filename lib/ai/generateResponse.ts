@@ -3,7 +3,11 @@ import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { decryptToken } from "@/lib/encryption"
 import OpenAI from "openai"
 
-function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
+let _aiDb: any = null
+function db(): any {
+  if(!_aiDb) _aiDb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  return _aiDb
+}
 
 export type AITool = {
   name: string
@@ -87,19 +91,9 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
   const model = (ai as any).model_name || (provider==="gemini" ? "gemini-2.5-flash" : provider==="claude" ? "claude-3-5-sonnet" : "gpt-4o-mini")
   const endpoint = (ai as any).api_endpoint || ""
 
-  // Gemini - auditoria: lista modelos disponíveis para a key e tenta em ordem (com fallback para alta demanda)
+  // Gemini: tenta o modelo configurado diretamente com fallback inteligente (economiza ~1s por resposta sem listar modelos a cada msg)
   if(provider==="gemini"){
-    let available: string[] = []
-    try{
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-      const lr = await fetch(listUrl)
-      const lj:any = await lr.json()
-      if(lr.ok && Array.isArray(lj.models)){
-        available = lj.models.filter((m:any)=> (m.supportedGenerationMethods||[]).includes("generateContent")).map((m:any)=> m.name.replace("models/",""))
-      }
-    }catch{}
-    const preferred = [model, "gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro"]
-    const tryModels = Array.from(new Set([...preferred.filter(m=> available.length===0 || available.includes(m)), ...available])).slice(0,6)
+    const tryModels = Array.from(new Set([model, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-flash-latest", "gemini-2.5-pro"])).filter(Boolean)
     let lastErr:any = null
     for(const m of tryModels){
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`
@@ -116,7 +110,7 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
       lastErr = j.error?.message || "Gemini falhou"
       const isModelErr = String(lastErr).toLowerCase().includes("not found") || String(lastErr).toLowerCase().includes("no longer available") || String(lastErr).toLowerCase().includes("not supported") || String(lastErr).toLowerCase().includes("not found for api version")
       const isQuotaErr = r.status === 429 || String(lastErr).toLowerCase().includes("quota")
-      // 429 (cota) tenta o próximo modelo (cotas separadas); demais erros param.
+      // 429 (cota) ou modelo não encontrado tenta o próximo modelo; demais erros param.
       if(!isModelErr && !isQuotaErr) break
     }
     throw new Error(lastErr || "Gemini falhou - nenhum modelo disponível para esta key. Verifique em https://aistudio.google.com/app/apikey e billing.")

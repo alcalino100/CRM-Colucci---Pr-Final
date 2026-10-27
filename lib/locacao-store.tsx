@@ -218,7 +218,26 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
 
     const canal = supabase
       .channel("crm-realtime-locacao")
-      .on("postgres_changes", { event: "*", schema: "public", table: "locacao_leads" }, loadLeads)
+      .on("postgres_changes", { event: "*", schema: "public", table: "locacao_leads" }, (payload: any) => {
+        if (payload?.eventType === "INSERT" && payload.new) {
+          const newLead = rowToLead(payload.new)
+          setLeads((prev) => (prev.some((l) => l.id === newLead.id) ? prev : [newLead, ...prev]))
+        } else if (payload?.eventType === "UPDATE" && payload.new) {
+          const updatedLead = rowToLead(payload.new)
+          setLeads((prev) => {
+            const idx = prev.findIndex((l) => l.id === updatedLead.id)
+            if (idx === -1) return [updatedLead, ...prev]
+            const next = [...prev]
+            next[idx] = { ...next[idx], ...updatedLead }
+            return next
+          })
+        } else if (payload?.eventType === "DELETE" && payload.old?.id) {
+          const id = payload.old.id
+          setLeads((prev) => prev.filter((l) => l.id !== id))
+        } else {
+          loadLeads()
+        }
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "locacao_visitas" }, loadVisits)
       .on("postgres_changes", { event: "*", schema: "public", table: "usuarios" }, loadUsers)
       .on("postgres_changes", { event: "*", schema: "public", table: "notificacoes" }, loadNotifications)
@@ -273,14 +292,36 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
   const markNotificationsRead = useCallback(() => {
     if (!userId) return
     const unread = notifications.filter((n) => !n.read)
+    if (!unread.length) return
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+
+    // Atualiza lida_por das notificações em lote (evita loop N+1 de queries)
     void (async () => {
-      for (const n of unread) {
-        const { data } = await supabase.from("notificacoes").select("lida_por").eq("id", n.id).maybeSingle()
-        const arr: string[] = Array.isArray(data?.lida_por) ? data!.lida_por : []
-        if (!arr.includes(userId)) {
-          await supabase.from("notificacoes").update({ lida_por: [...arr, userId] }).eq("id", n.id)
+      try {
+        const unreadIds = unread.map((n) => n.id)
+        const { data } = await supabase
+          .from("notificacoes")
+          .select("id, lida_por")
+          .in("id", unreadIds)
+
+        const updates = (data ?? [])
+          .map((row: any) => {
+            const arr: string[] = Array.isArray(row.lida_por) ? row.lida_por : []
+            if (!arr.includes(userId)) {
+              return supabase
+                .from("notificacoes")
+                .update({ lida_por: [...arr, userId], lida: true })
+                .eq("id", row.id)
+            }
+            return null
+          })
+          .filter(Boolean)
+
+        if (updates.length) {
+          await Promise.all(updates)
         }
+      } catch (err) {
+        console.warn("[notificacoes] falha ao marcar lidas:", err)
       }
     })()
   }, [notifications, userId])

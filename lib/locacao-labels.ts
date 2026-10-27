@@ -35,10 +35,10 @@ export interface LocacaoLead {
   valorAluguel?: number
   valorComissao?: number | null
   corretorId: string
-  gestorResponsavel?: string
+  gestorResponsavel?: string | null
   criadoEm: string
   atualizadoEm: string
-  arquivadoEm?: string
+  arquivadoEm?: string | null
   locadoEm?: string
   negociandoEm?: string
   interacoes: Interaction[]

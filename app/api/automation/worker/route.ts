@@ -674,12 +674,18 @@ export async function runWorker() {
           .eq("id", job.lead_id)
           .maybeSingle()
 
+        if (!lead) {
+          await cancelJob(job.id, "Lead não encontrado", "system")
+          results.cancelled++
+          continue
+        }
+
         // Automações normais exigem em_atendimento/em_automacao; follow-up aceita em_atendimento/em_automacao/em_followup
         // (em_automacao incluído: é onde a mãe estaciona o lead após a msg1)
         const isFollowup = automation.trigger_type === "no_response_followup"
         const validStatuses = isFollowup ? ["em_atendimento", "em_automacao", "em_followup"] : ["em_atendimento", "em_automacao"]
         const temTagFollowUp = tagsFollowUp.size > 0 && tagsDoLead(lead.referencias).some((t) => tagsFollowUp.has(t))
-        if (!lead || !validStatuses.includes(lead.status) || (lead.origem !== "Tráfego Pago" && !temTagFollowUp) || lead.fechado_em || lead.arquivado_em) {
+        if (!validStatuses.includes(lead.status) || (lead.origem !== "Tráfego Pago" && !temTagFollowUp) || lead.fechado_em || lead.arquivado_em) {
           await cancelJob(job.id, "Lead não atende mais às condições", "system")
           results.cancelled++
           continue

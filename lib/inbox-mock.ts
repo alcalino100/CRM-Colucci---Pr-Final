@@ -1,5 +1,5 @@
 // Mock isolado - não toca no banco real. Usado só pela rota /inbox (teste B)
-export type InboxStatus = "aguardando_resposta" | "respondido" | "em_follow_up"
+export type InboxStatus = "aguardando_resposta" | "respondido" | "em_follow_up" | "escalated"
 
 export type InboxMessage = {
   id: string

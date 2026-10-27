@@ -29,7 +29,7 @@ export function ConversaView(){
   const [texto, setTexto] = useState("")
   const [carregandoReal, setCarregandoReal] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
-  const conv = conversas.find(c=>c.id===selectedId) || null
+  const conv = conversas.find((c: any) => c.id === selectedId) || null
   const thread = selectedId ? (mensagens[selectedId] || []) : []
 
   useEffect(()=>{ if(threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight }, [thread])
@@ -143,7 +143,7 @@ export function ConversaView(){
           <p className="py-10 text-center text-sm text-slate-500">Histórico vazio — primeira mensagem?</p>
         ) : (
           <AnimatePresence initial={false}>
-            {thread.map(m=>(
+            {thread.map((m: any) => (
               <motion.div key={m.id} initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{duration:0.2}} className={cn("flex", m.sender==="você" ? "justify-end" : "justify-start")}>
                 <div className={cn("max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm",
                   m.sender==="você" ? "rounded-br-sm bg-sky-500 text-white" :

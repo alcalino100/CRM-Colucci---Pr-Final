@@ -201,7 +201,7 @@ export interface MetaEventLogRow {
 export async function persistMetaEventLog(row: MetaEventLogRow): Promise<void> {
   try {
     const valorNum = typeof row.valor === "number" ? row.valor : Number.parseFloat(String(row.valor ?? ""))
-    await logDb().from("meta_event_logs").insert({
+    await (logDb().from("meta_event_logs" as any) as any).insert({
       event_id: row.event_id ?? null,
       event_name: row.event_name ?? "Purchase",
       pixel_id: row.pixel_id ?? metaPixelId(),

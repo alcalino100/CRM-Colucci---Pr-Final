@@ -51,7 +51,7 @@ export function LeadCard({
   onArquivar?: (lead: Lead) => void
   onDesarquivar?: (lead: Lead) => void
 }) {
-  const { userName, users } = useLeads()
+  const { userName, users, updateLead } = useLeads()
   const { online } = usePresenca()
   const OrigemIcon = ORIGEM_ICON[lead.origem]
   const corretor = users.find((u) => u.id === lead.corretorId)
@@ -78,7 +78,6 @@ export function LeadCard({
       const j = await r.json()
       if (!j.ok) throw new Error(j.erro || "falha")
       // update local lead via store
-      const { updateLead } = useLeads.getState()
       updateLead(lead.id, { referencias: next.map((t, i) => ({ ref: t, principal: i === 0 && !lead.referencias?.some(r => r.principal) })) })
       setNewTag("")
       setShowTagEditor(false)
@@ -89,7 +88,6 @@ export function LeadCard({
     const next = currentTags.filter((t) => t !== tag)
     try {
       await fetch(`/api/leads/${encodeURIComponent(lead.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tags: next }) })
-      const { updateLead } = useLeads.getState()
       updateLead(lead.id, { referencias: next.map((t, i) => ({ ref: t, principal: i === 0 && !lead.referencias?.some(r => r.principal) })) })
     } catch { /* silent */ }
   }

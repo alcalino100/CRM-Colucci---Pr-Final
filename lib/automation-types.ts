@@ -50,6 +50,7 @@ export type AutomationTriggerType =
   | "lead_received_tag"
   | "lead_inactive"
   | "lead_temperature_changed"
+  | "no_response_followup"
 
 export type ConditionOperator =
   | "equals"

@@ -22,8 +22,8 @@ describe("nomeApresentacao", () => {
   })
   it("mantém nome simples e usa fallback", () => {
     expect(nomeApresentacao("Aurora")).toBe("Aurora")
-    expect(nomeApresentacao("")).toBe("assistente da Colucci Imóveis")
-    expect(nomeApresentacao(null)).toBe("assistente da Colucci Imóveis")
+    expect(nomeApresentacao("")).toBe("assistente imobiliário")
+    expect(nomeApresentacao(null)).toBe("assistente imobiliário")
   })
 })
 

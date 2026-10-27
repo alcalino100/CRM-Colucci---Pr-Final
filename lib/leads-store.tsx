@@ -77,6 +77,7 @@ interface Store {
   logChange: (e: Omit<ChangeLog, "id" | "dataHora">) => void
   logAudit: (e: AuditInput) => void
   addQualityNote: (leadId: string, texto: string) => void
+  addJustification: (leadId: string, motivo: string, observacao?: string) => Promise<{ ok: boolean; error?: string }>
   addUser: (u: Omit<User, "id" | "criadoEm">) => Promise<{ ok: boolean; error?: string }>
   updateUser: (id: string, patch: Partial<User>) => Promise<{ ok: boolean; error?: string }>
   updateProfile: (patch: { avatar?: string }) => Promise<{ ok: boolean; error?: string }>
@@ -326,7 +327,26 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
     const canal = supabase
       .channel("crm-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, loadLeads)
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, (payload: any) => {
+        if (payload?.eventType === "INSERT" && payload.new) {
+          const newLead = rowToLead(payload.new)
+          setLeads((prev) => (prev.some((l) => l.id === newLead.id) ? prev : [newLead, ...prev]))
+        } else if (payload?.eventType === "UPDATE" && payload.new) {
+          const updatedLead = rowToLead(payload.new)
+          setLeads((prev) => {
+            const idx = prev.findIndex((l) => l.id === updatedLead.id)
+            if (idx === -1) return [updatedLead, ...prev]
+            const next = [...prev]
+            next[idx] = { ...next[idx], ...updatedLead }
+            return next
+          })
+        } else if (payload?.eventType === "DELETE" && payload.old?.id) {
+          const id = payload.old.id
+          setLeads((prev) => prev.filter((l) => l.id !== id))
+        } else {
+          loadLeads()
+        }
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "visitas" }, loadVisits)
       .on("postgres_changes", { event: "*", schema: "public", table: "usuarios" }, loadUsers)
       .on("postgres_changes", { event: "*", schema: "public", table: "notificacoes" }, () => { loadNotifications(); loadAdminNotifications() })
@@ -405,15 +425,36 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   const markNotificationsRead = useCallback(() => {
     if (!userId) return
     const unread = notifications.filter((n) => !n.read)
+    if (!unread.length) return
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-    // Atualiza lida_por de cada notificação não lida
+
+    // Atualiza lida_por das notificações em lote (evita loop N+1 de queries)
     void (async () => {
-      for (const n of unread) {
-        const { data } = await supabase.from("notificacoes").select("lida_por").eq("id", n.id).maybeSingle()
-        const arr: string[] = Array.isArray(data?.lida_por) ? data!.lida_por : []
-        if (!arr.includes(userId)) {
-          await supabase.from("notificacoes").update({ lida_por: [...arr, userId] }).eq("id", n.id)
+      try {
+        const unreadIds = unread.map((n) => n.id)
+        const { data } = await supabase
+          .from("notificacoes")
+          .select("id, lida_por")
+          .in("id", unreadIds)
+
+        const updates = (data ?? [])
+          .map((row: any) => {
+            const arr: string[] = Array.isArray(row.lida_por) ? row.lida_por : []
+            if (!arr.includes(userId)) {
+              return supabase
+                .from("notificacoes")
+                .update({ lida_por: [...arr, userId], lida: true })
+                .eq("id", row.id)
+            }
+            return null
+          })
+          .filter(Boolean)
+
+        if (updates.length) {
+          await Promise.all(updates)
         }
+      } catch (err) {
+        console.warn("[notificacoes] falha ao marcar lidas:", err)
       }
     })()
   }, [notifications, userId])
@@ -707,7 +748,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       value={{
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, ready, corretores, userName,
         checkPhoneDuplicate, addLead, updateLead, updateLeadsBulk, deleteLead, addInteraction, getLead, assumirLead,
-        addVisit, updateVisit, removeVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addUser, updateUser, updateProfile,
+        addVisit, updateVisit, removeVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification, addUser, updateUser, updateProfile,
       }}
     >
       {children}

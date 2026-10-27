@@ -39,7 +39,11 @@ function suplementoAgendaHoje(): string {
   ].join("\n")
 }
 
-function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
+let _inboxDb: any = null
+function db(): any {
+  if(!_inboxDb) _inboxDb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  return _inboxDb
+}
 const normalize = (v: string) => (v || "").toLowerCase().trim()
 // Instâncias onde o pipeline é 100% manual: o lead NUNCA muda de etapa sozinho
 // (nem novo→em_atendimento na resposta). Configurável via
