@@ -20,6 +20,10 @@ import { NotificationBell } from "@/components/notification-bell"
 import { CrmTicker } from "@/components/crm-ticker"
 import { DailySummary } from "@/components/daily-summary"
 import { SaleCelebrationProvider } from "@/components/sale-celebration"
+import { WhatsAppStatusProvider } from "@/lib/whatsapp-status-context"
+import { WhatsAppEmergencyBanner } from "@/components/whatsapp/WhatsAppEmergencyBanner"
+import { WhatsAppStatusIndicator } from "@/components/whatsapp/WhatsAppStatusIndicator"
+import { WhatsAppReconnectModal } from "@/components/whatsapp/WhatsAppReconnectModal"
 import { cn } from "@/lib/utils"
 
 // Mostra a foto de perfil (se houver) ou as iniciais. Precisa estar dentro do LeadsProvider.
@@ -269,6 +273,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <AutomationProvider>
       <LocacaoProvider>
       <PresenceProvider>
+      <WhatsAppStatusProvider>
+      <WhatsAppReconnectModal />
       <DailySummary />
       <div className="flex min-h-screen bg-background">
         {/* Sidebar desktop */}
@@ -293,6 +299,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </button>
             <div className="ml-auto flex items-center gap-3">
               <BRTClock />
+              <WhatsAppStatusIndicator />
               <NotificationBell />
               <div className="text-right">
                 <p className="text-sm font-medium leading-tight">{user.nome}</p>
@@ -304,6 +311,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </button>
             </div>
           </header>
+          <WhatsAppEmergencyBanner />
           <CrmTicker />
 
           <main className="relative min-w-0 flex-1 overflow-x-hidden p-4 lg:p-6">
@@ -311,6 +319,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
+      </WhatsAppStatusProvider>
       </PresenceProvider>
       </LocacaoProvider>
       </AutomationProvider>
