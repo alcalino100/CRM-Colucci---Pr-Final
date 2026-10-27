@@ -7,12 +7,22 @@
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  Archive, ArchiveRestore, ArrowUpRight, Copy, Pause, Play, Plus, Search, Trash2, Workflow,
+  Archive,
+  ArchiveRestore,
+  ArrowUpRight,
+  Copy,
+  Pause,
+  Play,
+  Plus,
+  Search,
+  Trash2,
+  Workflow,
+  Sparkles,
 } from "lucide-react"
 import { useFlowStore } from "@/lib/flow/flow-store"
 import { FLOW_STATUS_LABEL, FLOW_TIPOS_LABEL } from "@/lib/flow/palette"
 import type { FlowStatus, FlowTipo } from "@/lib/flow/types"
-import { Dialog, useToast, Skeleton } from "@/components/ui/primitives"
+import { Dialog, useToast, Skeleton, Badge, Card, CardContent } from "@/components/ui/primitives"
 import { cn } from "@/lib/utils"
 
 const FILTROS_TIPO: (FlowTipo | "todos")[] = ["todos", "Captura", "Qualificacao", "Venda", "Nutricao", "Reengajamento"]
@@ -45,7 +55,7 @@ export default function FlowList() {
 
   const duplicar = (id: string) => {
     const novoId = useFlowStore.getState().duplicateFlow(id)
-    toast("Fluxo duplicado")
+    toast("Fluxo duplicado com sucesso")
     router.push(`/automacoes/fluxos?fluxo=${novoId}`)
   }
 
@@ -69,15 +79,15 @@ export default function FlowList() {
 
   return (
     <div className="space-y-4">
-      {/* Filtros */}
+      {/* Filtros e Busca */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-52 flex-1 sm:max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar fluxo..."
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-cyan-600 focus:outline-none"
+            placeholder="Buscar fluxo por nome..."
+            className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -88,70 +98,70 @@ export default function FlowList() {
               className={cn(
                 "rounded-lg border px-3 py-1.5 text-xs font-medium transition",
                 tipo === t
-                  ? "border-cyan-600 bg-cyan-500/15 text-cyan-300"
-                  : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                  ? "border-primary bg-primary text-primary-foreground font-semibold"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              {t === "todos" ? "Todos" : FLOW_TIPOS_LABEL[t]}
+              {t === "todos" ? "Todos os Tipos" : FLOW_TIPOS_LABEL[t]}
             </button>
           ))}
         </div>
         <button
           onClick={() => novo()}
-          className="ml-auto flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3.5 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-400"
+          className="ml-auto flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 shadow-xs"
         >
-          <Plus size={15} /> Novo Fluxo
+          <Plus size={14} /> Novo Fluxo
         </button>
       </div>
 
-      {/* Tabela */}
+      {/* Tabela de Fluxos */}
       {lista.length === 0 ? (
         <EmptyState temFiltro={busca.trim() !== "" || tipo !== "todos"} onNovo={() => novo()} />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-800">
+        <Card className="overflow-hidden">
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
-              <thead className="border-b border-zinc-800 text-left text-xs uppercase tracking-wide text-zinc-500">
+              <thead className="border-b border-border/80 text-left text-xs uppercase tracking-wide text-muted-foreground bg-muted/20">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Fluxo</th>
+                  <th className="px-4 py-3 font-medium">Nome do Fluxo</th>
                   <th className="px-4 py-3 font-medium">Tipo</th>
                   <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 text-right font-medium">Sessões ativas</th>
+                  <th className="px-4 py-3 text-right font-medium">Sessões Ativas</th>
                   <th className="px-4 py-3 text-right font-medium">Conversão</th>
-                  <th className="px-4 py-3 font-medium">Última edição</th>
+                  <th className="px-4 py-3 font-medium">Última Edição</th>
                   <th className="px-4 py-3 text-right font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {lista.map((f) => (
-                  <tr key={f.id} className="border-b border-zinc-800/60 transition-colors last:border-0 hover:bg-zinc-900/50">
+                  <tr key={f.id} className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/30">
                     <td className="px-4 py-3">
                       <button onClick={() => router.push(`/automacoes/fluxos?fluxo=${f.id}`)} className="group flex items-center gap-2.5 text-left">
-                        <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg border", slugBg(f.status))}>
+                        <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg border", slugBg(f.status))}>
                           <Workflow size={14} />
                         </span>
                         <span className="min-w-0">
-                          <span className="flex items-center gap-1 font-medium text-zinc-100 group-hover:text-cyan-300">
-                            {f.nome} <ArrowUpRight size={13} className="text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100" />
+                          <span className="flex items-center gap-1 font-semibold text-foreground group-hover:text-primary transition-colors">
+                            {f.nome} <ArrowUpRight size={13} className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                           </span>
-                          <span className="block text-[11px] text-zinc-500">{f.nodes.length} blocos{f.arquivado ? " · arquivado" : ""}</span>
+                          <span className="block text-[11px] text-muted-foreground">{f.nodes.length} blocos configurados{f.arquivado ? " · arquivado" : ""}</span>
                         </span>
                       </button>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300">{FLOW_TIPOS_LABEL[f.tipo] ?? f.tipo}</span>
+                      <span className="rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground">{FLOW_TIPOS_LABEL[f.tipo] ?? f.tipo}</span>
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={f.status} />
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-[13px] text-zinc-300">{f.sessoesAtivas.toLocaleString("pt-BR")}</td>
+                    <td className="px-4 py-3 text-right font-mono text-xs tabular-nums text-foreground">{f.sessoesAtivas.toLocaleString("pt-BR")}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className="font-mono text-[13px] text-zinc-300">{f.taxaConversao}%</span>
+                      <span className="font-mono text-xs tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">{f.taxaConversao}%</span>
                     </td>
-                    <td className="px-4 py-3 text-[12px] text-zinc-500">{formatData(f.updatedAt)}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{formatData(f.updatedAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <IconBtn title="Editar" onClick={() => router.push(`/automacoes/fluxos?fluxo=${f.id}`)}><ArrowUpRight size={14} /></IconBtn>
+                        <IconBtn title="Editar no Canvas" onClick={() => router.push(`/automacoes/fluxos?fluxo=${f.id}`)}><ArrowUpRight size={14} /></IconBtn>
                         <IconBtn title="Duplicar" onClick={() => duplicar(f.id)}><Copy size={14} /></IconBtn>
                         <IconBtn
                           title={f.status === "ativo" ? "Desativar" : "Ativar"}
@@ -170,22 +180,22 @@ export default function FlowList() {
             </table>
           </div>
 
-          {/* Cards mobile */}
-          <div className="divide-y divide-zinc-800 md:hidden">
+          {/* Versão Mobile */}
+          <div className="divide-y divide-border/60 md:hidden">
             {lista.map((f) => (
-              <div key={f.id} className="px-4 py-3">
+              <div key={f.id} className="p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <button onClick={() => router.push(`/automacoes/fluxos?fluxo=${f.id}`)} className="flex min-w-0 items-center gap-2 text-left">
-                    <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg border", slugBg(f.status))}><Workflow size={14} /></span>
+                  <button onClick={() => router.push(`/automacoes/fluxos?fluxo=${f.id}`)} className="flex min-w-0 items-center gap-2.5 text-left">
+                    <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg border", slugBg(f.status))}><Workflow size={14} /></span>
                     <span className="min-w-0">
-                      <span className="block truncate font-medium text-zinc-100">{f.nome}</span>
-                      <span className="text-[11px] text-zinc-500">{FLOW_TIPOS_LABEL[f.tipo]} · {f.nodes.length} blocos</span>
+                      <span className="block truncate font-semibold text-foreground text-sm">{f.nome}</span>
+                      <span className="text-[11px] text-muted-foreground">{FLOW_TIPOS_LABEL[f.tipo]} · {f.nodes.length} blocos</span>
                     </span>
                   </button>
                   <StatusBadge status={f.status} />
                 </div>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-[11px] text-zinc-500">Edição: {formatData(f.updatedAt)}</span>
+                <div className="flex items-center justify-between border-t border-border/60 pt-2">
+                  <span className="text-[11px] text-muted-foreground">Atualizado: {formatData(f.updatedAt)}</span>
                   <div className="flex gap-1">
                     <IconBtn title="Duplicar" onClick={() => duplicar(f.id)}><Copy size={14} /></IconBtn>
                     <IconBtn title="Ativar/Desativar" onClick={() => alternarAtivo(f.id, f.status)}>
@@ -198,43 +208,44 @@ export default function FlowList() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Arquivados */}
       {arquivados.length > 0 && (
         <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Arquivados ({arquivados.length})</p>
-          <div className="overflow-hidden rounded-xl border border-zinc-800/70">
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Fluxos Arquivados ({arquivados.length})</p>
+          <Card className="divide-y divide-border/60">
             {arquivados.map((f) => (
-              <div key={f.id} className="flex items-center justify-between gap-2 border-b border-zinc-800/60 px-4 py-2.5 last:border-0">
+              <div key={f.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <ArchiveRestore size={14} className="shrink-0 text-zinc-500" />
-                  <span className="truncate text-sm text-zinc-400">{f.nome}</span>
+                  <ArchiveRestore size={14} className="shrink-0 text-muted-foreground" />
+                  <span className="truncate text-sm text-muted-foreground">{f.nome}</span>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => router.push(`/automacoes/fluxos?fluxo=${f.id}`)} className="rounded-md px-2 py-1 text-[11px] font-medium text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
+                  <button onClick={() => router.push(`/automacoes/fluxos?fluxo=${f.id}`)} className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
                     Abrir
                   </button>
-                  <button onClick={() => arquivar(f.id, false)} className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-cyan-400 hover:bg-zinc-800">
+                  <button onClick={() => arquivar(f.id, false)} className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-muted">
                     <ArchiveRestore size={12} /> Restaurar
                   </button>
                 </div>
               </div>
             ))}
-          </div>
+          </Card>
         </div>
       )}
 
+      {/* Dialog Excluir */}
       <Dialog open={!!excluirId} onClose={() => setExcluirId(null)} title="Excluir fluxo?">
-        <p className="mb-4 text-sm text-zinc-400">
-          Esta ação é permanente e não pode ser desfeita. Os fluxos arquivados são a forma segura de guardar um fluxo.
+        <p className="mb-4 text-xs text-muted-foreground">
+          Esta ação é permanente e removerá os blocos e conexões deste fluxo. Os fluxos arquivados são a forma recomendada de pausar e guardar um fluxo.
         </p>
         <div className="flex justify-end gap-2">
-          <button onClick={() => setExcluirId(null)} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800">
+          <button onClick={() => setExcluirId(null)} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted">
             Cancelar
           </button>
-          <button onClick={excluir} className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500">
+          <button onClick={excluir} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700">
             Excluir definitivamente
           </button>
         </div>
@@ -245,44 +256,41 @@ export default function FlowList() {
 
 function EmptyState({ temFiltro, onNovo }: { temFiltro: boolean; onNovo: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-20 text-center">
-      <div className="grid h-14 w-14 place-items-center rounded-2xl border border-zinc-800 bg-zinc-900">
-        <Workflow size={26} className="text-zinc-600" />
-      </div>
-      <div>
-        <h3 className="text-sm font-semibold text-zinc-200">{temFiltro ? "Nenhum fluxo encontrado" : "Nenhum fluxo criado ainda"}</h3>
-        <p className="mx-auto mt-1 max-w-sm text-xs text-zinc-500">
-          {temFiltro
-            ? "Ajuste os filtros ou a busca para encontrar fluxos."
-            : "Crie seu primeiro fluxo: escolha um gatilho (ex.: novo lead no CRM) e monte a jornada no editor visual."}
-        </p>
-      </div>
-      <button onClick={onNovo} className="flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3.5 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-400">
-        <Plus size={15} /> Criar Fluxo
-      </button>
-    </div>
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+        <div className="grid size-12 place-items-center rounded-2xl border border-border bg-muted/40">
+          <Workflow size={22} className="text-muted-foreground" />
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{temFiltro ? "Nenhum fluxo encontrado" : "Nenhum fluxo criado ainda"}</h3>
+          <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+            {temFiltro
+              ? "Ajuste os filtros ou o termo de busca para localizar outros fluxos."
+              : "Crie sua primeira jornada visual com blocos de gatilhos e mensagens automáticas."}
+          </p>
+        </div>
+        <button onClick={onNovo} className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 shadow-xs">
+          <Plus size={14} /> Criar Primeiro Fluxo
+        </button>
+      </CardContent>
+    </Card>
   )
 }
 
 function StatusBadge({ status }: { status: FlowStatus }) {
-  const map: Record<FlowStatus, [string, string]> = {
-    ativo: ["bg-emerald-500/10 text-emerald-400", "∙"],
-    inativo: ["bg-zinc-700/10 text-zinc-400", "◦"],
-    rascunho: ["bg-amber-500/10 text-amber-400", "✎"],
+  if (status === "ativo") {
+    return <Badge variant="green">Ativo</Badge>
   }
-  const [cls, dot] = map[status]
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full border border-current/20 px-2.5 py-1 text-[11px] font-medium", cls)}>
-      <span className="size-1.5 rounded-full bg-current" />
-      {FLOW_STATUS_LABEL[status]}
-    </span>
-  )
+  if (status === "rascunho") {
+    return <Badge variant="amber">Rascunho</Badge>
+  }
+  return <Badge variant="gray">Inativo</Badge>
 }
 
 function slugBg(status: FlowStatus): string {
-  if (status === "ativo") return "border-emerald-700/40 bg-emerald-500/10 text-emerald-400"
-  if (status === "rascunho") return "border-amber-700/40 bg-amber-500/10 text-amber-400"
-  return "border-zinc-700 bg-zinc-800/40 text-zinc-400"
+  if (status === "ativo") return "border-emerald-500/40 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+  if (status === "rascunho") return "border-amber-500/40 bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+  return "border-border bg-muted/40 text-muted-foreground"
 }
 
 function IconBtn({ children, title, onClick, disabled, danger }: { children: React.ReactNode; title: string; onClick: () => void; disabled?: boolean; danger?: boolean }) {
@@ -292,8 +300,8 @@ function IconBtn({ children, title, onClick, disabled, danger }: { children: Rea
       disabled={disabled}
       title={title}
       className={cn(
-        "grid h-8 w-8 place-items-center rounded-lg border border-transparent text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200 disabled:pointer-events-none disabled:opacity-30",
-        danger && "hover:border-red-600/40 hover:text-red-400"
+        "grid size-7 place-items-center rounded-lg border border-transparent text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30",
+        danger && "hover:border-red-500/40 hover:text-red-600 dark:hover:text-red-400"
       )}
     >
       {children}
@@ -308,12 +316,12 @@ function formatData(t: number): string {
 
 export function FlowListSkeleton() {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex gap-2">
         <Skeleton className="h-9 w-64" />
         <Skeleton className="ml-auto h-9 w-28" />
       </div>
-      <Skeleton className="h-64 w-full" />
+      <Skeleton className="h-64 w-full rounded-xl" />
     </div>
   )
 }

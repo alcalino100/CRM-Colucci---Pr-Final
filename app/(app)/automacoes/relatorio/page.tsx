@@ -1,11 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
 import { isGestorNivel } from "@/lib/roles"
-import { Badge, Card, CardContent, CardHeader, CardTitle, Input, Select, Table, TD, TH, THead, TR } from "@/components/ui/primitives"
+import { Badge, Card, CardContent, CardHeader, CardTitle, Input, Table, TD, TH, THead, TR } from "@/components/ui/primitives"
+import { BarChart3, Download, RefreshCw, Send, MessageCircle, Users, Bot, Sparkles, TrendingUp, Calendar } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { AutomationSubNav } from "@/components/automation/AutomationSubNav"
 
 interface Dia {
   dia: string
@@ -47,7 +50,6 @@ export default function RelatorioAutomacoesPage() {
   const carregar = async (iniArg?: string, fimArg?: string) => {
     setBusy(true)
     try {
-      // Fronteiras em BRT (00:00 BRT = 03:00Z), para o "dia" bater com o real.
       const ini = `${iniArg ?? inicio}T03:00:00Z`
       const fdt = new Date(`${fimArg ?? fim}T12:00:00Z`)
       fdt.setDate(fdt.getDate() + 1)
@@ -61,8 +63,8 @@ export default function RelatorioAutomacoesPage() {
       const L = ((logs.data ?? []) as { event_type: string; created_at: string }[])
       const A = ((anal.data ?? []) as { tokens_used: number | null; api_cost_usd: number | null; created_at: string }[])
       const dias: string[] = []
-      const d0 = new Date(`${inicio}T12:00:00Z`)
-      const d1 = new Date(`${fim}T12:00:00Z`)
+      const d0 = new Date(`${iniArg ?? inicio}T12:00:00Z`)
+      const d1 = new Date(`${fimArg ?? fim}T12:00:00Z`)
       for (let d = new Date(d0); d <= d1; d.setDate(d.getDate() + 1)) dias.push(iso(d))
       const rows: Dia[] = dias.map((dia) => {
         const env = J.filter((j) => (j.sent_at ?? "").slice(0, 10) === dia).length
@@ -109,8 +111,11 @@ export default function RelatorioAutomacoesPage() {
       setInicio(f(d)); setFim(f(hoje)); void carregar(f(d), f(hoje))
     }
   }
+
   const tot = (k: keyof Dia) => (typeof linhas[0]?.[k] === "number" ? linhas.reduce((s, l) => s + (l[k] as number), 0) : 0)
-  const taxaGeral = (tot("enviadas") as number) ? Math.round(((tot("respondidas") as number) / (tot("enviadas") as number)) * 1000) / 10 : 0
+  const totalEnviadas = tot("enviadas") as number
+  const totalRespondidas = tot("respondidas") as number
+  const taxaGeral = totalEnviadas ? Math.round((totalRespondidas / totalEnviadas) * 1000) / 10 : 0
 
   const csv = () => {
     const head = "dia,enviadas,respondidas,taxa_%,viraram_ia,handoffs,triagens,tokens,custo_usd"
@@ -123,65 +128,204 @@ export default function RelatorioAutomacoesPage() {
     URL.revokeObjectURL(a.href)
   }
 
-  if (loading || !user) return <div className="py-16 text-center text-muted-foreground">Carregando...</div>
+  if (loading || !user) return <div className="py-16 text-center text-muted-foreground animate-pulse">Carregando relatório...</div>
   if (!permitido) return null
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-6">
+      {/* 1. Subnavegação Unificada */}
+      <AutomationSubNav />
+
+      {/* 2. Header & Ações de Exportação */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-xl font-bold">Relatório diário <Badge>automações + IA</Badge></h1>
-          <p className="text-xs text-muted-foreground">Dia a dia: envios, respostas, taxas, IA, triagem e custo. Exporte em CSV para compartilhar.</p>
+          <div className="flex items-center gap-2">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <BarChart3 className="size-4" />
+            </div>
+            <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+              Relatório Diário de Automações & IA
+            </h1>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Acompanhamento dia a dia: envios de reativação e follow-up, taxas de conversão, transições para IA e custos.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          {(["hoje", "ontem", "7d", "30d"] as const).map((p) => (
-            <button key={p} type="button" onClick={() => preset(p)} className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
-              {p === "hoje" ? "Hoje" : p === "ontem" ? "Ontem" : p === "7d" ? "7 dias" : "30 dias"}
-            </button>
-          ))}
-          <Input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} className="h-9 w-auto text-xs" aria-label="Data inicial" />
-          <span className="text-xs text-muted-foreground">→</span>
-          <Input type="date" value={fim} onChange={(e) => setFim(e.target.value)} className="h-9 w-auto text-xs" aria-label="Data final" />
-          <button type="button" onClick={() => carregar()} disabled={busy} className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50">
-            {busy ? "..." : "Buscar"}
-          </button>
-          <button type="button" onClick={csv} className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted">CSV</button>
-        </div>
+
+        <button
+          onClick={csv}
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-muted"
+        >
+          <Download className="size-3.5" /> Exportar Planilha (CSV)
+        </button>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-5">
-        {[["Enviadas", tot("enviadas")], ["Respondidas", tot("respondidas")], ["Taxa resposta %", taxaGeral], ["Viraram IA", tot("viraram_ia")], ["Custo US$", tot("custo")]].map(([label, v]) => (
-          <Card key={label as string}>
-            <CardContent>
-              <p className="text-2xl font-bold">{String(v)}</p>
-              <p className="text-xs text-muted-foreground">{label}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
+      {/* 3. Filtro de Período Limpo */}
       <Card>
-        <CardHeader><CardTitle>Por dia</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <THead><TR><TH>Dia</TH><TH>Enviadas</TH><TH>Respondidas</TH><TH>Taxa %</TH><TH>Viraram IA</TH><TH>Handoffs</TH><TH>Triagens</TH><TH>Tokens</TH><TH>US$</TH></TR></THead>
-            <tbody>
-              {linhas.map((l) => (
-                <TR key={l.dia}>
-                  <TD>{br(l.dia)}</TD>
-                  <TD>{l.enviadas}</TD>
-                  <TD>{l.respondidas}</TD>
-                  <TD>{l.taxa}%</TD>
-                  <TD>{l.viraram_ia}</TD>
-                  <TD>{l.handoffs}</TD>
-                  <TD>{l.triagens}</TD>
-                  <TD>{l.tokens.toLocaleString("pt-BR")}</TD>
-                  <TD>{l.custo.toFixed(5)}</TD>
-                </TR>
-              ))}
-            </tbody>
-          </Table>
+        <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold text-muted-foreground mr-1 flex items-center gap-1">
+              <Calendar className="size-3.5" /> Período:
+            </span>
+            {(["hoje", "ontem", "7d", "30d"] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => preset(p)}
+                className="rounded-lg border border-border/70 bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition"
+              >
+                {p === "hoje" ? "Hoje" : p === "ontem" ? "Ontem" : p === "7d" ? "Últimos 7 dias" : "Últimos 30 dias"}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={inicio}
+              onChange={(e) => setInicio(e.target.value)}
+              className="h-8 w-auto text-xs"
+              aria-label="Data inicial"
+            />
+            <span className="text-xs text-muted-foreground">até</span>
+            <Input
+              type="date"
+              value={fim}
+              onChange={(e) => setFim(e.target.value)}
+              className="h-8 w-auto text-xs"
+              aria-label="Data final"
+            />
+            <button
+              type="button"
+              onClick={() => carregar()}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
+            >
+              <RefreshCw className={cn("size-3", busy && "animate-spin")} />
+              {busy ? "Filtrando..." : "Filtrar"}
+            </button>
+          </div>
         </CardContent>
+      </Card>
+
+      {/* 4. Cards de Resumo Executivo */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground">Total Enviadas</span>
+              <Send className="size-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{totalEnviadas}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Mensagens no período</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground">Total Respondidas</span>
+              <MessageCircle className="size-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{totalRespondidas}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Retornos obtidos</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground">Taxa Média Resposta</span>
+              <TrendingUp className="size-4 text-primary" />
+            </div>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-primary">{taxaGeral}%</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Conversão da esteira</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground">Assumidos pela IA</span>
+              <Bot className="size-4 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{tot("viraram_ia")}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Atendimentos automáticos</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground">Custo IA Total</span>
+              <Sparkles className="size-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">${(tot("custo") as number).toFixed(3)}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Tokens consumidos</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 5. Tabela Detalhada por Dia */}
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-3 border-b border-border/60">
+          <CardTitle className="text-base font-bold">Progressão Diária</CardTitle>
+        </CardHeader>
+
+        <Table>
+          <THead>
+            <TR>
+              <TH>Data (BRT)</TH>
+              <TH>Enviadas</TH>
+              <TH>Respondidas</TH>
+              <TH>Taxa de Resposta</TH>
+              <TH>Viraram IA</TH>
+              <TH>Handoffs Corretores</TH>
+              <TH>Tokens IA</TH>
+              <TH className="text-right">Custo USD</TH>
+            </TR>
+          </THead>
+          <tbody>
+            {linhas.length === 0 ? (
+              <TR>
+                <TD colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                  Nenhum registro encontrado no período selecionado.
+                </TD>
+              </TR>
+            ) : (
+              linhas.map((l) => (
+                <TR key={l.dia} className="hover:bg-muted/30 transition-colors">
+                  <TD className="font-semibold text-foreground text-xs whitespace-nowrap">
+                    {br(l.dia)}
+                  </TD>
+                  <TD className="tabular-nums text-xs font-medium">{l.enviadas}</TD>
+                  <TD className="tabular-nums text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    {l.respondidas}
+                  </TD>
+                  <TD>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold tabular-nums min-w-[38px]">{l.taxa}%</span>
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-emerald-500"
+                          style={{ width: `${Math.min(100, l.taxa)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </TD>
+                  <TD className="tabular-nums text-xs">{l.viraram_ia}</TD>
+                  <TD className="tabular-nums text-xs">{l.handoffs}</TD>
+                  <TD className="tabular-nums text-xs font-mono text-muted-foreground">
+                    {l.tokens.toLocaleString("pt-BR")}
+                  </TD>
+                  <TD className="tabular-nums text-xs font-mono text-right text-muted-foreground">
+                    ${l.custo.toFixed(4)}
+                  </TD>
+                </TR>
+              ))
+            )}
+          </tbody>
+        </Table>
       </Card>
     </div>
   )

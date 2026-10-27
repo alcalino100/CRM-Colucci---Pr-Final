@@ -40,6 +40,7 @@ import { fmtDateTime } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
 import { EmergencyPauseButton } from "@/components/automation/EmergencyPauseButton"
+import { AutomationSubNav } from "@/components/automation/AutomationSubNav"
 
 // Teto estrito anti-banimento configurado nas automações
 const MAX_ENVIOS_LINHA_DIA = 30
@@ -410,7 +411,10 @@ export default function AutomacoesPage() {
 
   return (
     <div className="space-y-6">
-      {/* 1. Header Unificado com Navegação e Ações Rápidas */}
+      {/* 1. Subnavegação Unificada */}
+      <AutomationSubNav pendingJobsCount={scheduledJobs.length} />
+
+      {/* 2. Header Unificado com Ações Rápidas */}
       <div className="flex flex-col gap-4 border-b border-border/60 pb-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -456,85 +460,47 @@ export default function AutomacoesPage() {
           </div>
         </div>
 
-        {/* Subnavegação por Abas Limpas */}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        {/* Filtro de Visualização da Página */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <span className="text-xs font-semibold text-muted-foreground mr-1">Exibição:</span>
           <button
             onClick={() => setSecaoAtiva("geral")}
             className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+              "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition",
               secaoAtiva === "geral"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <Activity className="size-3.5" />
-            Visão Geral
+            Visão Geral Completa
           </button>
 
           <button
             onClick={() => setSecaoAtiva("regua")}
             className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+              "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition",
               secaoAtiva === "regua"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <Clock className="size-3.5" />
-            Régua Follow-up (D+1, D+2, D+3)
+            Foco na Régua D+1, D+2, D+3
           </button>
 
           <button
             onClick={() => setSecaoAtiva("linhas")}
             className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+              "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition",
               secaoAtiva === "linhas"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <Smartphone className="size-3.5" />
-            Linhas & Anti-Ban (30/dia)
+            Foco nas Linhas & Cota Anti-Ban
           </button>
-
-          <div className="h-4 w-px bg-border/80 mx-1 hidden sm:block" />
-
-          <Link
-            href="/automacoes/fila"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
-          >
-            <Layers className="size-3.5 text-muted-foreground" />
-            Fila de Envios
-            {scheduledJobs.length > 0 && (
-              <span className="ml-0.5 rounded-full bg-amber-100 px-1.5 py-0.2 text-[10px] font-bold text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
-                {scheduledJobs.length}
-              </span>
-            )}
-          </Link>
-
-          <Link
-            href="/automacoes/logs"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
-          >
-            <BarChart3 className="size-3.5 text-muted-foreground" />
-            Logs de Auditoria
-          </Link>
-
-          <Link
-            href="/automacoes/regras"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
-          >
-            <Zap className="size-3.5 text-muted-foreground" />
-            Regras & Mensagens
-          </Link>
-
-          <Link
-            href="/automacoes/relatorio"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
-          >
-            <BarChart3 className="size-3.5 text-muted-foreground" />
-            Relatório Detalhado
-          </Link>
         </div>
       </div>
 
