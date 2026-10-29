@@ -51,6 +51,7 @@ export type AutomationTriggerType =
   | "lead_inactive"
   | "lead_temperature_changed"
   | "no_response_followup"
+  | "atendimento_ia_stalled"
 
 export type ConditionOperator =
   | "equals"

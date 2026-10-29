@@ -3,6 +3,8 @@ import {
   TEMPLATE_D1,
   TEMPLATE_D2,
   TEMPLATE_D3,
+  TEMPLATE_CONTENCAO_IA,
+  AUTOMATION_CONTENCAO_IA_ID,
   MAX_ENVIOS_LINHA_DIA,
 } from "@/app/api/automation/worker/route"
 
@@ -11,6 +13,8 @@ describe("Régua de Follow-up (D+1, D+2, D+3) e Anti-Ban", () => {
     expect(TEMPLATE_D1).toBe("a0000000-0000-0000-0000-000000000002")
     expect(TEMPLATE_D2).toBe("a0000000-0000-0000-0000-000000000003")
     expect(TEMPLATE_D3).toBe("a0000000-0000-0000-0000-000000000004")
+    expect(TEMPLATE_CONTENCAO_IA).toBe("a0000000-0000-0000-0000-000000000005")
+    expect(AUTOMATION_CONTENCAO_IA_ID).toBe("b0000000-0000-0000-0000-000000000003")
     expect(MAX_ENVIOS_LINHA_DIA).toBe(30)
   })
 
@@ -47,5 +51,22 @@ describe("Régua de Follow-up (D+1, D+2, D+3) e Anti-Ban", () => {
     expect(agora - cutoffD1).toBe(24 * 3600 * 1000)
     expect(agora - cutoffD2).toBe(48 * 3600 * 1000)
     expect(agora - cutoffD3).toBe(72 * 3600 * 1000)
+  })
+
+  it("deve filtrar corretamente leads elegíveis para contenção IA x aguardando resposta", () => {
+    const leads = [
+      { id: "lead-1", nome: "Lead Silencioso", ultimaMsgDeMim: true, horasSilencio: 36 },
+      { id: "lead-2", nome: "Lead Recente", ultimaMsgDeMim: true, horasSilencio: 5 },
+      { id: "lead-3", nome: "Lead Esperando Resposta", ultimaMsgDeMim: false, horasSilencio: 40 },
+    ]
+
+    const elegiveis = leads.filter((l) => l.horasSilencio >= 24 && l.ultimaMsgDeMim === true)
+    const aguardando = leads.filter((l) => l.horasSilencio >= 24 && l.ultimaMsgDeMim === false)
+
+    expect(elegiveis).toHaveLength(1)
+    expect(elegiveis[0].id).toBe("lead-1")
+
+    expect(aguardando).toHaveLength(1)
+    expect(aguardando[0].id).toBe("lead-3")
   })
 })

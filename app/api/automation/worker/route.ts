@@ -107,6 +107,8 @@ function tagsDoLead(referencias: unknown): string[] {
 export const TEMPLATE_D1 = "a0000000-0000-0000-0000-000000000002" // Follow-up D+1 (24h)
 export const TEMPLATE_D2 = "a0000000-0000-0000-0000-000000000003" // Follow-up D+2 (48h)
 export const TEMPLATE_D3 = "a0000000-0000-0000-0000-000000000004" // Follow-up D+3 (72h)
+export const TEMPLATE_CONTENCAO_IA = "a0000000-0000-0000-0000-000000000005" // Contenção IA — Resgate para Follow-up
+export const AUTOMATION_CONTENCAO_IA_ID = "b0000000-0000-0000-0000-000000000003" // Automação de Contenção IA
 export const MAX_ENVIOS_LINHA_DIA = 30 // Limite estrito anti-banimento (máximo 30 msgs/linha/dia)
 
 // Auto-pausa conversas IA inativas há mais de 1 hora para liberar o semáforo de follow-up
@@ -430,6 +432,111 @@ async function criarJobsFollowup(automation: any, results: { created: number }, 
   }
 }
 
+// =============================================================================
+// PLANO DE CONTENÇÃO IA — Resgate de leads parados em atendimento_ia para Follow-up
+// =============================================================================
+async function criarJobsContencaoIA(automation: any, results: { created: number }): Promise<void> {
+  const agora = Date.now()
+  const scheduledAt = calculateScheduledAt(automation.wait_config)
+
+  // 1. Busca leads com status 'atendimento_ia' que não estejam fechados ou arquivados
+  const { data: leadsIA } = await wsupabase
+    .from("leads")
+    .select("id, nome, status, telefone, corretor_id, arquivado_em, fechado_em, atualizado_em")
+    .eq("status", "atendimento_ia")
+    .is("arquivado_em", null)
+    .is("fechado_em", null)
+    .order("atualizado_em", { ascending: true, nullsFirst: true })
+    .limit(200)
+
+  if (!leadsIA || leadsIA.length === 0) return
+
+  for (const lead of leadsIA) {
+    if (!lead.telefone || lead.telefone.replace(/\D/g, "").length < 10) continue
+
+    // Evita duplicidade se já houver qualquer job desta automação de contenção
+    const { count: jaTemJob } = await wsupabase
+      .from("automation_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("automation_id", automation.id)
+      .eq("lead_id", lead.id)
+
+    if ((jaTemJob ?? 0) > 0) continue
+
+    // Verifica se houve interação humana recente nas últimas 24h
+    const ultimaHumana = await getLastHumanInteraction(lead.id)
+    if (ultimaHumana.timestamp && new Date(ultimaHumana.timestamp).getTime() > agora - 24 * 3600_000) {
+      continue
+    }
+
+    // Busca última mensagem de WhatsApp trocada com o lead
+    const telDigits = lead.telefone.replace(/\D/g, "")
+    const conds = [`lead_id.eq.${lead.id}`]
+    if (telDigits) {
+      conds.push(`telefone.ilike.%${telDigits.slice(-8)}%`)
+    }
+
+    const { data: ultimasMsgs } = await wsupabase
+      .from("whatsapp_mensagens")
+      .select("de_mim, criado_em, corpo")
+      .or(conds.join(","))
+      .order("criado_em", { ascending: false })
+      .limit(1)
+
+    const ultimaMsg = ultimasMsgs?.[0]
+
+    if (ultimaMsg) {
+      // Se a última mensagem partiu do LEAD (de_mim === false), o lead está esperando resposta!
+      // NÃO enviamos "Notei que você não respondeu mais...", pois seria desconexo e anti-profissional.
+      if (!ultimaMsg.de_mim) {
+        continue
+      }
+      // Se a última mensagem foi enviada há menos de 24 horas, ainda está dentro da janela de respiro
+      const tempoMsg = new Date(ultimaMsg.criado_em).getTime()
+      if (agora - tempoMsg < 24 * 3600_000) {
+        continue
+      }
+    } else {
+      // Se não há mensagens gravadas, checa se atualizado_em tem menos de 24 horas
+      const tempoLead = new Date(lead.atualizado_em || 0).getTime()
+      if (tempoLead && agora - tempoLead < 24 * 3600_000) {
+        continue
+      }
+    }
+
+    // Cria o job de contenção e resgate para a fila
+    const { error: insErr } = await wsupabase.from("automation_jobs").insert({
+      automation_id: automation.id,
+      lead_id: lead.id,
+      assigned_agent_id: lead.corretor_id || null,
+      supervisor_user_id: automation.supervisor_user_id,
+      status: "scheduled",
+      scheduled_at: scheduledAt,
+      eligible_at: new Date().toISOString(),
+      max_attempts: 1,
+      metadata: {
+        tipo: "contencao_ia",
+        followup_stage: "contencao_ia",
+        template_id: TEMPLATE_CONTENCAO_IA,
+        motivo: "Lead parado em Atendimento IA sem resposta há +24h",
+      },
+    })
+
+    if (!insErr) {
+      results.created++
+      await createLog({
+        automation_id: automation.id,
+        lead_id: lead.id,
+        event_type: "job_created",
+        event_title: `Contenção IA agendada: ${lead.nome}`,
+        event_description: `Lead sem resposta em Atendimento IA há +24h — agendado resgate para Follow-up em ${new Date(scheduledAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`,
+        new_status: "scheduled",
+        payload: { tipo: "contencao_ia", scheduled_at: scheduledAt },
+      })
+    }
+  }
+}
+
 interface RejectionBreakdown {
   has_active_job: number
   conditions_not_met: number
@@ -538,9 +645,17 @@ export async function runWorker() {
       if (nb) nomeImobiliaria = nb
     } catch { /* fallback neutro */ }
 
-    // Follow-up tem gatilho próprio (jobs sem resposta), não o pool bruto de leads.
-    const automacoesNormais = automations.filter((a) => a.trigger_type !== "no_response_followup")
+    // Automações por finalidade e gatilho
+    const automacoesContencao = automations.filter(
+      (a) => a.trigger_type === "atendimento_ia_stalled" || a.id === AUTOMATION_CONTENCAO_IA_ID
+    )
     const automacoesFollowup = automations.filter((a) => a.trigger_type === "no_response_followup")
+    const automacoesNormais = automations.filter(
+      (a) =>
+        a.trigger_type !== "no_response_followup" &&
+        a.trigger_type !== "atendimento_ia_stalled" &&
+        a.id !== AUTOMATION_CONTENCAO_IA_ID
+    )
 
     // Semáforo IA x Automação: se alguma IA ativa coordena com a automação, pula leads
     // com conversa IA ativa (ai_responding=true) tanto na reativação quanto no follow-up.
@@ -802,6 +917,21 @@ export async function runWorker() {
       payload: { followup_automations: automacoesFollowup.map((a) => a.id) },
     })
 
+    // FASE 1-C: Criar jobs de contenção IA (leads parados em atendimento_ia sem resposta há +24h)
+    for (const automation of automacoesContencao) {
+      await criarJobsContencaoIA(automation, results)
+    }
+
+    if (automacoesContencao.length > 0) {
+      await createLog({
+        automation_id: null,
+        event_type: "lead_evaluated",
+        event_title: "FASE 1-C contenção IA concluída",
+        event_description: `Automações contenção IA: ${automacoesContencao.length} | Jobs de contenção avaliados nesta run`,
+        payload: { contencao_automations: automacoesContencao.map((a) => a.id) },
+      })
+    }
+
     // FASE 2: Processar jobs agendados
     const semConexaoAvisada = new Set<string>()
     let jobsToProcess = await getJobsToProcess()
@@ -886,12 +1016,25 @@ export async function runWorker() {
           continue
         }
 
-        // Automações normais exigem em_atendimento/em_automacao; follow-up aceita em_atendimento/em_automacao/em_followup
-        // (em_automacao incluído: é onde a mãe estaciona o lead após a msg1)
+        // Automações normais exigem em_atendimento/em_automacao; follow-up aceita em_atendimento/em_automacao/em_followup;
+        // contenção IA aceita atendimento_ia/em_atendimento/em_followup
         const isFollowup = automation.trigger_type === "no_response_followup"
-        const validStatuses = isFollowup ? ["em_atendimento", "em_automacao", "em_followup"] : ["em_atendimento", "em_automacao"]
+        const isContencao =
+          automation.trigger_type === "atendimento_ia_stalled" ||
+          automation.id === AUTOMATION_CONTENCAO_IA_ID ||
+          (job.metadata as Record<string, unknown> | null)?.["tipo"] === "contencao_ia" ||
+          (job.metadata as Record<string, unknown> | null)?.["template_id"] === TEMPLATE_CONTENCAO_IA
+
+        const validStatuses = isContencao
+          ? ["atendimento_ia", "em_atendimento", "em_followup"]
+          : isFollowup
+            ? ["em_atendimento", "em_automacao", "em_followup"]
+            : ["em_atendimento", "em_automacao"]
+
         const temTagFollowUp = tagsFollowUp.size > 0 && tagsDoLead(lead.referencias).some((t) => tagsFollowUp.has(t))
-        if (!validStatuses.includes(lead.status) || (lead.origem !== "Tráfego Pago" && !temTagFollowUp) || lead.fechado_em || lead.arquivado_em) {
+        const origemValida = isContencao || lead.origem === "Tráfego Pago" || temTagFollowUp
+
+        if (!validStatuses.includes(lead.status) || !origemValida || lead.fechado_em || lead.arquivado_em) {
           await cancelJob(job.id, "Lead não atende mais às condições", "system")
           results.cancelled++
           continue
@@ -1035,12 +1178,12 @@ export async function runWorker() {
             const supervisionUpdate: Record<string, unknown> = {
               gestor_responsavel: automation.supervisor_user_id,
             }
-            // Follow-up: NÃO força status — lead permanece em_followup até responder.
+            // Follow-up e Contenção: NÃO força status — lead permanece em_followup ou onde definido.
             // Automação: NÃO puxa de volta — lead em estágio de máquina
             // (em_automacao/atendimento_ia/em_followup) fica onde está; só o dono é definido.
             // Sem isso a supervisão desfazia a movimentação do próprio envio.
             const estagioMaquina = ["em_automacao", "atendimento_ia", "em_followup"].includes(String((lead as { status?: unknown }).status ?? ""))
-            if (!isFollowupAutomation && !estagioMaquina) {
+            if (!isFollowupAutomation && !estagioMaquina && !isContencao) {
               supervisionUpdate.status = "em_atendimento"
             }
             const { error: supErr } = await wsupabase
@@ -1132,6 +1275,52 @@ export async function runWorker() {
                 event_description: `${lead.nome} saiu de em_atendimento e entrou em "Em Automação" após o envio da reativação.`,
               })
             } catch { /* best-effort */ }
+          }
+
+          // Ordem do fluxo Contenção IA: enviou o resgate ("Notei que você não respondeu...") →
+          // 1. Libera semáforo na conversations_ia (ai_responding = false)
+          // 2. Transfere lead para "em_followup"
+          // 3. Registra observação e log de resgate
+          if (isContencao) {
+            try {
+              const telDigits = (lead.telefone || "").replace(/\D/g, "")
+              const conds = [`contact_id.eq.${job.lead_id}`]
+              if (telDigits) {
+                conds.push(`external_id.eq.${telDigits}`)
+                if (telDigits.startsWith("55")) conds.push(`external_id.eq.${telDigits.slice(2)}`)
+                else conds.push(`external_id.eq.55${telDigits}`)
+              }
+              await wsupabase
+                .from("conversations_ia")
+                .update({ ai_responding: false })
+                .or(conds.join(","))
+
+              const { data: leadAtual } = await wsupabase.from("leads").select("observacoes").eq("id", job.lead_id).maybeSingle()
+              const baseObs = leadAtual?.observacoes ? `${leadAtual.observacoes}\n` : ""
+              const obsResgate = `${baseObs}[Contenção IA] Mensagem de resgate enviada ("Notei que você não respondeu mais..."). Lead transferido de Atendimento IA para Follow-up.`.trim()
+
+              await wsupabase
+                .from("leads")
+                .update({
+                  status: "em_followup",
+                  observacoes: obsResgate,
+                  atualizado_em: new Date().toISOString(),
+                })
+                .eq("id", job.lead_id)
+
+              await createLog({
+                automation_id: automation.id,
+                job_id: job.id,
+                lead_id: job.lead_id,
+                event_type: "lead_resgatado_atendimento_ia",
+                event_title: "Lead resgatado de Atendimento IA → Follow-up",
+                event_description: `${lead.nome} recebeu mensagem de contenção e foi transferido de Atendimento IA para Follow-up.`,
+                new_status: "sent",
+                payload: { lead_novo_status: "em_followup" },
+              })
+            } catch (errContencao) {
+              console.error("Erro pós-envio contenção IA:", errContencao)
+            }
           }
         } else {
           const attempts = (job.attempts ?? 0) + 1
