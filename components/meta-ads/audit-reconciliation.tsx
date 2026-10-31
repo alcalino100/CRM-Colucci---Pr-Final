@@ -167,7 +167,7 @@ export default function AuditReconciliation({ reconciliacoes, corretores, totais
               <span className="text-[11px] uppercase tracking-wide text-amber-600 font-semibold">4. Visitas</span>
               <p className="mt-1 text-xl font-bold tabular-nums text-amber-600">{fmt(totais.visitasTotal)}</p>
               <span className="mt-1 text-[11px] text-muted-foreground">
-                {totais.leadsTotalCrm > 0 ? `${((totais.visitasTotal / totais.leadsTotalMédia(totais.leadsTotalCrm)) * 100).toFixed(1)}% dos leads` : "—"}
+                {totais.leadsTotalCrm > 0 ? `${((totais.visitasTotal / totais.leadsTotalCrm) * 100).toFixed(1)}% dos leads` : "—"}
               </span>
             </div>
 
@@ -398,8 +398,4 @@ export default function AuditReconciliation({ reconciliacoes, corretores, totais
       </Card>
     </div>
   )
-}
-
-function totaisLeadsMédia(n: number): number {
-  return n > 0 ? n : 1
 }
