@@ -25,7 +25,7 @@ import AuditReconciliation from "@/components/meta-ads/audit-reconciliation"
 import AttributionAudit from "@/components/meta-ads/attribution-audit"
 import ExecutiveReport from "@/components/meta-ads/executive-report"
 import McpIntegrationPanel from "@/components/meta-ads/mcp-integration-panel"
-import { calcularReconciliacao } from "@/lib/meta/reconciliation"
+import { calcularReconciliacao, extrairResultadosMeta } from "@/lib/meta/reconciliation"
 
 // ---------- helpers ----------
 const fetcher = (u: string) => fetch(u).then(async (r) => {
@@ -35,7 +35,21 @@ const fetcher = (u: string) => fetch(u).then(async (r) => {
 })
 
 const fmt = (n: number, d = 0) => n.toLocaleString("pt-BR", { maximumFractionDigits: d, minimumFractionDigits: d })
-const iso = (d: Date) => d.toISOString().slice(0, 10)
+
+// Formata data YYYY-MM-DD no fuso de Brasília (America/Sao_Paulo) para casar perfeitamente com o Meta Ads Manager
+function toBrasiliaIso(d: Date): string {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d)
+  const y = parts.find((p) => p.type === "year")?.value
+  const m = parts.find((p) => p.type === "month")?.value
+  const day = parts.find((p) => p.type === "day")?.value
+  return `${y}-${m}-${day}`
+}
+
 const brl2 = (v?: number) => v == null ? "—" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 })
 
 type Nivel = "account" | "campaign" | "adset" | "ad"
@@ -55,13 +69,9 @@ function StatusBadge({ s }: { s?: string | null }) {
   return <Badge variant={m.variant as any}>{m.label}</Badge>
 }
 
-// Extrai "resultados" (leads/conversas) do array actions do Insights
-function resultados(row: any): number {
-  const acts: any[] = row?.actions || []
-  return acts
-    .filter((a) => a.action_type === "lead" || a.action_type.includes("messaging_conversation_started"))
-    .reduce((s, a) => s + Number(a.value || 0), 0)
-}
+// Extrai resultados unificados de todas as ações de conversão da campanha
+const resultados = extrairResultadosMeta
+
 function agrega(rows: any[]) {
   const t = { spend: 0, impressions: 0, clicks: 0, reach: 0, results: 0 }
   for (const r of rows) {
@@ -81,7 +91,7 @@ function agrega(rows: any[]) {
   }
 }
 
-// ---------- períodos ----------
+// ---------- períodos (fuso oficial Meta Ads / Brasília) ----------
 const PRESETS = [
   { id: "hoje", label: "Hoje" },
   { id: "7d", label: "Últimos 7 dias" },
@@ -91,18 +101,31 @@ const PRESETS = [
 ] as const
 
 function rangeFor(preset: string, cSince: string, cUntil: string): { since: string; until: string } {
-  const hoje = new Date()
-  if (preset === "hoje") return { since: iso(hoje), until: iso(hoje) }
-  if (preset === "7d") return { since: iso(new Date(Date.now() - 6 * 864e5)), until: iso(hoje) }
-  if (preset === "mes") return { since: iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), until: iso(hoje) }
+  const agora = new Date()
+  const hojeStr = toBrasiliaIso(agora)
+
+  if (preset === "hoje") return { since: hojeStr, until: hojeStr }
+  if (preset === "7d") {
+    const d = new Date(Date.now() - 6 * 864e5)
+    return { since: toBrasiliaIso(d), until: hojeStr }
+  }
+  if (preset === "mes") {
+    const [ano, mes] = hojeStr.split("-")
+    return { since: `${ano}-${mes}-01`, until: hojeStr }
+  }
   if (preset === "custom" && cSince && cUntil) return { since: cSince, until: cUntil }
-  return { since: iso(new Date(Date.now() - 29 * 864e5)), until: iso(hoje) }
+  const d30 = new Date(Date.now() - 29 * 864e5)
+  return { since: toBrasiliaIso(d30), until: hojeStr }
 }
-// Período anterior de mesma duração (para variação percentual)
+
+// Período anterior de mesma duração
 function periodoAnterior(since: string, until: string) {
   const d0 = new Date(since + "T12:00:00Z"), d1 = new Date(until + "T12:00:00Z")
   const dias = Math.round((d1.getTime() - d0.getTime()) / 864e5) + 1
-  return { since: iso(new Date(d0.getTime() - dias * 864e5)), until: iso(new Date(d0.getTime() - 864e5)) }
+  return {
+    since: toBrasiliaIso(new Date(d0.getTime() - dias * 864e5)),
+    until: toBrasiliaIso(new Date(d0.getTime() - 864e5)),
+  }
 }
 
 // ---------- página ----------
@@ -122,8 +145,8 @@ function MetaAdsDashboard() {
   const { leads, visits, userName } = useLeads()
   const [abaAtiva, setAbaAtiva] = useState<"geral" | "auditoria" | "orfaos" | "relatorio" | "mcp">("auditoria")
   const [preset, setPreset] = useState("30d")
-  const [cSince, setCSince] = useState(iso(new Date(Date.now() - 29 * 864e5)))
-  const [cUntil, setCUntil] = useState(iso(new Date()))
+  const [cSince, setCSince] = useState(toBrasiliaIso(new Date(Date.now() - 29 * 864e5)))
+  const [cUntil, setCUntil] = useState(toBrasiliaIso(new Date()))
   const [comparar, setComparar] = useState(true)
   const [compacto, setCompacto] = useState(false)
   // trilha do drill-down: [{nivel, id, nome, creativeId?}]
@@ -150,8 +173,8 @@ function MetaAdsDashboard() {
   const dadosReconciliacao = useMemo(() => {
     const camps = todasCampanhas?.data ?? []
     const ins = insCampanhasGerais?.data ?? []
-    return calcularReconciliacao(camps, ins, leads, visits, userName)
-  }, [todasCampanhas, insCampanhasGerais, leads, visits, userName])
+    return calcularReconciliacao(camps, ins, leads, visits, userName, { since, until })
+  }, [todasCampanhas, insCampanhasGerais, leads, visits, userName, since, until])
 
   const listaCampanhas = useMemo(() => {
     return (todasCampanhas?.data ?? []).map((c: any) => ({ id: String(c.id), name: c.name || String(c.id) }))

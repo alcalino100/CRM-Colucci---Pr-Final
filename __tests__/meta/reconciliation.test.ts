@@ -49,7 +49,7 @@ describe("calcularReconciliacao", () => {
       (id) => `Corretor ${id}`
     )
 
-    expect(res.reconciliacoes).toHaveLength(2)
+    expect(res.reconciliacoes).toHaveLength(3)
 
     const c1 = res.reconciliacoes.find((r) => r.campaignId === "camp_1")!
     expect(c1).toBeDefined()
@@ -65,12 +65,18 @@ describe("calcularReconciliacao", () => {
     expect(c1.roasComissao).toBe(30)
     expect(c1.statusSaude).toBe("excelente")
 
+    // Linha de Tráfego Pago Geral (Click-to-WhatsApp)
+    const cOrf = res.reconciliacoes.find((r) => r.campaignId === "click_to_whatsapp_geral")!
+    expect(cOrf).toBeDefined()
+    expect(cOrf.crmLeads).toBe(1)
+
     // Leads órfãos
     expect(res.leadsOrfaos).toHaveLength(1)
     expect(res.leadsOrfaos[0].id).toBe("l_orfao")
 
-    // Totais consolidados
+    // Totais consolidados (inclui todos os 4 leads de tráfego pago)
     expect(res.totais.gastoTotalMeta).toBe(1500)
+    expect(res.totais.leadsTotalCrm).toBe(4)
     expect(res.totais.comissaoTotalFechada).toBe(30000)
     expect(res.totais.roasComissaoGeral).toBe(20) // 30000 / 1500 = 20x
   })
