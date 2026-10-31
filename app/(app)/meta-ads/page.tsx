@@ -9,7 +9,7 @@ import useSWR from "swr"
 import {
   CircleDollarSign, Eye, MousePointerClick, Percent, Coins, BarChart3, Users, Target,
   ChevronRight, Link2, TriangleAlert, ArrowUpRight, ArrowDownRight, Plug, RefreshCw, CalendarRange, Sparkles,
-  Wallet, SlidersHorizontal, TrendingUp,
+  Wallet, SlidersHorizontal, TrendingUp, ShieldCheck, FileText, Cpu, AlertCircle, CheckCircle2,
 } from "lucide-react"
 import {
   ResponsiveContainer, LineChart, Line, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend,
@@ -21,6 +21,11 @@ import { Badge, Card, CardContent, CardHeader, CardTitle, Select, Skeleton, Inpu
 import { brl } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 import MetaAiChat from "@/components/meta-ai-chat"
+import AuditReconciliation from "@/components/meta-ads/audit-reconciliation"
+import AttributionAudit from "@/components/meta-ads/attribution-audit"
+import ExecutiveReport from "@/components/meta-ads/executive-report"
+import McpIntegrationPanel from "@/components/meta-ads/mcp-integration-panel"
+import { calcularReconciliacao } from "@/lib/meta/reconciliation"
 
 // ---------- helpers ----------
 const fetcher = (u: string) => fetch(u).then(async (r) => {
@@ -114,7 +119,8 @@ export default function MetaAdsPage() {
 }
 
 function MetaAdsDashboard() {
-  const { leads, userName } = useLeads()
+  const { leads, visits, userName } = useLeads()
+  const [abaAtiva, setAbaAtiva] = useState<"geral" | "auditoria" | "orfaos" | "relatorio" | "mcp">("auditoria")
   const [preset, setPreset] = useState("30d")
   const [cSince, setCSince] = useState(iso(new Date(Date.now() - 29 * 864e5)))
   const [cUntil, setCUntil] = useState(iso(new Date()))
@@ -133,6 +139,25 @@ function MetaAdsDashboard() {
     const list = contas?.data ?? []
     return list.find((c: any) => c.id === contaId) ?? list[0]
   }, [contas, contaId])
+
+  // ---- todas as campanhas da conta para reconciliação e auditoria global ----
+  const { data: todasCampanhas } = useSWR(conta?.id ? `/api/meta?op=campaigns&account=${conta.id}` : null, fetcher)
+  const { data: insCampanhasGerais } = useSWR(
+    conta?.id ? `/api/meta?op=insights&node=${conta.id}&level=campaign&since=${since}&until=${until}` : null,
+    fetcher
+  )
+
+  const dadosReconciliacao = useMemo(() => {
+    const camps = todasCampanhas?.data ?? []
+    const ins = insCampanhasGerais?.data ?? []
+    return calcularReconciliacao(camps, ins, leads, visits, userName)
+  }, [todasCampanhas, insCampanhasGerais, leads, visits, userName])
+
+  const listaCampanhas = useMemo(() => {
+    return (todasCampanhas?.data ?? []).map((c: any) => ({ id: String(c.id), name: c.name || String(c.id) }))
+  }, [todasCampanhas])
+
+  const periodoLabel = PRESETS.find((p) => p.id === preset)?.label || `${since.split("-").reverse().join("/")} até ${until.split("-").reverse().join("/")}`
 
   // Nó selecionado (último da trilha, ou a conta)
   const selecionado = trilha[trilha.length - 1] ?? (conta ? { nivel: "account" as Nivel, id: conta.id, nome: conta.name } : null)
@@ -247,6 +272,92 @@ function MetaAdsDashboard() {
         </div>
       </header>
 
+      {/* Subnavegação das Abas de Tráfego e Inteligência */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("auditoria")}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all shadow-sm",
+            abaAtiva === "auditoria"
+              ? "bg-primary text-primary-foreground"
+              : "bg-card border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <ShieldCheck className="size-4" />
+          <span>Auditoria & Reconciliação (Meta × CRM)</span>
+          {dadosReconciliacao.totais.fechamentosTotal > 0 && (
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+              ROAS {dadosReconciliacao.totais.roasComissaoGeral.toFixed(1)}x
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("geral")}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all shadow-sm",
+            abaAtiva === "geral"
+              ? "bg-primary text-primary-foreground"
+              : "bg-card border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <BarChart3 className="size-4" />
+          <span>Visão Geral & Drill-down</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("orfaos")}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all shadow-sm",
+            abaAtiva === "orfaos"
+              ? "bg-primary text-primary-foreground"
+              : "bg-card border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <Link2 className="size-4" />
+          <span>Leads Órfãos & Atribuição</span>
+          {dadosReconciliacao.leadsOrfaos.length > 0 && (
+            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-600">
+              {dadosReconciliacao.leadsOrfaos.length} pendentes
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("relatorio")}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all shadow-sm",
+            abaAtiva === "relatorio"
+              ? "bg-primary text-primary-foreground"
+              : "bg-card border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <FileText className="size-4" />
+          <span>Relatório Executivo</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("mcp")}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all shadow-sm",
+            abaAtiva === "mcp"
+              ? "bg-primary text-primary-foreground"
+              : "bg-card border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <Cpu className="size-4" />
+          <span>Integração MCP & API</span>
+          <span className="rounded-full bg-blue-500/20 px-1.5 py-0.5 text-[9px] font-bold text-blue-600 uppercase">
+            Protocol
+          </span>
+        </button>
+      </div>
+
       {/* Avisos */}
       {status?.warnExpiring && (
         <Aviso texto="O token da conta Meta expira em menos de 7 dias. Reconecte para evitar interrupção." acao="Reconectar" />
@@ -260,12 +371,10 @@ function MetaAdsDashboard() {
         </p>
       )}
 
-      {/* Verba mensal / teto de gastos */}
-      <OrcamentoPanel />
-
-      {/* Conta + período */}
-      <Card className="rounded-2xl">
-        <CardContent className="grid gap-4 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+      {/* Conta + período (disponível para abas analíticas) */}
+      {abaAtiva !== "mcp" && (
+        <Card className="rounded-2xl">
+          <CardContent className="grid gap-4 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
           <div className="flex min-w-0 flex-col gap-1.5">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="meta-conta">Conta de anúncios</label>
             <Select id="meta-conta" value={conta?.id ?? ""} onChange={(e) => { setContaId(e.target.value); setTrilha([]) }} aria-label="Conta de anúncios">
@@ -312,9 +421,16 @@ function MetaAdsDashboard() {
           )}
         </CardContent>
       </Card>
+      )}
 
-      {/* Breadcrumb do drill-down */}
-      <nav aria-label="Navegação da hierarquia" className="flex flex-wrap items-center gap-1.5 text-sm">
+      {/* ABA 1: VISÃO GERAL & DRILL-DOWN */}
+      {abaAtiva === "geral" && (
+        <>
+          {/* Verba mensal / teto de gastos */}
+          <OrcamentoPanel />
+
+          {/* Breadcrumb do drill-down */}
+          <nav aria-label="Navegação da hierarquia" className="flex flex-wrap items-center gap-1.5 text-sm">
         <button
           type="button"
           className="rounded-lg px-2 py-1 font-medium text-primary transition hover:bg-primary/10"
@@ -358,9 +474,6 @@ function MetaAdsDashboard() {
           </>
         )}
       </div>
-
-      {/* IA Chat flutuante */}
-      <MetaAiChat />
 
       {/* Gráficos */}
       <div className="grid gap-4 xl:grid-cols-2">
@@ -568,6 +681,44 @@ function MetaAdsDashboard() {
           </CardContent>
         </Card>
       )}
+        </>
+      )}
+
+      {/* ABA 2: AUDITORIA & RECONCILIAÇÃO (META × CRM REAL) */}
+      {abaAtiva === "auditoria" && (
+        <AuditReconciliation
+          reconciliacoes={dadosReconciliacao.reconciliacoes}
+          corretores={dadosReconciliacao.corretores}
+          totais={dadosReconciliacao.totais}
+          loading={!todasCampanhas}
+        />
+      )}
+
+      {/* ABA 3: LEADS ÓRFÃOS & AUDITORIA DE ATRIBUIÇÃO */}
+      {abaAtiva === "orfaos" && (
+        <AttributionAudit
+          leadsOrfaos={dadosReconciliacao.leadsOrfaos}
+          campanhas={listaCampanhas}
+        />
+      )}
+
+      {/* ABA 4: RELATÓRIO EXECUTIVO & EXPORTAÇÃO */}
+      {abaAtiva === "relatorio" && (
+        <ExecutiveReport
+          reconciliacoes={dadosReconciliacao.reconciliacoes}
+          corretores={dadosReconciliacao.corretores}
+          totais={dadosReconciliacao.totais}
+          periodoStr={periodoLabel}
+        />
+      )}
+
+      {/* ABA 5: INTEGRAÇÃO MCP & API */}
+      {abaAtiva === "mcp" && (
+        <McpIntegrationPanel />
+      )}
+
+      {/* IA Chat flutuante em todas as abas */}
+      <MetaAiChat />
     </div>
   )
 }

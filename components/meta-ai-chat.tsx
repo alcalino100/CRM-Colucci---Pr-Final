@@ -9,10 +9,10 @@ interface Mensagem {
 }
 
 const SUGESTOES = [
-  "Resumo geral do desempenho de ontem",
-  "Qual campanha gastou mais sem gerar leads?",
-  "Quantos leads tive e qual o CPL?",
-  "Quais os melhores anúncios?",
+  "Qual o ROAS real em comissão e VGV gerado pelas campanhas?",
+  "Quantas visitas reais vieram dos anúncios e qual o CPV?",
+  "Qual campanha gastou mais sem gerar visitas ou negócios?",
+  "Qual a discrepância entre leads do Meta e leads no CRM?",
 ]
 
 export default function MetaAiChat() {

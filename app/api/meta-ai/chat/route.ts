@@ -73,15 +73,37 @@ export async function POST(req: Request) {
     const trintaDias = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10)
     const hoje = new Date().toISOString().slice(0, 10)
 
-    const { data: leadsData } = await supabase
-      .from("leads").select("meta_campaign_id, created_at, status, corretor_id")
-      .eq("origem", "Tráfego Pago").not("meta_campaign_id", "is", null)
-      .gte("created_at", trintaDias).lte("created_at", hoje)
+    // Busca leads e visitas do CRM para reconciliação real
+    const [{ data: leadsData }, { data: visitsData }] = await Promise.all([
+      supabase
+        .from("leads")
+        .select("id, meta_campaign_id, status, corretor_id, valor_proposta, valor_comissao, criado_em, origem")
+        .or("origem.eq.Tráfego Pago,meta_campaign_id.not.is.null"),
+      supabase
+        .from("visitas")
+        .select("id, lead_id, data"),
+    ])
 
     const leadsPorCamp = new Map<string, number>()
+    const visitasPorLead = new Set((visitsData ?? []).map((v: any) => v.lead_id))
+    let totalFechamentos = 0
+    let totalVgv = 0
+    let totalComissao = 0
+    let totalVisitas = 0
+
     for (const l of leadsData ?? []) {
       const cid = l.meta_campaign_id
-      leadsPorCamp.set(cid, (leadsPorCamp.get(cid) ?? 0) + 1)
+      if (cid) {
+        leadsPorCamp.set(cid, (leadsPorCamp.get(cid) ?? 0) + 1)
+      }
+      if (l.status === "visita agendada" || visitasPorLead.has(l.id)) {
+        totalVisitas++
+      }
+      if (l.status === "fechado") {
+        totalFechamentos++
+        totalVgv += Number(l.valor_proposta || 0)
+        totalComissao += Number(l.valor_comissao || 0)
+      }
     }
     const totalLeads = leadsData?.length ?? 0
 
@@ -188,7 +210,13 @@ export async function POST(req: Request) {
       }
     }
 
-    const cpl = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : "N/A"
+    const cplReal = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : "N/A"
+    const cplMeta = totalResults > 0 ? (totalSpend / totalResults).toFixed(2) : "N/A"
+    const cpvReal = totalVisitas > 0 ? (totalSpend / totalVisitas).toFixed(2) : "N/A"
+    const cacReal = totalFechamentos > 0 ? (totalSpend / totalFechamentos).toFixed(2) : "N/A"
+    const roasComissao = totalSpend > 0 ? (totalComissao / totalSpend).toFixed(2) : "0"
+    const roasVgv = totalSpend > 0 ? (totalVgv / totalSpend).toFixed(1) : "0"
+    const discrepancia = totalResults > 0 ? (((totalResults - totalLeads) / totalResults) * 100).toFixed(1) : "0"
     const fonte = metaOk ? "META ADS (API direta)" : "BANCO LOCAL"
 
     const campanhasStr = campanhasContext.map(c =>
@@ -201,13 +229,23 @@ export async function POST(req: Request) {
 
     dadosContexto = `FONTE: ${fonte} (${trintaDias} a ${hoje})
 
-RESUMO:
-Gasto total: R$ ${totalSpend.toFixed(2)}
-Resultados totais (leads+conversas): ${totalResults}
-Leads no CRM: ${totalLeads}
-CPL: R$ ${cpl}
-Campanhas com gasto: ${campanhasContext.length}
-Anúncios individuais com gasto: ${adsContext.length}
+RESUMO EXECUTIVO & AUDITORIA FINANCEIRA REAL (CRM COLUCCI):
+- Gasto total em anúncios Meta: R$ ${totalSpend.toFixed(2)}
+- Resultados reportados pela Meta: ${totalResults}
+- Leads efetivos registrados no CRM: ${totalLeads}
+- Taxa de discrepância (perda de leads): ${discrepancia}%
+- CPL Meta (reportado): R$ ${cplMeta}
+- CPL Real (base CRM): R$ ${cplReal}
+- Visitas agendadas/realizadas no CRM: ${totalVisitas}
+- CPV Real (Custo por Visita): R$ ${cpvReal}
+- Negócios/Vendas Fechadas: ${totalFechamentos}
+- CAC Real (Custo de Aquisição por Venda): R$ ${cacReal}
+- VGV Total Fechado: R$ ${totalVgv.toFixed(2)}
+- Comissão Real Gerada para Imobiliária: R$ ${totalComissao.toFixed(2)}
+- ROAS Real em Comissão: ${roasComissao}x (retorno direto em dinheiro sobre o valor investido)
+- ROAS em VGV: ${roasVgv}x
+- Campanhas com gasto: ${campanhasContext.length}
+- Anúncios individuais com gasto: ${adsContext.length}
 
 CAMPANHAS:
 ${campanhasStr || "(nenhuma com dados)"}
@@ -221,7 +259,10 @@ ${adsStr || "(nenhum com dados)"}`
         console.error("GEMINI_API_KEY parece inválida (muito curta)")
       } else {
         try {
-          const sistema = `Você é um analista de Meta Ads. Responda EM PORTUGUÊS BRASILEIRO. Seja direto — NÃO cumprimente, NÃO se apresente. Vá direto aos dados e recomendações. Mencione nomes e valores exatos. Não invente dados.`
+          const sistema = `Você é o consultor executivo de tráfego e inteligência de vendas da Imobiliária Colucci.
+Responda EM PORTUGUÊS BRASILEIRO. Seja direto, cirúrgico e profissional — NÃO cumprimente, NÃO se apresente.
+Vá direto aos dados reais de ROAS, VGV, comissões, visitas e gargalos.
+Mencione números e valores exatos em R$, destacando retorno sobre investimento e eficácia do funil.`
 
           const gemBody = {
             contents: [
