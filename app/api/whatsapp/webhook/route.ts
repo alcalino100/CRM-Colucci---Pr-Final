@@ -81,11 +81,10 @@ async function handleConnectionUpdate(payload: any) {
 }
 
 // Detecta se a mensagem nasceu de um clique em anúncio (Click-to-WhatsApp).
-// A Meta injeta esse contexto na 1ª mensagem; a Evolution repassa em campos que
-// variam por versão, então tentamos todos, em ordem de prioridade.
-// Alguns cliques chegam SEM contexto (Evolution inconsistente) — nesse caso,
-// cai no fallback por conteúdo (texto pré-preenchido do anúncio).
+// Suporta variações de texto pré-preenchido, saudações com interesse em imóveis,
+// referências de anúncios e códigos de rastreamento.
 function pareceTextoDeAnuncio(texto: string): boolean {
+  if (!texto) return false
   const t = (texto || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -93,14 +92,62 @@ function pareceTextoDeAnuncio(texto: string): boolean {
     .replace(/[^a-z0-9]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-  // Texto pré-preenchido padrão dos anúncios Click-to-WhatsApp da Meta
-  return /^ola\s+gostaria\s+de\s+saber\s+mais\s+sobre\s+o\s+imovel/.test(t)
+
+  // 1. Padrão clássico: "olá gostaria de saber mais sobre..." (inclui typos como "fola", "oie")
+  if (/^(f?ola|oi|oie|bom dia|boa tarde|boa noite)\s+gostaria\s+de\s+(saber\s+mais|mais\s+informac|conhecer|agendar|ver|comprar|alugar)/.test(t)) {
+    return true
+  }
+
+  // 2. Templates padrão do Meta Ads CTWA: "Olá! Posso ter mais informações sobre isso?" / "tenho interesse nisso"
+  if (/(posso\s+ter\s+mais\s+informac|tenho\s+interesse\s+nisso|quero\s+saber\s+mais|quero\s+mais\s+informac|gostaria\s+de\s+mais\s+informac)/.test(t)) {
+    return true
+  }
+
+  // 3. Menção explícita a anúncio ou rede social
+  if (/vi\s+(o\s+)?(anuncio|imovel|post|video|foto)|vi\s+(isso\s+)?no\s+(instagram|facebook|face|insta|marketplace|feed|stories|reels)/.test(t)) {
+    return true
+  }
+
+  // 4. Mensagem com referência de imóvel (ex.: ref.: 17454, ref: 17454, ref 17454, ref 17176, ref Umuarama)
+  if (/\bref[.:\s]+([0-9]{3,}|[a-z0-9\-]+)/.test(t)) {
+    return true
+  }
+
+  // 5. Perguntas de leads iniciadas com saudação perguntando sobre imóvel/apartamento/casa/valores
+  if (/^(f?ola|oi|oie|bom dia|boa tarde|boa noite).*?\b(esse\s+imovel|essa\s+casa|esse\s+apto|esse\s+apartamento|comprar\s+esta\s+casa|comprar\s+esse\s+imovel|requisitos.*?apartamento|requisitos.*?casa|valor\s+desse\s+imovel|qual\s+o\s+valor\s+deste\s+condominio)\b/.test(t)) {
+    return true
+  }
+
+  // 6. Links compartilhados de redes sociais ou do site
+  if (/facebook\.com\/share|instagram\.com\/(reel|p)\/|colucciimoveis\.com\/imovel/.test(texto)) {
+    return true
+  }
+
+  // 7. Código de rastreio da ponte /r
+  if (/(?:codigo|código)[:.\s-]*[A-Z0-9]{6,10}/i.test(texto)) {
+    return true
+  }
+
+  return false
+}
+
+// Extrai referência do imóvel a partir do texto da mensagem (ex.: ref.: 17454, ref: 17454, ref 17454)
+function extrairReferenciaDoTexto(texto: string): string {
+  if (!texto) return ""
+  const mNum = texto.match(/ref[.:\s]+([0-9]{3,}[a-z0-9\-]*)/i)
+  if (mNum?.[1]) return mNum[1].trim()
+  const mAlfa = texto.match(/ref[.:\s]+([^,\n.!]+)/i)
+  if (mAlfa?.[1]) return mAlfa[1].trim().slice(0, 50)
+  const mCod = texto.match(/c[oó]digo[.:\s]+([0-9]{3,})/i)
+  if (mCod?.[1]) return mCod[1].trim()
+  return ""
 }
 
 function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId: string | null; anuncioTitulo: string | null } {
-  const ctx = msg?.contextInfo ?? msg?.message?.contextInfo ?? msg?.message?.extendedTextMessage?.contextInfo
-  const externalAd = ctx?.externalAdReplyInfo
-  const referral = msg?.message?.referral ?? msg?.referral
+  const m = msg?.message?.ephemeralMessage?.message ?? msg?.message?.viewOnceMessage?.message ?? msg?.message ?? msg
+  const ctx = msg?.contextInfo ?? m?.contextInfo ?? m?.extendedTextMessage?.contextInfo ?? m?.imageMessage?.contextInfo ?? m?.videoMessage?.contextInfo ?? m?.documentMessage?.contextInfo
+  const externalAd = ctx?.externalAdReplyInfo ?? ctx?.externalAdReply
+  const referral = m?.referral ?? msg?.referral ?? ctx?.referral
 
   // Sinal forte: referral com source_type === "ad" (campo oficial da Meta)
   if (referral?.source_type === "ad") {
@@ -135,7 +182,7 @@ function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId:
     }
   }
 
-  // Fallback por conteúdo: texto pré-preenchido do anúncio (mesmo sem contexto CTWA)
+  // Fallback por conteúdo: texto pré-preenchido do anúncio (mesmo sem contexto CTWA da Evolution)
   if (corpo && pareceTextoDeAnuncio(corpo)) {
     return { veioDeAnuncio: true, anuncioId: null, anuncioTitulo: corpo }
   }
@@ -144,19 +191,30 @@ function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId:
 }
 
 // Acha o lead cujo telefone bate com o do contato (para vincular a mensagem ao registro do CRM).
-// Busca por variantes no BANCO (ilike) em vez de varrer a tabela inteira no JS —
-// com 1000+ leads o select sem filtro corta os mais novos (PostgREST pagina em 1000).
-async function encontrarLeadPorTelefone(telefone: string): Promise<string | null> {
+// Prioriza o lead pertencente ao corretor da instância, evitando vincular mensagens cruzadas entre corretores.
+async function encontrarLeadPorTelefone(telefone: string, corretorId?: string | null): Promise<string | null> {
   const digits = onlyDigits(telefone)
   if (!digits) return null
-  const variantes = Array.from(new Set([digits, digits.startsWith("55") ? digits.slice(2) : `55${digits}`]))
+  const semDdi = digits.startsWith("55") ? digits.slice(2) : digits
+  const ultimos8 = digits.slice(-8)
+  const variantes = Array.from(new Set([digits, `55${semDdi}`, semDdi, ultimos8]))
   const { data: candidatos } = await wsupabase
     .from("leads")
-    .select("id, telefone")
+    .select("id, telefone, corretor_id, criado_em")
     .or(variantes.map((v) => `telefone.ilike.%${v}%`).join(","))
-    .limit(20)
-  const lead = (candidatos ?? []).find((l) => normalizePhone(l.telefone) === normalizePhone(telefone))
-  return lead?.id ?? null
+    .order("criado_em", { ascending: false })
+    .limit(30)
+
+  const comp = normalizePhone(telefone)
+  const matches = (candidatos ?? []).filter((l) => normalizePhone(l.telefone) === comp)
+  if (!matches.length) return null
+
+  if (corretorId) {
+    const doCorretor = matches.find((l) => l.corretor_id === corretorId)
+    if (doCorretor) return doCorretor.id
+  }
+
+  return matches[0].id
 }
 
 // Transições por resposta (fluxo automação → IA): quando um lead parado em
@@ -307,6 +365,15 @@ async function handleMessageUpsert(payload: any) {
   if (remoteJid.includes("@g.us") || remoteJid.includes("broadcast")) return
   const telefone = onlyDigits(remoteJid.split("@")[0])
   if (!telefone) return
+
+  // Descobre o corretor dono da instância logo no início (busca case-insensitive e sem espaços)
+  const { data: inst } = await wsupabase
+    .from("whatsapp_instancias")
+    .select("corretor_id, instance_name")
+    .ilike("instance_name", instanceName.trim())
+    .maybeSingle()
+  const corretorId = inst?.corretor_id ?? null
+
   // Números internos bloqueados: NÃO descarta mais — registra para o Inbox refletir
   // o Evolution de verdade, mas sem vincular lead, sem criar lead e sem acionar IA
   // (a menos que seja número de teste de IA ativa, que segue o fluxo completo).
@@ -421,7 +488,7 @@ async function handleMessageUpsert(payload: any) {
       telefone,
       nome_contato: null,
       corpo,
-      lead_id: await encontrarLeadPorTelefone(telefone),
+      lead_id: await encontrarLeadPorTelefone(telefone, corretorId),
       de_mim: true,
       mensagem_id: mensagemId,
       ...camposMidia(midia),
@@ -454,8 +521,8 @@ async function handleMessageUpsert(payload: any) {
   }
 
   // Este contato já é um lead? Se sim e houver automação enviada a ele, ESTA mensagem é a
-  // resposta — liga a resposta ao job. Resolvido uma única vez e reaproveitado no insert abaixo.
-  const leadIdExistente = await encontrarLeadPorTelefone(telefone)
+  // resposta — liga a resposta ao job. Prioriza lead do próprio corretor se houver.
+  const leadIdExistente = await encontrarLeadPorTelefone(telefone, corretorId)
   if (leadIdExistente) await registrarRespostaDeLead(leadIdExistente, new Date().toISOString())
   // Transição por resposta (fluxo automação → IA): lead em "em_automacao"/"em_followup"
   // que responde sai da automação sozinho. Só mensagem do lead — nunca eco próprio.
@@ -476,14 +543,11 @@ async function handleMessageUpsert(payload: any) {
         .maybeSingle()
     : { data: null }
 
-  // Descobre o corretor dono da instância
-  const { data: inst } = await wsupabase
-    .from("whatsapp_instancias")
-    .select("corretor_id")
-    .eq("instance_name", instanceName)
-    .maybeSingle()
-  const corretorId = inst?.corretor_id
-  if (!corretorId) return
+  // Se não foi possível mapear o corretor da instância, avisa e não prossegue
+  if (!corretorId) {
+    console.warn(`[whatsapp-webhook] Instância "${instanceName}" sem corretor_id associado em whatsapp_instancias.`)
+    return
+  }
 
   const { veioDeAnuncio, anuncioId, anuncioTitulo } = detectAd(msg, corpo)
   const veioDeAnuncioEfetivo = veioDeAnuncio || !!clique
@@ -554,53 +618,133 @@ async function handleMessageUpsert(payload: any) {
   }
 
   const digitsTel = onlyDigits(telefone)
-  const variantesTel = Array.from(new Set([digitsTel, digitsTel.startsWith("55") ? digitsTel.slice(2) : `55${digitsTel}`]))
+  const semDdiTel = digitsTel.startsWith("55") ? digitsTel.slice(2) : digitsTel
+  const ultimos8Tel = digitsTel.slice(-8)
+  const variantesTel = Array.from(new Set([digitsTel, `55${semDdiTel}`, semDdiTel, ultimos8Tel]))
   const { data: candidatos } = await wsupabase
     .from("leads")
-    .select("id, telefone, corretor_id, status")
+    .select("id, telefone, corretor_id, status, observacoes, referencias, referencia_imovel")
     .or(variantesTel.map((v) => `telefone.ilike.%${v}%`).join(","))
-    .limit(20)
-  const existente = (candidatos ?? []).find((l) => normalizePhone(l.telefone) === normalizePhone(telefone))
+    .limit(30)
 
-  // Nome do corretor da instância (para as notificações)
-  const { data: corretor } = await wsupabase.from("usuarios").select("nome").eq("id", corretorId).maybeSingle()
-  const corretorNome = corretor?.nome ?? "corretor"
+  const compTel = normalizePhone(telefone)
+  const matchesTel = (candidatos ?? []).filter((l) => normalizePhone(l.telefone) === compTel)
+  // Prioriza encontrar o lead já vinculado a ESTE corretor da instância
+  const existenteDoCorretor = matchesTel.find((l) => l.corretor_id === corretorId)
+  const existente = existenteDoCorretor ?? matchesTel[0] ?? null
+  const mesmoCorretor = Boolean(existenteDoCorretor)
+  let leadId: string | null = existenteDoCorretor ? existenteDoCorretor.id : null
 
-  // Telefone que já é do MESMO corretor: não duplica, apenas anexa a mensagem ao lead existente
-  const mesmoCorretor = existente && existente.corretor_id === corretorId
-  let leadId: string | null = mesmoCorretor ? existente.id : null
+  // Nome do corretor da instância (para as notificações e observações)
+  let corretorNome = "corretor"
+  if (corretorId) {
+    const { data: corretor } = await wsupabase.from("usuarios").select("nome").eq("id", corretorId).maybeSingle()
+    if (corretor?.nome) corretorNome = corretor.nome
+  }
 
-  // Lead já existente: enriquece com o rastreio do clique (utm/fbc/fbp)
-  if (mesmoCorretor && clique) {
+  // Extração de referência do imóvel a partir do texto (ex.: ref.: 17454, ref: 17176, ref 17455)
+  const referenciaExtraida = extrairReferenciaDoTexto(corpo)
+
+  // Monta as tags (referencias) com a tag obrigatória "Tráfego Pago"
+  const tagsLead: { ref: string; principal?: boolean }[] = []
+  if (referenciaExtraida) {
+    tagsLead.push({ ref: referenciaExtraida, principal: true })
+    tagsLead.push({ ref: "Tráfego Pago", principal: false })
+  } else {
+    tagsLead.push({ ref: "Tráfego Pago", principal: true })
+  }
+
+  // Lead já existente DO MESMO CORRETOR: Reativa o lead se inativo, move para "novo", temperatura "morno",
+  // carimba a tag "Tráfego Pago", enriquece as observações com o anúncio e notifica o corretor!
+  if (mesmoCorretor && existenteDoCorretor) {
+    const refsAtuais = Array.isArray(existenteDoCorretor.referencias) ? existenteDoCorretor.referencias : []
+    const refsAtualizadas = comRef(
+      referenciaExtraida ? comRef(refsAtuais, { ref: referenciaExtraida, principal: true }) : refsAtuais,
+      { ref: "Tráfego Pago" }
+    )
+
+    const agoraBr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
+    const reengajamentoMsg = `\n\n[${agoraBr}] Lead reengajado através do anúncio vinculado ao Tráfego Pago no WhatsApp de ${corretorNome}.${referenciaExtraida ? ` Imóvel ref. ${referenciaExtraida}.` : ""}${nomeCampanha ? ` Campanha: ${nomeCampanha}.` : ""}${clique?.utm_campaign ? ` UTM: ${clique.utm_campaign}.` : ""}`
+    const obsAtualizada = `${existenteDoCorretor.observacoes || ""}${reengajamentoMsg}`.trim()
+
+    // Status: se estava perdido, frio, em_followup, em_automacao ou arquivado, reativa para "novo"
+    const statusReativar = ["perdido", "frio", "em_followup", "em_automacao", "arquivado"].includes(existenteDoCorretor.status)
+      ? "novo"
+      : existenteDoCorretor.status
+
     await wsupabase.from("leads").update({
-      utm_campaign: clique.utm_campaign ?? null,
-      utm_adset: clique.utm_adset ?? null,
-      utm_ad: clique.utm_ad ?? null,
-      fbc: clique.fbc ?? null,
-      fbp: clique.fbp ?? null,
-      client_ip: clique.ip ?? null,
-      client_ua: clique.user_agent ?? null,
-    }).eq("id", existente.id)
+      status: statusReativar,
+      temperatura: "morno",
+      origem: "Tráfego Pago",
+      referencia_imovel: referenciaExtraida || existenteDoCorretor.referencia_imovel || "",
+      referencias: refsAtualizadas,
+      observacoes: obsAtualizada,
+      meta_campaign_id: metaCampaignId || undefined,
+      meta_adset_id: metaAdsetId || undefined,
+      meta_ad_id: metaAdId || undefined,
+      utm_campaign: clique?.utm_campaign ?? undefined,
+      utm_adset: clique?.utm_adset ?? undefined,
+      utm_ad: clique?.utm_ad ?? undefined,
+      fbc: clique?.fbc ?? undefined,
+      fbp: clique?.fbp ?? undefined,
+      client_ip: clique?.ip ?? undefined,
+      client_ua: clique?.user_agent ?? undefined,
+      atualizado_em: new Date().toISOString(),
+    }).eq("id", existenteDoCorretor.id)
+
+    // Notifica o corretor e o gestor sobre o reengajamento do lead
+    await wsupabase.from("notificacoes").insert({
+      mensagem: `Lead reengajado via Tráfego Pago (WhatsApp): ${nome} escreveu para ${corretorNome}${referenciaExtraida ? ` (Ref. ${referenciaExtraida})` : ""}`,
+      tipo: "lead_reengajado",
+      modulo: "vendas",
+      usuario_id: corretorId,
+      para_role: "gestor",
+      lead_id: existenteDoCorretor.id,
+    })
+
+    // Dispara CAPI para registrar a nova conversão de lead
+    try {
+      await enviarLeadCapi({
+        lead_id: existenteDoCorretor.id,
+        telefone,
+        nome,
+        email: "",
+        valor: 0,
+        corretor_id: corretorId,
+        campanha_id: metaCampaignId,
+        adset_id: metaAdsetId,
+        ad_id: metaAdId,
+        utm_campaign: clique?.utm_campaign ?? null,
+        utm_adset: clique?.utm_adset ?? null,
+        utm_ad: clique?.utm_ad ?? null,
+        fbc: clique?.fbc ?? null,
+        fbp: clique?.fbp ?? null,
+        ip: clique?.ip ?? null,
+        ua: clique?.user_agent ?? null,
+      })
+    } catch {}
   }
 
   if (!mesmoCorretor) {
     // Cria lead para o corretor que recebeu o clique — mesmo que o telefone já exista para outro corretor.
     // Assim o lead do tráfego nunca fica "invisível" para quem recebeu a mensagem.
-    const partesObs: string[] = ["Lead criado automaticamente via WhatsApp (Click-to-WhatsApp)"]
+    const partesObs: string[] = [
+      `Lead criado automaticamente através do anúncio vinculado ao Tráfego Pago no WhatsApp de ${corretorNome}.`,
+    ]
+    if (referenciaExtraida) partesObs.push(`Imóvel de interesse: ref. ${referenciaExtraida}`)
     if (nomeAnuncio || anuncioTitulo) partesObs.push(`Anúncio: ${nomeAnuncio || anuncioTitulo}`)
     if (nomeCampanha) partesObs.push(`Campanha: ${nomeCampanha}`)
     if (nomeConjunto) partesObs.push(`Conjunto: ${nomeConjunto}`)
     if (clique?.utm_campaign) partesObs.push(`UTM campanha: ${clique.utm_campaign}`)
     if (clique?.utm_adset) partesObs.push(`UTM conjunto: ${clique.utm_adset}`)
     const obs = partesObs.join("\n")
-    // Se o anúncio não carregou contexto (detecção por conteúdo), tenta extrair o Ref. do imóvel do texto
-    const referenciaExtraida = !anuncioId ? (corpo.match(/ref[.:]?\s*(\d{3,})/i)?.[1] ?? "") : ""
+
     const baseLead = {
       nome,
       telefone,
       email: "",
-      referencia_imovel: referenciaExtraida,
-      referencias: referenciaExtraida ? [referenciaExtraida] : [],
+      referencia_imovel: referenciaExtraida || "",
+      referencias: tagsLead,
       temperatura: "morno",
       origem: "Tráfego Pago",
       observacoes: obs,
@@ -619,84 +763,87 @@ async function handleMessageUpsert(payload: any) {
       client_ip: clique?.ip ?? null,
       client_ua: clique?.user_agent ?? null,
     }
-    // Colunas de rastreio dependem da migration 013: se ainda não existirem, insere sem elas
-    let { data: novo, error } = await wsupabase
+
+    let { data: novo, error: errInsert } = await wsupabase
       .from("leads")
       .insert({ ...baseLead, ...rastreioLead })
       .select("id")
       .maybeSingle()
-    if (error && String(error.message).includes("does not exist")) {
-      ;({ data: novo, error } = await wsupabase
+
+    if (errInsert) {
+      console.error("[whatsapp-webhook] Erro ao inserir lead com rastreio:", errInsert)
+      const resFallback = await wsupabase
         .from("leads")
         .insert(baseLead)
         .select("id")
-        .maybeSingle())
-    }
-    if (error) {
-      // Corrida: telefone inserido em paralelo — trata como existente
-      const { data: candidatos2 } = await wsupabase
-        .from("leads")
-        .select("id, telefone, corretor_id, status")
-        .or(variantesTel.map((v) => `telefone.ilike.%${v}%`).join(","))
-        .limit(20)
-      const again = (candidatos2 ?? []).find((l) => normalizePhone(l.telefone) === normalizePhone(telefone))
-      leadId = again?.id ?? null
-      if (again && again.corretor_id && again.corretor_id !== corretorId) {
-        await wsupabase.from("notificacoes").insert({
-          mensagem: `Possível lead duplicado: ${telefone} clicou em anúncio e escreveu para o WhatsApp de ${corretorNome}, mas já é lead de outro corretor (status: ${again.status}).`,
-          tipo: "possivel_duplicado",
-          modulo: "vendas",
-          usuario_id: corretorId,
-          para_role: "gestor",
-          lead_id: again.id,
-        })
+        .maybeSingle()
+      novo = resFallback.data
+      if (resFallback.error) {
+        console.error("[whatsapp-webhook] Erro ao inserir lead fallback:", resFallback.error)
+        const resMin = await wsupabase
+          .from("leads")
+          .insert({
+            nome,
+            telefone,
+            email: "",
+            referencia_imovel: referenciaExtraida || "",
+            referencias: tagsLead,
+            temperatura: "morno",
+            origem: "Tráfego Pago",
+            observacoes: obs,
+            status: "novo",
+            corretor_id: corretorId,
+          })
+          .select("id")
+          .maybeSingle()
+        novo = resMin.data
       }
-    } else {
-      leadId = novo?.id ?? null
+    }
+
+    leadId = novo?.id ?? null
+
+    if (leadId) {
       await wsupabase.from("notificacoes").insert({
-        mensagem: `Novo lead via tráfego pago (WhatsApp): ${nome} (via ${corretorNome})`,
+        mensagem: `Novo lead via Tráfego Pago (WhatsApp): ${nome} (via ${corretorNome})${referenciaExtraida ? ` - Ref. ${referenciaExtraida}` : ""}`,
         tipo: "lead_novo",
         modulo: "vendas",
         usuario_id: corretorId,
         para_role: "gestor",
         lead_id: leadId,
       })
+
       // Envia o evento Lead (CAPI) com os identificadores capturados na ponte de rastreio.
-      // Melhora a "match quality" e atribui o lead à campanha/conjunto real. Best-effort.
-      if (leadId) {
-        try {
-          await enviarLeadCapi({
-            lead_id: leadId,
-            telefone,
-            nome,
-            email: "",
-            valor: 0,
-            corretor_id: corretorId,
-            campanha_id: metaCampaignId,
-            adset_id: metaAdsetId,
-            ad_id: metaAdId,
-            utm_campaign: clique?.utm_campaign ?? null,
-            utm_adset: clique?.utm_adset ?? null,
-            utm_ad: clique?.utm_ad ?? null,
-            fbc: clique?.fbc ?? null,
-            fbp: clique?.fbp ?? null,
-            ip: clique?.ip ?? null,
-            ua: clique?.user_agent ?? null,
-          })
-        } catch {
-          // nunca derruba o processamento do webhook
-        }
-      }
+      try {
+        await enviarLeadCapi({
+          lead_id: leadId,
+          telefone,
+          nome,
+          email: "",
+          valor: 0,
+          corretor_id: corretorId,
+          campanha_id: metaCampaignId,
+          adset_id: metaAdsetId,
+          ad_id: metaAdId,
+          utm_campaign: clique?.utm_campaign ?? null,
+          utm_adset: clique?.utm_adset ?? null,
+          utm_ad: clique?.utm_ad ?? null,
+          fbc: clique?.fbc ?? null,
+          fbp: clique?.fbp ?? null,
+          ip: clique?.ip ?? null,
+          ua: clique?.user_agent ?? null,
+        })
+      } catch {}
+
       // Telefone já cadastrado para outro corretor: avisa o gestor, mas o lead do clique é de quem recebeu
       if (existente && existente.corretor_id && existente.corretor_id !== corretorId) {
         const { data: dono } = await wsupabase.from("usuarios").select("nome").eq("id", existente.corretor_id).maybeSingle()
         await wsupabase.from("notificacoes").insert({
-          mensagem: `Possível lead duplicado: ${telefone} clicou em anúncio e escreveu para o WhatsApp de ${corretorNome}, mas já é lead de ${dono?.nome ?? "outro corretor"} (status: ${existente.status}).`,
+          mensagem: `Lead compartilhado: ${telefone} clicou em anúncio de Tráfego Pago no WhatsApp de ${corretorNome}, mas já possui lead com ${dono?.nome ?? "outro corretor"} (status: ${existente.status}). O novo lead foi criado para ${corretorNome}.`,
           tipo: "possivel_duplicado",
           modulo: "vendas",
           usuario_id: corretorId,
           para_role: "gestor",
-          lead_id: existente.id,
+          lead_id: leadId,
         })
       }
     }
