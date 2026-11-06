@@ -80,12 +80,39 @@ async function handleConnectionUpdate(payload: any) {
   }
 }
 
-// Detecta se a mensagem nasceu de um clique em anúncio (Click-to-WhatsApp).
-// Suporta variações de texto pré-preenchido, saudações com interesse em imóveis,
-// referências de anúncios e códigos de rastreamento.
-export function pareceTextoDeAnuncio(texto: string): boolean {
-  if (!texto) return false
-  const t = (texto || "")
+// Anti-patterns: palavras, saudações pessoais e expressões conversacionais
+// que PROVAM de forma definitiva que a mensagem é humana/orgânica, e NÃO um anúncio pago.
+const CONVERSATIONAL_PATTERNS = [
+  // Menção a corretores (templates de anúncios do Meta NUNCA sabem o nome do corretor no texto pré-preenchido)
+  /\b(levi|luciana|lu|daline|dali|jessica|jéssica|aline|brayon|guilherme|joao|joão|gabriel|abraao|abraão|kleber|diego)\b/i,
+  // Saudações/perguntas conversacionais pessoais
+  /\b(tudo bem|tudo bom|tudo joia|como vai|como voce|como você|como ces|como vocês)\b/i,
+  // Expressões informais/humanas
+  /\b(rs|kkk|haha|hehe|rsrs|valeu|abrac|abraç|obrigad)\b/i,
+  // Intenção formulada pelo próprio lead em primeira pessoa
+  /\b(estou|estamos|queria|queria saber|queria ver|gostaria de saber se|pensando em|comecar a procurar|começar a procurar)\b/i,
+  // Menção a parentes/terceiros
+  /\b(minha mae|minha mãe|meu pai|meu marido|minha esposa|meu noivo|minha noiva|meus filhos|meu filho|minha filha)\b/i,
+  // Perguntas sobre condições/preço/localização formuladas livremente
+  /\b(quanto custa|qual o valor|aceita permuta|aceita financiamento|ainda esta disponivel|ainda está disponível|onde fica|qual regiao|qual região)\b/i,
+]
+
+// Validação ESTRITA de template de anúncio (Meta CTWA).
+// Só aceita o texto exato do botão do anúncio sem acréscimos conversacionais.
+export function ehTemplateExatoDeAnuncio(corpo: string): boolean {
+  if (!corpo) return false
+  const t = corpo.trim()
+
+  // Se tiver quebra de linha ou for longo (> 80 caracteres), é conversa livre humana, não template de anúncio
+  if (t.includes("\n") || t.length > 80) return false
+
+  // Se contiver links (ex.: https://instagram.com, https://facebook.com), é link colado organicamente
+  if (/https?:\/\//i.test(t)) return false
+
+  // Se contiver qualquer marcador conversacional humano ou nome de corretor, é 100% orgânico
+  if (CONVERSATIONAL_PATTERNS.some((re) => re.test(t))) return false
+
+  const normalizado = t
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -93,47 +120,22 @@ export function pareceTextoDeAnuncio(texto: string): boolean {
     .replace(/\s+/g, " ")
     .trim()
 
-  // 1. Padrão clássico: "olá gostaria de saber mais sobre..." (inclui typos como "fola", "oie")
-  if (/^(f?ola|oi|oie|bom dia|boa tarde|boa noite)\s+gostaria\s+de\s+(saber\s+mais|mais\s+informac|conhecer|agendar|ver|comprar|alugar)/.test(t)) {
+  // Template 1 oficial da Colucci no Meta Ads: "Olá Gostaria de saber mais sobre o imóvel ref.: 16430"
+  if (/^ol[aá]\s+gostaria\s+de\s+saber\s+mais\s+sobre\s+o\s+imovel\s+ref[.:\s]+([0-9]{3,}[a-z0-9\-]*)$/i.test(normalizado)) {
     return true
   }
 
-  // 2. Templates padrão do Meta Ads CTWA: "Olá! Posso ter mais informações sobre isso?" / "tenho interesse nisso"
-  if (/(posso\s+ter\s+mais\s+informac|tenho\s+interesse\s+nisso|quero\s+saber\s+mais|quero\s+mais\s+informac|gostaria\s+de\s+mais\s+informac|tenho\s+interesse\s+nesse\s+imovel|tenho\s+interesse\s+nesta\s+casa|tenho\s+interesse\s+nesse\s+apto)/.test(t)) {
-    return true
-  }
-
-  // 3. Menção explícita a anúncio ou rede social
-  if (/vi\s+(o\s+)?(anuncio|imovel|post|video|foto)|vi\s+(isso\s+)?no\s+(instagram|facebook|face|insta|marketplace|feed|stories|reels)/.test(t)) {
-    return true
-  }
-
-  // 4. Mensagem com referência de imóvel (ex.: ref.: 17454, ref: 17454, ref 17454, ref 17176, ref Umuarama)
-  if (/\bref[.:\s]+([0-9]{3,}|[a-z0-9\-]+)/.test(t)) {
-    return true
-  }
-
-  // 5. Perguntas de leads iniciadas com saudação perguntando sobre imóvel/apartamento/casa/valores/disponibilidade
-  if (/^(f?ola|oi|oie|bom dia|boa tarde|boa noite).*?\b(esse\s+imovel|essa\s+casa|esse\s+apto|esse\s+apartamento|comprar\s+esta\s+casa|comprar\s+esse\s+imovel|requisitos.*?apartamento|requisitos.*?casa|valor\s+desse\s+imovel|qual\s+o\s+valor\s+deste\s+condominio|ainda\s+esta\s+disponivel|ainda\s+esta\s+a\s+venda)\b/.test(t)) {
-    return true
-  }
-
-  // 6. Links compartilhados de redes sociais ou do site
-  if (/facebook\.com\/share|instagram\.com\/(reel|p)\/|colucciimoveis\.com\/imovel/.test(texto)) {
-    return true
-  }
-
-  // 7. Código de rastreio da ponte /r
-  if (/(?:codigo|código)[:.\s-]*[A-Z0-9]{6,10}/i.test(texto)) {
-    return true
-  }
-
-  // 8. Interesse direto comum em anúncios imobiliários
-  if (/(ainda\s+esta\s+disponivel|fotos\s+desse\s+imovel|onde\s+fica\s+esse\s+imovel|qual\s+o\s+bairro\s+desse\s+imovel|aceita\s+financiamento|aceita\s+permuta)/.test(t)) {
+  // Template 2 padrão oficial do Meta Ads CTWA: "Olá! Posso ter mais informações sobre isso?" / "tenho interesse nisso"
+  if (/^ol[aá]\s+(posso\s+ter\s+mais\s+informac[a-z]*\s+sobre\s+isso|gostaria\s+de\s+saber\s+mais\s+sobre\s+isso|tenho\s+interesse\s+nisso)$/i.test(normalizado)) {
     return true
   }
 
   return false
+}
+
+// Mantém retrocompatibilidade delegando para a validação estrita
+export function pareceTextoDeAnuncio(texto: string): boolean {
+  return ehTemplateExatoDeAnuncio(texto)
 }
 
 // Extrai referência do imóvel a partir do texto da mensagem (ex.: ref.: 17454, ref: 17454, ref 17454)
@@ -198,9 +200,10 @@ export function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anu
     }
   }
 
-  // 5. Fallback por conteúdo: texto pré-preenchido do anúncio (mesmo sem contexto CTWA da Evolution)
-  if (corpo && pareceTextoDeAnuncio(corpo)) {
-    return { veioDeAnuncio: true, anuncioId: null, anuncioTitulo: corpo }
+  // 5. Fallback por conteúdo: APENAS template estrito e exato de anúncio do Meta Ads (CTWA)
+  // Mensagens conversacionais, perguntas livres, links colados ou papo humano NUNCA são anúncios.
+  if (corpo && ehTemplateExatoDeAnuncio(corpo)) {
+    return { veioDeAnuncio: true, anuncioId: null, anuncioTitulo: "Anúncio Meta CTWA" }
   }
 
   return { veioDeAnuncio: false, anuncioId: null, anuncioTitulo: null }

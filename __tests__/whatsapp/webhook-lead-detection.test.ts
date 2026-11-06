@@ -4,6 +4,7 @@ import {
   extrairReferenciaDoTexto,
   detectAd,
   pareceTextoDeAnuncio,
+  ehTemplateExatoDeAnuncio,
 } from "@/app/api/whatsapp/webhook/route"
 
 describe("WhatsApp Webhook - LID & Inbound Contact Extraction", () => {
@@ -79,6 +80,22 @@ describe("WhatsApp Webhook - Ad & CTWA Detection", () => {
     expect(res.anuncioId).toBe("1202084930129")
   })
 
+  it("detecta anúncio por externalAdReply (card oficial do Meta Ads)", () => {
+    const msg = {
+      contextInfo: {
+        externalAdReply: {
+          title: "Converse conosco",
+          sourceId: "120250884182240692",
+          sourceUrl: "https://fb.me/colucci",
+        },
+      },
+    }
+    const res = detectAd(msg, "Olá, quero saber mais")
+    expect(res.veioDeAnuncio).toBe(true)
+    expect(res.anuncioId).toBe("120250884182240692")
+    expect(res.anuncioTitulo).toBe("Converse conosco")
+  })
+
   it("detecta anúncio por contextInfo da Meta/Evolution (conversionSource / entryPointConversionSource)", () => {
     const msg = {
       contextInfo: {
@@ -90,22 +107,42 @@ describe("WhatsApp Webhook - Ad & CTWA Detection", () => {
     expect(res.veioDeAnuncio).toBe(true)
   })
 
-  it("detecta anúncio por texto padrão pré-preenchido", () => {
-    const textos = [
-      "Olá, gostaria de saber mais sobre o imóvel ref. 17176",
+  it("detecta anúncio quando o texto é ESTRITAMENTE o template boilerplate do Meta Ads", () => {
+    const templatesOficiais = [
+      "Olá Gostaria de saber mais sobre o imóvel ref.: 16430",
+      "Olá, gostaria de saber mais sobre o imóvel ref 17176",
       "Olá! Posso ter mais informações sobre isso?",
-      "Vi o anúncio no Instagram e gostaria de informações",
-      "Vi no Facebook esse imóvel, ainda está disponível?",
-      "Olá, gostaria de agendar uma visita para essa casa",
+      "Olá! Tenho interesse nisso.",
     ]
-    for (const t of textos) {
-      expect(pareceTextoDeAnuncio(t)).toBe(true)
+    for (const t of templatesOficiais) {
+      expect(ehTemplateExatoDeAnuncio(t)).toBe(true)
       const res = detectAd({}, t)
       expect(res.veioDeAnuncio).toBe(true)
     }
   })
 
-  it("extrai referências numéricas e alfanuméricas do texto", () => {
+  it("NUNCA considera conversas orgânicas como Tráfego Pago (exemplo real Laís Menescal)", () => {
+    const conversasOrganicas = [
+      "Oi Levi, tudo bem? Estamos pensando em começar a procurar, rs\nO Jequitiba ainda esta disponivel?",
+      "Bom dia Levi, como vai? Esse imóvel ainda está disponível?",
+      "Olá Jessica, tudo bem? Vi uma casa no condomínio e queria saber o valor",
+      "https://www.instagram.com/p/Dc7USpyHHK5/?srtk=cHg1dG9iN3k2MHYw",
+      "Ref - 17607 Vendida por mim",
+      "Ref 17428 Permuta.",
+      "bom dia, gostaria de saber em qual região é essa casa e qual o valor",
+      "Oi Aline, meu marido e eu estamos procurando um terreno",
+      "quanto custa esse apartamento?",
+      "onde fica essa casa?",
+    ]
+    for (const texto of conversasOrganicas) {
+      expect(ehTemplateExatoDeAnuncio(texto)).toBe(false)
+      expect(pareceTextoDeAnuncio(texto)).toBe(false)
+      const res = detectAd({}, texto)
+      expect(res.veioDeAnuncio).toBe(false)
+    }
+  })
+
+  it("extrai referências numéricas e alfanuméricas do texto quando for anúncio", () => {
     expect(extrairReferenciaDoTexto("Olá, gostaria de saber mais sobre o ref: 17454")).toBe("17454")
     expect(extrairReferenciaDoTexto("ref. 17176")).toBe("17176")
     expect(extrairReferenciaDoTexto("Código: 12345")).toBe("12345")
