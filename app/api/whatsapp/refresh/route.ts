@@ -42,7 +42,30 @@ export async function GET(request: Request) {
     }
     const json = await res.json().catch(() => null)
     const state = json?.instance?.state ?? json?.state
-    const status = state ? mapConnectionState(state) : fallbackStatus
+    let status = state ? mapConnectionState(state) : fallbackStatus
+
+    // Auto-healing: Se constava como conectado mas a Evolution reportou close (queda temporária de socket),
+    // tenta restart para reatar a sessão antes de declarar desconectado.
+    if (status === "desconectado" && fallbackStatus === "conectado") {
+      try {
+        await fetchWithTimeout(`${cfg.url}/instance/restart/${encodeURIComponent(instanceName)}`, {
+          method: "POST",
+          headers: { apikey: cfg.key },
+        }, 6000)
+        await new Promise((r) => setTimeout(r, 2000))
+        const checkRes = await fetchWithTimeout(`${cfg.url}/instance/connectionState/${encodeURIComponent(instanceName)}`, {
+          headers: { apikey: cfg.key },
+        }, 4000)
+        if (checkRes.ok) {
+          const checkJson = await checkRes.json().catch(() => null)
+          const checkState = checkJson?.instance?.state ?? checkJson?.state
+          if (checkState) status = mapConnectionState(checkState)
+        }
+      } catch {
+        /* se falhar, mantém desconectado */
+      }
+    }
+
     let numero: string | null = status === "conectado" ? fallbackNumero : null
 
     if (status === "conectado" && !numero) {

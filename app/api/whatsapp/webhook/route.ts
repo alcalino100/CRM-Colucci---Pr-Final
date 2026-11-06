@@ -83,7 +83,7 @@ async function handleConnectionUpdate(payload: any) {
 // Detecta se a mensagem nasceu de um clique em anúncio (Click-to-WhatsApp).
 // Suporta variações de texto pré-preenchido, saudações com interesse em imóveis,
 // referências de anúncios e códigos de rastreamento.
-function pareceTextoDeAnuncio(texto: string): boolean {
+export function pareceTextoDeAnuncio(texto: string): boolean {
   if (!texto) return false
   const t = (texto || "")
     .normalize("NFD")
@@ -99,7 +99,7 @@ function pareceTextoDeAnuncio(texto: string): boolean {
   }
 
   // 2. Templates padrão do Meta Ads CTWA: "Olá! Posso ter mais informações sobre isso?" / "tenho interesse nisso"
-  if (/(posso\s+ter\s+mais\s+informac|tenho\s+interesse\s+nisso|quero\s+saber\s+mais|quero\s+mais\s+informac|gostaria\s+de\s+mais\s+informac)/.test(t)) {
+  if (/(posso\s+ter\s+mais\s+informac|tenho\s+interesse\s+nisso|quero\s+saber\s+mais|quero\s+mais\s+informac|gostaria\s+de\s+mais\s+informac|tenho\s+interesse\s+nesse\s+imovel|tenho\s+interesse\s+nesta\s+casa|tenho\s+interesse\s+nesse\s+apto)/.test(t)) {
     return true
   }
 
@@ -113,8 +113,8 @@ function pareceTextoDeAnuncio(texto: string): boolean {
     return true
   }
 
-  // 5. Perguntas de leads iniciadas com saudação perguntando sobre imóvel/apartamento/casa/valores
-  if (/^(f?ola|oi|oie|bom dia|boa tarde|boa noite).*?\b(esse\s+imovel|essa\s+casa|esse\s+apto|esse\s+apartamento|comprar\s+esta\s+casa|comprar\s+esse\s+imovel|requisitos.*?apartamento|requisitos.*?casa|valor\s+desse\s+imovel|qual\s+o\s+valor\s+deste\s+condominio)\b/.test(t)) {
+  // 5. Perguntas de leads iniciadas com saudação perguntando sobre imóvel/apartamento/casa/valores/disponibilidade
+  if (/^(f?ola|oi|oie|bom dia|boa tarde|boa noite).*?\b(esse\s+imovel|essa\s+casa|esse\s+apto|esse\s+apartamento|comprar\s+esta\s+casa|comprar\s+esse\s+imovel|requisitos.*?apartamento|requisitos.*?casa|valor\s+desse\s+imovel|qual\s+o\s+valor\s+deste\s+condominio|ainda\s+esta\s+disponivel|ainda\s+esta\s+a\s+venda)\b/.test(t)) {
     return true
   }
 
@@ -128,11 +128,16 @@ function pareceTextoDeAnuncio(texto: string): boolean {
     return true
   }
 
+  // 8. Interesse direto comum em anúncios imobiliários
+  if (/(ainda\s+esta\s+disponivel|fotos\s+desse\s+imovel|onde\s+fica\s+esse\s+imovel|qual\s+o\s+bairro\s+desse\s+imovel|aceita\s+financiamento|aceita\s+permuta)/.test(t)) {
+    return true
+  }
+
   return false
 }
 
 // Extrai referência do imóvel a partir do texto da mensagem (ex.: ref.: 17454, ref: 17454, ref 17454)
-function extrairReferenciaDoTexto(texto: string): string {
+export function extrairReferenciaDoTexto(texto: string): string {
   if (!texto) return ""
   const mNum = texto.match(/ref[.:\s]+([0-9]{3,}[a-z0-9\-]*)/i)
   if (mNum?.[1]) return mNum[1].trim()
@@ -143,13 +148,13 @@ function extrairReferenciaDoTexto(texto: string): string {
   return ""
 }
 
-function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId: string | null; anuncioTitulo: string | null } {
+export function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId: string | null; anuncioTitulo: string | null } {
   const m = msg?.message?.ephemeralMessage?.message ?? msg?.message?.viewOnceMessage?.message ?? msg?.message ?? msg
   const ctx = msg?.contextInfo ?? m?.contextInfo ?? m?.extendedTextMessage?.contextInfo ?? m?.imageMessage?.contextInfo ?? m?.videoMessage?.contextInfo ?? m?.documentMessage?.contextInfo
   const externalAd = ctx?.externalAdReplyInfo ?? ctx?.externalAdReply
   const referral = m?.referral ?? msg?.referral ?? ctx?.referral
 
-  // Sinal forte: referral com source_type === "ad" (campo oficial da Meta)
+  // 1. Sinal forte: referral com source_type === "ad" (campo oficial da Meta)
   if (referral?.source_type === "ad") {
     return {
       veioDeAnuncio: true,
@@ -158,7 +163,7 @@ function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId:
     }
   }
 
-  // Sinal forte: externalAdReplyInfo presente (Click-to-WhatsApp / anúncios com mídia)
+  // 2. Sinal forte: externalAdReplyInfo presente (Click-to-WhatsApp / anúncios com mídia)
   if (externalAd && (externalAd.sourceId || externalAd.sourceUrl || externalAd.title || externalAd.body || externalAd.mediaType)) {
     return {
       veioDeAnuncio: true,
@@ -167,13 +172,24 @@ function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId:
     }
   }
 
-  // Sinal da Evolution para Click-to-WhatsApp: contextInfo.conversionSource
-  // (não carrega ID do anúncio, mas é o que a Evolution repassa de fato)
-  if (ctx?.conversionSource) {
+  // 3. Sinal da Evolution/Baileys para Click-to-WhatsApp:
+  // - contextInfo.conversionSource
+  // - contextInfo.conversionData
+  // - contextInfo.entryPointConversionSource (ex: "ad")
+  // - contextInfo.entryPointConversionApp (ex: "fb" ou "instagram")
+  const src = String(ctx?.entryPointConversionSource || ctx?.conversionSource || "").toLowerCase()
+  const app = String(ctx?.entryPointConversionApp || "").toLowerCase()
+  if (
+    ctx?.conversionSource ||
+    ctx?.conversionData ||
+    src.includes("ad") ||
+    app.includes("fb") ||
+    app.includes("insta")
+  ) {
     return { veioDeAnuncio: true, anuncioId: null, anuncioTitulo: null }
   }
 
-  // Fallback: referral genérico com qualquer campo de anúncio
+  // 4. Fallback: referral genérico com qualquer campo de anúncio
   if (referral && (referral.source_id || referral.source_type || referral.headline || referral.body)) {
     return {
       veioDeAnuncio: true,
@@ -182,7 +198,7 @@ function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anuncioId:
     }
   }
 
-  // Fallback por conteúdo: texto pré-preenchido do anúncio (mesmo sem contexto CTWA da Evolution)
+  // 5. Fallback por conteúdo: texto pré-preenchido do anúncio (mesmo sem contexto CTWA da Evolution)
   if (corpo && pareceTextoDeAnuncio(corpo)) {
     return { veioDeAnuncio: true, anuncioId: null, anuncioTitulo: corpo }
   }
@@ -354,16 +370,53 @@ async function preencherMidiaUrl(instanceName: string, mensagemId: string | null
     .eq("mensagem_id", mensagemId)
 }
 
+// Extrai o telefone real do contato resolvendo identificadores de grupo, transmissão
+// e o modo LID (Linked Identity Device) do WhatsApp / Baileys.
+export function extrairTelefoneContato(msg: any): { telefone: string; remoteJid: string } {
+  const key = msg?.key ?? {}
+  const remoteJid: string = key.remoteJid ?? msg?.remoteJid ?? ""
+  const remoteJidAlt: string = key.remoteJidAlt ?? msg?.remoteJidAlt ?? ""
+  const participantAlt: string = key.participantAlt ?? msg?.participantAlt ?? ""
+  const participant: string = key.participant ?? msg?.participant ?? ""
+  const sender: string = msg?.sender ?? ""
+
+  // Ignora grupos e transmissões
+  if (remoteJid.includes("@g.us") || remoteJid.includes("broadcast")) {
+    return { telefone: "", remoteJid }
+  }
+
+  // Priorização para descobrir o telefone real (evitando identificador interno LID):
+  // 1. Se remoteJidAlt contiver @s.whatsapp.net (padrão Baileys v6+ quando addressingMode === 'lid')
+  // 2. Se remoteJid contiver @s.whatsapp.net e NÃO for @lid
+  // 3. Se participantAlt contiver @s.whatsapp.net
+  // 4. Se sender contiver @s.whatsapp.net
+  // 5. Fallback para remoteJidAlt ou participant ou remoteJid
+  let jidAlvo = ""
+  if (remoteJidAlt && remoteJidAlt.includes("@s.whatsapp.net")) {
+    jidAlvo = remoteJidAlt
+  } else if (remoteJid && remoteJid.includes("@s.whatsapp.net") && !remoteJid.includes("@lid")) {
+    jidAlvo = remoteJid
+  } else if (participantAlt && participantAlt.includes("@s.whatsapp.net")) {
+    jidAlvo = participantAlt
+  } else if (sender && sender.includes("@s.whatsapp.net")) {
+    jidAlvo = sender
+  } else if (remoteJidAlt && !remoteJidAlt.includes("@lid")) {
+    jidAlvo = remoteJidAlt
+  } else {
+    jidAlvo = remoteJid
+  }
+
+  const digits = onlyDigits(jidAlvo.split("@")[0])
+  return { telefone: digits, remoteJid }
+}
+
 async function handleMessageUpsert(payload: any) {
   const instanceName = getInstanceName(payload)
   if (!instanceName) return
   const msg = Array.isArray(payload?.data) ? payload.data[0] : payload?.data
   if (!msg) return
 
-  const remoteJid: string = msg?.key?.remoteJid ?? ""
-  // Ignora grupos e transmissões
-  if (remoteJid.includes("@g.us") || remoteJid.includes("broadcast")) return
-  const telefone = onlyDigits(remoteJid.split("@")[0])
+  const { telefone, remoteJid } = extrairTelefoneContato(msg)
   if (!telefone) return
 
   // Descobre o corretor dono da instância logo no início (busca case-insensitive e sem espaços)
@@ -395,11 +448,18 @@ async function handleMessageUpsert(payload: any) {
     msg?.key?.fromMe !== true &&
     ((await agenteParaInstancia(instanceName)) !== null || (await isNumeroTesteIA(telefone)))
   // Corpo: texto puro, ou a legenda da mídia (imagem/vídeo/documento podem ter legenda).
-  // Sem mídia e sem texto, mantém o rótulo antigo por segurança.
+  const mInner = msg?.message?.ephemeralMessage?.message ?? msg?.message?.viewOnceMessage?.message ?? msg?.message ?? {}
   let corpo =
-    msg?.message?.conversation ??
-    msg?.message?.extendedTextMessage?.text ??
-    (midia ? (midia.legenda ?? "") : "[mídia]")
+    mInner?.conversation ??
+    mInner?.extendedTextMessage?.text ??
+    mInner?.imageMessage?.caption ??
+    mInner?.videoMessage?.caption ??
+    mInner?.documentMessage?.caption ??
+    mInner?.buttonsResponseMessage?.selectedDisplayText ??
+    mInner?.templateButtonReplyMessage?.selectedDisplayText ??
+    mInner?.listResponseMessage?.title ??
+    (midia ? (midia.legenda ?? "") : "")
+  if (!corpo && midia) corpo = "[mídia]"
 
   // ÁUDIO: transcreve (Claude do agente primeiro, Gemini como fallback) e segue o
   // fluxo NORMAL (vínculo, regras, IA, escalação, auditoria).
@@ -918,7 +978,7 @@ export async function POST(request: Request) {
     const payload = await request.json().catch(() => null)
     if (!payload) return ok()
 
-    const event: string = payload.event ?? payload.type ?? ""
+    const event: string = (payload.event ?? payload.type ?? "").toLowerCase()
     if (event.includes("connection")) await handleConnectionUpdate(payload)
     else if (event.includes("messages") && event.includes("update")) await handleMessageStatusUpdate(payload)
     else if (event.includes("messages")) {

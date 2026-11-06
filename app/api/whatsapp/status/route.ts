@@ -40,6 +40,28 @@ export async function GET(request: Request) {
         const state = json?.instance?.state ?? json?.state
         if (state) status = mapConnectionState(state)
 
+        // Auto-healing: Se constava como conectado no banco mas a Evolution reportou close (queda temporária de socket),
+        // tenta restart para reatar a sessão antes de alertar desconexão.
+        if (status === "desconectado" && row?.status === "conectado") {
+          try {
+            await fetchWithTimeout(`${cfg.url}/instance/restart/${encodeURIComponent(instanceName)}`, {
+              method: "POST",
+              headers: { apikey: cfg.key },
+            }, 6000)
+            await new Promise((r) => setTimeout(r, 2000))
+            const checkRes = await fetchWithTimeout(`${cfg.url}/instance/connectionState/${encodeURIComponent(instanceName)}`, {
+              headers: { apikey: cfg.key },
+            }, 4000)
+            if (checkRes.ok) {
+              const checkJson = await checkRes.json().catch(() => null)
+              const checkState = checkJson?.instance?.state ?? checkJson?.state
+              if (checkState) status = mapConnectionState(checkState)
+            }
+          } catch {
+            /* se falhar, mantém desconectado */
+          }
+        }
+
         // Busca o número apenas quando conectado e ainda não conhecido
         if (status === "conectado" && !numero) {
           try {

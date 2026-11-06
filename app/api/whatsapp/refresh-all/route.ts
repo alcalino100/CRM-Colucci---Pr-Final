@@ -44,8 +44,30 @@ export async function POST() {
         }
         const json = await res.json().catch(() => null)
         const state = json?.instance?.state ?? json?.state
-        const newStatus = state ? mapConnectionState(state) : inst.status
+        let newStatus = state ? mapConnectionState(state) : inst.status
         let numero = inst.numero
+
+        // Auto-healing: Se constava como conectado mas a Evolution reportou close (queda temporária de socket),
+        // tenta restart para reatar a sessão antes de declarar desconectado.
+        if (newStatus === "desconectado" && inst.status === "conectado") {
+          try {
+            await fetchWithTimeout(`${cfg.url}/instance/restart/${encodeURIComponent(name)}`, {
+              method: "POST",
+              headers: { apikey: cfg.key },
+            }, 6000)
+            await new Promise((r) => setTimeout(r, 2000))
+            const checkRes = await fetchWithTimeout(`${cfg.url}/instance/connectionState/${encodeURIComponent(name)}`, {
+              headers: { apikey: cfg.key },
+            }, 4000)
+            if (checkRes.ok) {
+              const checkJson = await checkRes.json().catch(() => null)
+              const checkState = checkJson?.instance?.state ?? checkJson?.state
+              if (checkState) newStatus = mapConnectionState(checkState)
+            }
+          } catch {
+            /* se falhar, prossegue com desconectado */
+          }
+        }
 
         if (newStatus === "conectado" && !numero) {
           try {

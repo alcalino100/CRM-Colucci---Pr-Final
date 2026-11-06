@@ -131,7 +131,7 @@ export function WidgetPanel(){
           leadTags = ((existente.referencias||[]) as any[]).map((x:any)=> typeof x === "string" ? x : x?.ref ?? "").filter(Boolean)
         }
         else if(criarNovo){
-          const isTrafego = conv.origem === "Tráfego Pago" || Boolean((conv as any).veioDeAnuncio) || Boolean((conv as any).veio_de_anuncio)
+          const isTrafego = (conv.origem as string) === "Tráfego Pago" || Boolean((conv as any).veioDeAnuncio) || Boolean((conv as any).veio_de_anuncio)
           const origemFinal = isTrafego ? "Tráfego Pago" : conv.origem === "Instagram" ? "Instagram" : conv.origem === "Site" ? "Site" : "WhatsApp"
           const finalTags = isTrafego && !tags.some(t => t.toLowerCase() === "tráfego pago") ? [...tags, "Tráfego Pago"] : tags
           const criado = await fetch("/api/leads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ nome: conv.leadName, telefone: conv.telefone, origem: origemFinal, status:"novo", temperatura: "morno", referencias: finalTags, observacoes: isTrafego ? "Lead criado pelo inbox WhatsApp (Tráfego Pago)" : "Criado pelo inbox WhatsApp" })}).then(r=>r.json())
