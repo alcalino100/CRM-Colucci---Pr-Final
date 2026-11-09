@@ -334,11 +334,8 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
         } else if (payload?.eventType === "UPDATE" && payload.new) {
           const updatedLead = rowToLead(payload.new)
           setLeads((prev) => {
-            const idx = prev.findIndex((l) => l.id === updatedLead.id)
-            if (idx === -1) return [updatedLead, ...prev]
-            const next = [...prev]
-            next[idx] = { ...next[idx], ...updatedLead }
-            return next
+            const semEle = prev.filter((l) => l.id !== updatedLead.id)
+            return [updatedLead, ...semEle]
           })
         } else if (payload?.eventType === "DELETE" && payload.old?.id) {
           const id = payload.old.id

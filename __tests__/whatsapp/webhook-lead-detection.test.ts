@@ -107,12 +107,21 @@ describe("WhatsApp Webhook - Ad & CTWA Detection", () => {
     expect(res.veioDeAnuncio).toBe(true)
   })
 
-  it("detecta anúncio quando o texto é ESTRITAMENTE o template boilerplate do Meta Ads", () => {
+  it("detecta anúncio quando o texto é o template boilerplate do Meta Ads (numérico, alfanumérico e locação)", () => {
     const templatesOficiais = [
       "Olá Gostaria de saber mais sobre o imóvel ref.: 16430",
       "Olá, gostaria de saber mais sobre o imóvel ref 17176",
+      "Olá Gostaria de saber mais sobre o imóvel ref.: Bairro Umuarama",
+      "Olá Gostaria de saber mais sobre o imóvel ref.: Habiana 1",
+      "Olá Gostaria de saber mais sobre o imóvel ref.: Alphaville!",
+      "Olá Gostaria de saber mais sobre o imóvel ref.: Portal dos Bandeirantes",
+      "Olá Gostaria de saber mais sobre o imóvel ref.: Villa Estádio!",
+      "Olá Gostaria de saber mais sobre o imóvel disponível para locação",
+      "Olá Gostaria de saber mais sobre o imóvel",
       "Olá! Posso ter mais informações sobre isso?",
       "Olá! Tenho interesse nisso.",
+      "Olá Gostaria de saber mais sobre o imóvel ref.: 17454\nAmanhã volto a fazer contato. \nObrigado.",
+      "Olá Gostaria de saber mais sobre o imóvel ref.: 17454 valor dessa casa?",
     ]
     for (const t of templatesOficiais) {
       expect(ehTemplateExatoDeAnuncio(t)).toBe(true)
@@ -121,7 +130,7 @@ describe("WhatsApp Webhook - Ad & CTWA Detection", () => {
     }
   })
 
-  it("NUNCA considera conversas orgânicas como Tráfego Pago (exemplo real Laís Menescal)", () => {
+  it("NUNCA considera conversas orgânicas, correntes ou mensagens casuais como Tráfego Pago", () => {
     const conversasOrganicas = [
       "Oi Levi, tudo bem? Estamos pensando em começar a procurar, rs\nO Jequitiba ainda esta disponivel?",
       "Bom dia Levi, como vai? Esse imóvel ainda está disponível?",
@@ -133,6 +142,11 @@ describe("WhatsApp Webhook - Ad & CTWA Detection", () => {
       "Oi Aline, meu marido e eu estamos procurando um terreno",
       "quanto custa esse apartamento?",
       "onde fica essa casa?",
+      "tranquilo",
+      "bele",
+      "Muito obrigada por sua disponibilidade",
+      "Hoje, todos nós temos 2.026 anos de idade! Você sabia que hoje a idade de todo mundo é a mesma?",
+      "Boa tarde tudo bem?",
     ]
     for (const texto of conversasOrganicas) {
       expect(ehTemplateExatoDeAnuncio(texto)).toBe(false)
@@ -140,6 +154,16 @@ describe("WhatsApp Webhook - Ad & CTWA Detection", () => {
       const res = detectAd({}, texto)
       expect(res.veioDeAnuncio).toBe(false)
     }
+  })
+
+  it("não marca como anúncio se apenas entryPointConversionApp for instagram sem conversionSource ad", () => {
+    const msg = {
+      contextInfo: {
+        entryPointConversionApp: "instagram",
+      },
+    }
+    const res = detectAd(msg, "Oi boa tarde")
+    expect(res.veioDeAnuncio).toBe(false)
   })
 
   it("extrai referências numéricas e alfanuméricas do texto quando for anúncio", () => {

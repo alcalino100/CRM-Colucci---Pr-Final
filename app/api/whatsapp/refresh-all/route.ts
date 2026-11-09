@@ -3,8 +3,9 @@ import { evolutionConfig, mapConnectionState, notifyDisconnection, onlyDigits, w
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+export const maxDuration = 60
 
-async function fetchWithTimeout(url: string, init: RequestInit, ms = 6000) {
+async function fetchWithTimeout(url: string, init: RequestInit, ms = 8000) {
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), ms)
   try {
@@ -14,11 +15,12 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 6000) {
   }
 }
 
-// Sincroniza o estado de conexão de todas as instâncias ativas consultando a Evolution API
-export async function POST() {
+// Sincroniza o estado de conexão de todas as instâncias consultando a Evolution API.
+// Inclui auto-healing (restart de socket fechado) e atualização automática de QR Code.
+export async function sincronizarInstanciasWhatsApp() {
   const { data: instancias, error } = await wsupabase
     .from("whatsapp_instancias")
-    .select("id, corretor_id, instance_name, status, numero")
+    .select("id, corretor_id, instance_name, status, numero, qr_code")
 
   if (error || !instancias) {
     return NextResponse.json({ error: "Não foi possível carregar as instâncias." }, { status: 500 })
@@ -46,52 +48,78 @@ export async function POST() {
         const state = json?.instance?.state ?? json?.state
         let newStatus = state ? mapConnectionState(state) : inst.status
         let numero = inst.numero
+        let qrCode: string | null = inst.qr_code
 
-        // Auto-healing: Se constava como conectado mas a Evolution reportou close (queda temporária de socket),
-        // tenta restart para reatar a sessão antes de declarar desconectado.
-        if (newStatus === "desconectado" && inst.status === "conectado") {
+        // Auto-healing: Se a Evolution reportou "close" ou "connecting" (queda de socket),
+        // tenta reiniciar a sessão automaticamente para reatar antes de declarar desconectado.
+        if (newStatus !== "conectado") {
           try {
             await fetchWithTimeout(`${cfg.url}/instance/restart/${encodeURIComponent(name)}`, {
               method: "POST",
               headers: { apikey: cfg.key },
             }, 6000)
-            await new Promise((r) => setTimeout(r, 2000))
+
+            await new Promise((r) => setTimeout(r, 2500))
+
             const checkRes = await fetchWithTimeout(`${cfg.url}/instance/connectionState/${encodeURIComponent(name)}`, {
               headers: { apikey: cfg.key },
-            }, 4000)
+            }, 5000)
+
             if (checkRes.ok) {
               const checkJson = await checkRes.json().catch(() => null)
               const checkState = checkJson?.instance?.state ?? checkJson?.state
-              if (checkState) newStatus = mapConnectionState(checkState)
+              if (checkState) {
+                newStatus = mapConnectionState(checkState)
+              }
             }
           } catch {
-            /* se falhar, prossegue com desconectado */
+            /* restart falhou */
           }
         }
 
-        if (newStatus === "conectado" && !numero) {
+        // Se continuou desconectado, busca QR Code para que o corretor já veja no painel
+        if (newStatus === "desconectado") {
           try {
-            const fi = await fetchWithTimeout(
-              `${cfg.url}/instance/fetchInstances?instanceName=${encodeURIComponent(name)}`,
-              { headers: { apikey: cfg.key } },
-            )
-            const arr = await fi.json().catch(() => null)
-            const item = Array.isArray(arr) ? arr[0] : arr
-            const owner = item?.instance?.owner ?? item?.owner ?? item?.instance?.ownerJid ?? item?.ownerJid
-            if (owner) numero = onlyDigits(String(owner).split("@")[0])
+            const qrRes = await fetchWithTimeout(`${cfg.url}/instance/connect/${encodeURIComponent(name)}`, {
+              headers: { apikey: cfg.key },
+            }, 6000)
+            if (qrRes.ok) {
+              const qrJson = await qrRes.json().catch(() => null)
+              if (qrJson?.base64) {
+                qrCode = qrJson.base64
+              }
+            }
           } catch {
-            /* número opcional */
+            /* QR code opcional */
           }
         }
 
-        const mudou = newStatus !== inst.status || numero !== inst.numero
+        if (newStatus === "conectado") {
+          qrCode = null
+          if (!numero) {
+            try {
+              const fi = await fetchWithTimeout(
+                `${cfg.url}/instance/fetchInstances?instanceName=${encodeURIComponent(name)}`,
+                { headers: { apikey: cfg.key } },
+              )
+              const arr = await fi.json().catch(() => null)
+              const item = Array.isArray(arr) ? arr[0] : arr
+              const owner = item?.instance?.owner ?? item?.owner ?? item?.instance?.ownerJid ?? item?.ownerJid
+              if (owner) numero = onlyDigits(String(owner).split("@")[0])
+            } catch {
+              /* número opcional */
+            }
+          }
+        }
+
+        const mudou = newStatus !== inst.status || numero !== inst.numero || qrCode !== inst.qr_code
         if (mudou) {
           const patch: Record<string, unknown> = {
             status: newStatus,
+            qr_code: qrCode,
             atualizado_em: new Date().toISOString(),
           }
           if (numero) patch.numero = numero
-          if (newStatus === "conectado") patch.qr_code = null
           await wsupabase.from("whatsapp_instancias").update(patch).eq("instance_name", name)
 
           if (newStatus === "desconectado" && inst.status === "conectado") {
@@ -111,4 +139,13 @@ export async function POST() {
     total: instancias.length,
     resultados: results.map((r) => (r.status === "fulfilled" ? r.value : { error: String(r.reason) })),
   })
+}
+
+// Suporte para Vercel Cron (GET) e chamadas do frontend (POST)
+export async function GET() {
+  return sincronizarInstanciasWhatsApp()
+}
+
+export async function POST() {
+  return sincronizarInstanciasWhatsApp()
 }

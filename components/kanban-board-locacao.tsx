@@ -341,7 +341,14 @@ export function KanbanBoardLocacao({
       (!bairrosFilter || l.bairrosDesejados.some((b) => b.toLowerCase().includes(bairrosFilter.toLowerCase()))) &&
       matchesQuery(l),
   )
-  const byStatus = (s: LocacaoStatus) => filtered.filter((l) => l.status === s)
+  const byStatus = (s: LocacaoStatus) =>
+    filtered
+      .filter((l) => l.status === s)
+      .sort((a, b) => {
+        const da = a.atualizadoEm || a.criadoEm || ""
+        const db = b.atualizadoEm || b.criadoEm || ""
+        return db.localeCompare(da)
+      })
   const temFiltros = tempFilter !== "todas" || origemFilter !== "todas" || statusFilter !== "todos" || corretorFilter !== "todos" || tipoFilter !== "todos" || quartosFilter !== "todos" || !!aluguelMaxFilter || !!bairrosFilter || !!q
   const noResults = temFiltros && filtered.length === 0
 

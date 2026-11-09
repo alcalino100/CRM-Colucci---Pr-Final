@@ -97,20 +97,28 @@ const CONVERSATIONAL_PATTERNS = [
   /\b(quanto custa|qual o valor|aceita permuta|aceita financiamento|ainda esta disponivel|ainda está disponível|onde fica|qual regiao|qual região)\b/i,
 ]
 
-// Validação ESTRITA de template de anúncio (Meta CTWA).
-// Só aceita o texto exato do botão do anúncio sem acréscimos conversacionais.
+// Validação de template de anúncio (Meta CTWA).
+// Suporta todos os formatos oficiais da Colucci (numéricos, alfanuméricos com nome de bairro/condomínio,
+// locação ou perguntas de anúncios oficiais) sem confundir com conversas humanas normais.
 export function ehTemplateExatoDeAnuncio(corpo: string): boolean {
   if (!corpo) return false
   const t = corpo.trim()
 
-  // Se tiver quebra de linha ou for longo (> 80 caracteres), é conversa livre humana, não template de anúncio
-  if (t.includes("\n") || t.length > 80) return false
-
   // Se contiver links (ex.: https://instagram.com, https://facebook.com), é link colado organicamente
   if (/https?:\/\//i.test(t)) return false
 
-  // Se contiver qualquer marcador conversacional humano ou nome de corretor, é 100% orgânico
-  if (CONVERSATIONAL_PATTERNS.some((re) => re.test(t))) return false
+  // Se contiver menção direta aos nomes dos corretores (templates oficiais do Meta NUNCA sabem o nome do corretor no texto pré-preenchido)
+  if (/\b(levi|luciana|lu\b|daline|dali\b|jessica|jéssica|aline|brayon|guilherme|joao|joão|gabriel|abraao|abraão|kleber|diego)\b/i.test(t)) {
+    return false
+  }
+
+  // Se contiver qualquer marcador conversacional humano forte ou menção a parentes
+  if (/\b(minha mae|minha mãe|meu pai|meu marido|minha esposa|meu noivo|minha noiva|meus filhos|meu filho|minha filha)\b/i.test(t)) {
+    return false
+  }
+  if (/\b(kkk|haha|hehe|rsrs|valeu|abrac|abraç)\b/i.test(t)) {
+    return false
+  }
 
   const normalizado = t
     .normalize("NFD")
@@ -120,14 +128,30 @@ export function ehTemplateExatoDeAnuncio(corpo: string): boolean {
     .replace(/\s+/g, " ")
     .trim()
 
-  // Template 1 oficial da Colucci no Meta Ads: "Olá Gostaria de saber mais sobre o imóvel ref.: 16430"
-  if (/^ol[aá]\s+gostaria\s+de\s+saber\s+mais\s+sobre\s+o\s+imovel\s+ref[.:\s]+([0-9]{3,}[a-z0-9\-]*)$/i.test(normalizado)) {
+  // Template 1 oficial da Colucci no Meta Ads:
+  // "Olá Gostaria de saber mais sobre o imóvel..."
+  // Ex: "Olá Gostaria de saber mais sobre o imóvel ref.: 16430"
+  // Ex: "Olá Gostaria de saber mais sobre o imóvel ref.: Bairro Umuarama"
+  // Ex: "Olá Gostaria de saber mais sobre o imóvel ref.: Habiana 1"
+  // Ex: "Olá Gostaria de saber mais sobre o imóvel ref.: Alphaville!"
+  // Ex: "Olá Gostaria de saber mais sobre o imóvel disponível para locação"
+  // Ex: "Olá Gostaria de saber mais sobre o imóvel"
+  if (/^ol[aá]\s+gostaria\s+(de\s+)?saber\s+mais\s+sobre\s+o\s+imovel/i.test(normalizado)) {
     return true
   }
 
-  // Template 2 padrão oficial do Meta Ads CTWA: "Olá! Posso ter mais informações sobre isso?" / "tenho interesse nisso"
-  if (/^ol[aá]\s+(posso\s+ter\s+mais\s+informac[a-z]*\s+sobre\s+isso|gostaria\s+de\s+saber\s+mais\s+sobre\s+isso|tenho\s+interesse\s+nisso)$/i.test(normalizado)) {
+  // Template 2 padrão oficial do Meta Ads CTWA:
+  // "Olá! Posso ter mais informações sobre isso?" / "tenho interesse nisso" / "gostaria de mais informações sobre isso"
+  if (/^ol[aá]\s+(posso\s+ter\s+mais\s+informac|gostaria\s+de\s+saber\s+mais\s+sobre\s+isso|tenho\s+interesse\s+nisso|gostaria\s+de\s+mais\s+informac)/i.test(normalizado)) {
     return true
+  }
+
+  // Template 3: Saudação com referência numérica ou código Colucci
+  // Ex: "Olá gostaria de saber mais sobre a casa ref 17454", "Boa tarde, tenho interesse no imóvel ref: 17454"
+  if (/^(ol[aá]|bom\s+dia|boa\s+tarde|boa\s+noite)\b/i.test(normalizado)) {
+    if (/\b(ref|codigo|referencia)\s*[:.]?\s*[0-9]{3,}/i.test(t)) {
+      return true
+    }
   }
 
   return false
@@ -175,20 +199,11 @@ export function detectAd(msg: any, corpo: string): { veioDeAnuncio: boolean; anu
   }
 
   // 3. Sinal da Evolution/Baileys para Click-to-WhatsApp:
-  // - contextInfo.conversionSource
-  // - contextInfo.conversionData
   // - contextInfo.entryPointConversionSource (ex: "ad")
-  // - contextInfo.entryPointConversionApp (ex: "fb" ou "instagram")
+  // - contextInfo.conversionSource
   const src = String(ctx?.entryPointConversionSource || ctx?.conversionSource || "").toLowerCase()
-  const app = String(ctx?.entryPointConversionApp || "").toLowerCase()
-  if (
-    ctx?.conversionSource ||
-    ctx?.conversionData ||
-    src.includes("ad") ||
-    app.includes("fb") ||
-    app.includes("insta")
-  ) {
-    return { veioDeAnuncio: true, anuncioId: null, anuncioTitulo: null }
+  if (src.includes("ad")) {
+    return { veioDeAnuncio: true, anuncioId: null, anuncioTitulo: "Anúncio Meta CTWA" }
   }
 
   // 4. Fallback: referral genérico com qualquer campo de anúncio
@@ -765,26 +780,29 @@ async function handleMessageUpsert(payload: any) {
       lead_id: existenteDoCorretor.id,
     })
 
-    // Dispara CAPI para registrar a nova conversão de lead
+    // Dispara CAPI para registrar a nova conversão de lead (timeout de 2s para nunca travar o webhook)
     try {
-      await enviarLeadCapi({
-        lead_id: existenteDoCorretor.id,
-        telefone,
-        nome,
-        email: "",
-        valor: 0,
-        corretor_id: corretorId,
-        campanha_id: metaCampaignId,
-        adset_id: metaAdsetId,
-        ad_id: metaAdId,
-        utm_campaign: clique?.utm_campaign ?? null,
-        utm_adset: clique?.utm_adset ?? null,
-        utm_ad: clique?.utm_ad ?? null,
-        fbc: clique?.fbc ?? null,
-        fbp: clique?.fbp ?? null,
-        ip: clique?.ip ?? null,
-        ua: clique?.user_agent ?? null,
-      })
+      await Promise.race([
+        enviarLeadCapi({
+          lead_id: existenteDoCorretor.id,
+          telefone,
+          nome,
+          email: "",
+          valor: 0,
+          corretor_id: corretorId,
+          campanha_id: metaCampaignId,
+          adset_id: metaAdsetId,
+          ad_id: metaAdId,
+          utm_campaign: clique?.utm_campaign ?? null,
+          utm_adset: clique?.utm_adset ?? null,
+          utm_ad: clique?.utm_ad ?? null,
+          fbc: clique?.fbc ?? null,
+          fbp: clique?.fbp ?? null,
+          ip: clique?.ip ?? null,
+          ua: clique?.user_agent ?? null,
+        }),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ])
     } catch {}
   }
 
@@ -875,26 +893,29 @@ async function handleMessageUpsert(payload: any) {
         lead_id: leadId,
       })
 
-      // Envia o evento Lead (CAPI) com os identificadores capturados na ponte de rastreio.
+      // Envia o evento Lead (CAPI) com os identificadores capturados na ponte de rastreio (timeout 2s).
       try {
-        await enviarLeadCapi({
-          lead_id: leadId,
-          telefone,
-          nome,
-          email: "",
-          valor: 0,
-          corretor_id: corretorId,
-          campanha_id: metaCampaignId,
-          adset_id: metaAdsetId,
-          ad_id: metaAdId,
-          utm_campaign: clique?.utm_campaign ?? null,
-          utm_adset: clique?.utm_adset ?? null,
-          utm_ad: clique?.utm_ad ?? null,
-          fbc: clique?.fbc ?? null,
-          fbp: clique?.fbp ?? null,
-          ip: clique?.ip ?? null,
-          ua: clique?.user_agent ?? null,
-        })
+        await Promise.race([
+          enviarLeadCapi({
+            lead_id: leadId,
+            telefone,
+            nome,
+            email: "",
+            valor: 0,
+            corretor_id: corretorId,
+            campanha_id: metaCampaignId,
+            adset_id: metaAdsetId,
+            ad_id: metaAdId,
+            utm_campaign: clique?.utm_campaign ?? null,
+            utm_adset: clique?.utm_adset ?? null,
+            utm_ad: clique?.utm_ad ?? null,
+            fbc: clique?.fbc ?? null,
+            fbp: clique?.fbp ?? null,
+            ip: clique?.ip ?? null,
+            ua: clique?.user_agent ?? null,
+          }),
+          new Promise((resolve) => setTimeout(resolve, 2000)),
+        ])
       } catch {}
 
       // Telefone já cadastrado para outro corretor: avisa o gestor, mas o lead do clique é de quem recebeu

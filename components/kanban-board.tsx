@@ -509,7 +509,14 @@ export function KanbanBoard({
       dentroPeriodo(l) &&
       matchesQuery(l),
   )
-  const byStatus = (s: LeadStatus) => filtered.filter((l) => l.status === s)
+  const byStatus = (s: LeadStatus) =>
+    filtered
+      .filter((l) => l.status === s)
+      .sort((a, b) => {
+        const da = a.atualizadoEm || a.criadoEm || ""
+        const db = b.atualizadoEm || b.criadoEm || ""
+        return db.localeCompare(da)
+      })
   const temFiltros = tempFilter !== "todas" || filtros.origem !== "todas" || filtros.status !== "todos" || filtros.corretor !== "todos" || !!filtros.dataInicio || !!filtros.dataFim || !!q
   const noResults = temFiltros && filtered.length === 0
 

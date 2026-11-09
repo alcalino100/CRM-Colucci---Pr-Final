@@ -101,8 +101,9 @@ export default function CadastrosPage() {
     const ini = dataInicio || "0000-00-00"
     const fim = dataFim || "9999-99-99"
     return leads.filter((l) => {
-      const d = (l.criadoEm || "").slice(0, 10)
-      return d >= ini && d <= fim
+      const dCriado = (l.criadoEm || "").slice(0, 10)
+      const dAtivo = (l.atualizadoEm || "").slice(0, 10)
+      return (dCriado >= ini && dCriado <= fim) || (dAtivo >= ini && dAtivo <= fim)
     })
   }, [leads, dataInicio, dataFim])
 
@@ -113,7 +114,11 @@ export default function CadastrosPage() {
         (origem === "todas" || l.origem === origem) &&
         (status === "todos" || l.status === status),
     )
-    return [...lista].sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || ""))
+    return [...lista].sort((a, b) => {
+      const da = a.atualizadoEm || a.criadoEm || ""
+      const db = b.atualizadoEm || b.criadoEm || ""
+      return db.localeCompare(da)
+    })
   }, [noPeriodo, corretor, origem, status])
 
   const kpis = useMemo(() => {
