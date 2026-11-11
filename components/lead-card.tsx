@@ -91,24 +91,31 @@ export function LeadCard({
       updateLead(lead.id, { referencias: next.map((t, i) => ({ ref: t, principal: i === 0 && !lead.referencias?.some(r => r.principal) })) })
     } catch { /* silent */ }
   }
+  const isReativado = Boolean(lead.reativadoEm && !lead.arquivadoEm)
+
   return (
     <div className={cn(
-      "group relative rounded-xl border bg-card p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
-      overdue ? "border-destructive/50 ring-1 ring-destructive/20" : "border-border hover:border-primary/30",
-      lead.gestorResponsavel && "ring-1 ring-violet-400/40",
+      "group relative rounded-xl border p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
+      isReativado
+        ? "border-amber-400/90 bg-gradient-to-b from-amber-100/70 via-amber-50/40 to-card ring-2 ring-amber-400/40 shadow-amber-500/10 dark:from-amber-950/40 dark:via-card dark:border-amber-500/80 dark:ring-amber-500/30"
+        : overdue
+        ? "border-destructive/50 bg-card ring-1 ring-destructive/20"
+        : "border-border bg-card hover:border-primary/30",
+      lead.gestorResponsavel && !isReativado && "ring-1 ring-violet-400/40",
     )}>
+      {isReativado && (
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1.5 rounded-t-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 shadow-sm" />
+      )}
       {overdue && <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2 py-1.5 text-xs font-semibold text-destructive"><AlertTriangle className="size-3.5" /> Follow-up pendente</div>}
-      {lead.reativadoEm && (
-        <div className="mb-2 flex items-center justify-between gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200">
+      {isReativado && (
+        <div className="mb-2.5 flex items-center justify-between gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/20 px-2.5 py-1.5 text-xs font-bold text-amber-950 dark:text-amber-100 shadow-sm">
           <span className="flex items-center gap-1.5">
-            <ArchiveRestore className="size-3.5 text-amber-600 dark:text-amber-400" />
-            Reativado em {fmtDate(lead.reativadoEm)}
+            <ArchiveRestore className="size-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>REATIVADO • {fmtDate(lead.reativadoEm || "")}</span>
           </span>
-          {lead.reativacoesCount && lead.reativacoesCount > 1 ? (
-            <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-800 dark:text-amber-300">
-              {lead.reativacoesCount}x
-            </span>
-          ) : null}
+          <span className="rounded-full bg-amber-600/25 px-2 py-0.5 text-[10px] font-extrabold text-amber-950 dark:text-amber-200 uppercase tracking-wide">
+            {lead.reativacoesCount && lead.reativacoesCount > 1 ? `${lead.reativacoesCount}ª vez` : "Retomar contato"}
+          </span>
         </div>
       )}
       {lead.arquivadoEm && (

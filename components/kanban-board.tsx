@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Search, SearchX, X } from "lucide-react"
+import { Search, SearchX, X, Sparkles } from "lucide-react"
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
 import { Button } from "@/components/ui/button"
-import { Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
+import { Badge, Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
 import { LeadCard } from "@/components/lead-card"
 import { ArquivarLeadDialog } from "@/components/arquivar-lead-dialog"
 import { LeadForm, type LeadFormValues } from "@/components/lead-form"
@@ -471,6 +471,23 @@ export function KanbanBoard({
     toast("Lead desarquivado com sucesso.")
   }
 
+  const [filterReativados, setFilterReativados] = useState(false)
+
+  const leadsReativados = useMemo(() => {
+    return leads.filter((l) => Boolean(l.reativadoEm && !l.arquivadoEm))
+  }, [leads])
+
+  useEffect(() => {
+    if (leadsReativados.length > 0) {
+      const primeiro = leadsReativados[0]
+      toast(
+        leadsReativados.length === 1
+          ? `🔔 Lead "${primeiro.nome}" reativado no funil! Bloco destacado em cor âmbar.`
+          : `🔔 ${leadsReativados.length} leads reativados no funil! Blocos destacados em cor âmbar.`
+      )
+    }
+  }, [leadsReativados.length])
+
   const q = query.trim().toLowerCase()
   const qDigits = normalizePhone(query)
   const matchesQuery = (l: Lead) => {
@@ -494,6 +511,7 @@ export function KanbanBoard({
   const filtered = leads.filter(
     (l) =>
       (showArchived || !l.arquivadoEm) &&
+      (!filterReativados || Boolean(l.reativadoEm && !l.arquivadoEm)) &&
       (tempFilter === "todas" || l.temperatura === tempFilter) &&
       (filtros.origem === "todas" || l.origem === filtros.origem) &&
       (filtros.status === "todos" || l.status === filtros.status) &&
@@ -531,6 +549,56 @@ export function KanbanBoard({
 
   return (
     <>
+      {/* Banner Visual de Leads Reativados para a Corretora / Gestor */}
+      {leadsReativados.length > 0 && (
+        <div className="relative mb-3 flex flex-col gap-3 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-500/15 via-amber-100/70 to-card p-4 text-amber-950 shadow-md dark:from-amber-950/50 dark:via-card dark:to-card dark:text-amber-100 dark:border-amber-500">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm">
+                <Sparkles className="size-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-display font-bold text-base text-amber-950 dark:text-amber-100">
+                    {leadsReativados.length === 1
+                      ? `🔔 1 Lead Reativado no seu funil: ${leadsReativados[0].nome}`
+                      : `🔔 ${leadsReativados.length} Leads Reativados aguardando retomada de contato!`}
+                  </span>
+                  <Badge variant="amber" className="font-extrabold border border-amber-500/40 text-amber-900 bg-amber-300/80 dark:bg-amber-900 dark:text-amber-200">
+                    Retomar Contato
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-amber-900/90 dark:text-amber-200/90 leading-relaxed">
+                  {leadsReativados.length === 1 ? (
+                    <>
+                      O lead <strong className="font-semibold underline">{leadsReativados[0].nome}</strong> retornou ao funil como &quot;Novo Lead&quot; com o <strong>bloco destacado em cor âmbar</strong>.
+                    </>
+                  ) : (
+                    "Estes leads atingiram a data programada de compra e retornaram com destaque âmbar na coluna Novo Lead."
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                className={cn(
+                  "font-bold shadow-sm transition-all",
+                  filterReativados
+                    ? "bg-slate-800 text-white hover:bg-slate-900 dark:bg-slate-200 dark:text-slate-900"
+                    : "bg-amber-600 text-white hover:bg-amber-700"
+                )}
+                onClick={() => setFilterReativados((p) => !p)}
+              >
+                <Sparkles className="size-3.5 mr-1.5" />
+                {filterReativados ? "Ver todos os leads" : "Destacar apenas reativados"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="relative mb-3 flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-primary/0 via-primary/70 to-primary/0" />
         <div className="relative w-full sm:max-w-xs">
@@ -555,6 +623,19 @@ export function KanbanBoard({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          {leadsReativados.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilterReativados((p) => !p)}
+              className={chip(
+                filterReativados,
+                "border-amber-500 bg-amber-500 text-white font-bold shadow-sm"
+              )}
+            >
+              <Sparkles className="size-3.5 inline mr-1" />
+              Reativados ({leadsReativados.length})
+            </button>
+          )}
           <span className="text-xs font-medium text-muted-foreground">Temperatura:</span>
           <button type="button" onClick={() => setTempFilter("todas")} className={chip(tempFilter === "todas")}>Todas</button>
           {TEMPERATURAS.map((t) => (

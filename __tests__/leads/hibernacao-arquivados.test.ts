@@ -194,13 +194,17 @@ describe("Suite de Hibernação e Reativação Automática de Leads (T1 - T11)",
     telefone: "5518999990001",
     email: "mariana@exemplo.com",
     status: "em_atendimento",
-    temperatura: "morna",
+    temperatura: "morno",
     origem: "Tráfego Pago",
     corretorId: "u-luciana",
     valorNegociacao: 500000,
+    imovelRef: "AP-301",
     tags: ["Campanha Luxo", "Investimento"],
+    referencias: [{ ref: "Campanha Luxo" }, { ref: "Investimento" }],
+    observacoes: "Lead interessado em imóveis de alto padrão",
     interacoes: [],
     criadoEm: "2026-01-01T10:00:00Z",
+    atualizadoEm: "2026-01-01T10:00:00Z",
   }
 
   // T1. Arquivar com data válida

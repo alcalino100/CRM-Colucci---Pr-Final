@@ -36,6 +36,8 @@ export type AuditTipo =
   | "temperatura"
   | "qualidade"
   | "justificativa"
+  | "reativacao"
+  | "arquivamento"
   | "locacao_criacao"
   | "locacao_exclusao"
   | "locacao_visita"
@@ -103,6 +105,7 @@ export interface Lead {
   email: string
   imovelRef: string
   referencias: LeadRef[]
+  tags?: string[]
   temperatura: Temperatura
   refProposta?: string
   refFechamento?: string

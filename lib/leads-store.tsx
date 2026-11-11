@@ -852,13 +852,17 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
     const usuarioNome = user?.nome ?? "Usuário"
     const statusDestino = (lead.statusAnterior as LeadStatus) || "novo"
+    const agoraIso = new Date().toISOString()
+    const novoCiclo = (lead.reativacoesCount || 0) + 1
 
     const patch: Partial<Lead> = {
       arquivadoEm: null,
       dataReaparecimento: null,
       motivoArquivamento: null,
       observacaoArquivamento: null,
-      status: statusDestino,
+      status: "novo", // Volta como Novo Lead para prioridade de atendimento
+      reativadoEm: agoraIso, // Ativa a cor âmbar e badge de reativação
+      reativacoesCount: novoCiclo,
     }
 
     const res = await updateLead(id, patch)
@@ -868,19 +872,19 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       leadId: lead.id,
       leadNome: lead.nome,
       usuarioNome,
-      tipo: "edicao",
-      descricao: `Lead desarquivado manualmente por ${usuarioNome} (retornou para etapa "${statusDestino}")`,
+      tipo: "reativacao",
+      descricao: `Lead reativado/desarquivado por ${usuarioNome} (retornou como "Novo Lead" com bloco destacado)`,
     })
 
-    notify(`Lead ${lead.nome} desarquivado por ${usuarioNome}`, {
-      tipo: "desarquivamento",
+    notify(`🔔 Lead ${lead.nome} reativado e retornou para o funil como Novo Lead.`, {
+      tipo: "pipeline",
       paraRole: "gestor",
       leadId: lead.id,
     })
 
     if (lead.corretorId && lead.corretorId !== userId) {
-      notify(`Seu lead ${lead.nome} foi desarquivado e retornou para "${statusDestino}"`, {
-        tipo: "desarquivamento",
+      notify(`🔔 Seu lead ${lead.nome} reapareceu no funil como Novo Lead! Tarefa: Retomar contato.`, {
+        tipo: "pipeline",
         paraUsuarioId: lead.corretorId,
         leadId: lead.id,
       })
