@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { ok, fail } from "@/lib/api/response"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -11,7 +12,7 @@ export async function GET(req: Request) {
   const auth = req.headers.get("authorization")
   const qs = url.searchParams.get("secret")
   const autorizado = !!secret && (auth === `Bearer ${secret}` || qs === secret)
-  if (!autorizado) return NextResponse.json({ erro: "não autorizado" }, { status: 401 })
+  if (!autorizado) return fail("não autorizado", 401)
 
   try {
     // Arquiva apenas fechamentos de meses anteriores (fim de mês).
@@ -26,14 +27,19 @@ export async function GET(req: Request) {
       .or(`fechado_em.lt.${inicioMes},and(fechado_em.is.null,atualizado_em.lt.${inicioMes})`)
       .select("id")
 
-    if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
+    if (error) {
+      logger.error("Erro no cron de arquivamento de fechados", { error: error.message })
+      return fail(error.message, 500)
+    }
 
-    return NextResponse.json({
-      ok: true,
+    logger.info("Cron de arquivamento de fechados executado", { count: data?.length ?? 0 })
+    return ok({
       arquivados: data?.length ?? 0,
-      quando: agora,
+      quando: agora.toISOString(),
     })
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, erro: e.message }, { status: 500 })
+  } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : String(e)
+    logger.error("Exceção no cron de arquivamento", { error: errorMsg })
+    return fail(errorMsg, 500)
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -304,7 +305,9 @@ async function processarReativacao(request: Request) {
         event_description: `Data: ${hojeBrasilia} | Avaliados: ${lista.length} | Reativados: ${reativados} | Conflitos duplicidade: ${conflitos} | Pulados: ${pulados}`,
         actor_type: "system",
       })
-    } catch {}
+    } catch (err) {
+      logger.warn("Falha ao registrar log de resumo de reativação", { error: err })
+    }
   }
 
   return NextResponse.json({

@@ -1,8 +1,23 @@
-import { NextResponse } from "next/server"
+import { z } from "zod"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { ok, fail } from "@/lib/api/response"
+import { parseBody } from "@/lib/api/validate"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+const deleteLeadSchema = z.object({
+  motivo: z.string().trim().min(1, "Informe o motivo da exclusão."),
+  detalhe: z.string().trim().min(1, "Informe o detalhe da exclusão."),
+  usuario: z.string().trim().optional().default("Inbox"),
+})
+
+const patchLeadSchema = z.object({
+  status: z.string().optional(),
+  tags: z.array(z.union([z.string(), z.object({ ref: z.string(), principal: z.boolean().optional() })])).optional(),
+  observacoes: z.string().optional(),
+})
 
 // Exclui um lead (usado pelo Inbox). Exige motivo + detalhe, grava auditoria e
 // desvincula as mensagens do WhatsApp (lead_id = null) para a conversa continuar
@@ -12,24 +27,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  if (!id) return NextResponse.json({ ok: false, erro: "ID ausente." }, { status: 400 })
+  if (!id) return fail("ID ausente.", 400)
 
-  let body: { motivo?: string; detalhe?: string; usuario?: string }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ ok: false, erro: "Dados inválidos." }, { status: 400 })
-  }
+  const parsed = await parseBody(request, deleteLeadSchema)
+  if (!parsed.success) return parsed.response
 
-  const motivo = String(body?.motivo ?? "").trim()
-  const detalhe = String(body?.detalhe ?? "").trim()
-  const usuario = String(body?.usuario ?? "").trim() || "Inbox"
-  if (!motivo || !detalhe) {
-    return NextResponse.json({ ok: false, erro: "Informe o motivo e o detalhe da exclusão." }, { status: 400 })
-  }
+  const { motivo, detalhe, usuario } = parsed.data
 
   const { data: lead } = await wsupabase.from("leads").select("id, nome").eq("id", id).maybeSingle()
-  if (!lead) return NextResponse.json({ ok: false, erro: "Lead não encontrado." }, { status: 404 })
+  if (!lead) return fail("Lead não encontrado.", 404)
 
   const auditErr = await wsupabase.from("auditoria").insert({
     lead_id: id,
@@ -40,50 +46,57 @@ export async function DELETE(
     motivo,
     motivo_detalhe: detalhe,
   })
-  if (auditErr.error) return NextResponse.json({ ok: false, erro: auditErr.error.message }, { status: 500 })
+  if (auditErr.error) {
+    logger.error("Erro ao registrar auditoria de exclusão", { error: auditErr.error.message, leadId: id })
+    return fail(auditErr.error.message, 500)
+  }
 
   const { error } = await wsupabase.from("leads").delete().eq("id", id)
-  if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
+  if (error) {
+    logger.error("Erro ao excluir lead", { error: error.message, leadId: id })
+    return fail(error.message, 500)
+  }
 
   await wsupabase.from("whatsapp_mensagens").update({ lead_id: null }).eq("lead_id", id)
 
-  return NextResponse.json({ ok: true })
+  logger.info("Lead excluído com sucesso via Inbox", { leadId: id, motivo })
+  return ok()
 }
 
 // Atualiza campos permitidos de um lead (usado pelo Inbox para salvar tags/estágio).
 // Aceita somente campos controlados — nunca sobrescreve telefone/corretor.
 export async function PATCH(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  if (!id) return NextResponse.json({ ok: false, erro: "ID ausente." }, { status: 400 })
+  if (!id) return fail("ID ausente.", 400)
 
-  let body: { status?: string; tags?: string[]; observacoes?: string }
-  try {
-    body = await _request.json()
-  } catch {
-    return NextResponse.json({ ok: false, erro: "Dados inválidos." }, { status: 400 })
-  }
+  const parsed = await parseBody(request, patchLeadSchema)
+  if (!parsed.success) return parsed.response
 
+  const body = parsed.data
   const patch: Record<string, unknown> = {}
+
   if (body.status !== undefined) patch.status = body.status
   if (body.tags !== undefined) {
-    const arr = Array.isArray(body.tags) ? body.tags.filter(Boolean) : []
-    patch.referencias = arr.map((t: any, i: number) => {
-      if (typeof t === "object" && t !== null && typeof t.ref === "string") return t
+    patch.referencias = body.tags.map((t, i) => {
+      if (typeof t === "object" && t !== null && "ref" in t) return t
       return { ref: String(t), principal: i === 0 }
     })
   }
   if (body.observacoes !== undefined) patch.observacoes = body.observacoes
 
   const { error } = await wsupabase.from("leads").update(patch).eq("id", id)
-  if (error) return NextResponse.json({ ok: false, erro: error.message }, { status: 500 })
+  if (error) {
+    logger.error("Erro ao atualizar lead", { error: error.message, leadId: id })
+    return fail(error.message, 500)
+  }
 
   try {
     const mudancas: string[] = []
     if (body.status !== undefined) mudancas.push(`etapa → ${body.status}`)
-    if (body.tags !== undefined) mudancas.push(`tags → [${(Array.isArray(body.tags) ? body.tags : []).filter(Boolean).join(", ") || "—"}]`)
+    if (body.tags !== undefined) mudancas.push(`tags → [${body.tags.map((t) => typeof t === "string" ? t : t.ref).join(", ") || "—"}]`)
     if (body.observacoes !== undefined) mudancas.push("observações atualizadas")
     if (mudancas.length) {
       await wsupabase.from("automation_logs").insert({
@@ -94,7 +107,10 @@ export async function PATCH(
         lead_id: id,
       })
     }
-  } catch { /* log é best-effort */ }
+  } catch (logErr) {
+    // Log operacional é best-effort
+    logger.warn("Falha ao registrar log de atualização do lead no Inbox", { error: logErr, leadId: id })
+  }
 
-  return NextResponse.json({ ok: true })
+  return ok()
 }
