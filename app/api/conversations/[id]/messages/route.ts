@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { generateAIResponse } from "@/lib/ai/generateResponse"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -123,7 +124,7 @@ const { data: historyDesc } = await db()
       executionTimeMs: Date.now() - t0,
     })
   } catch (e: unknown) {
-    console.error(e)
+    logger.error("Erro na rota de mensagens da conversa", { error: e instanceof Error ? e.message : String(e) })
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 }

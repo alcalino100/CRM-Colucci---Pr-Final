@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import type { EscalationCheck, EscalationTrigger } from "./types"
+import { logger } from "@/lib/logger"
 
 // Re-export de compatibilidade: o handoff vive em handoffNotifications.ts,
 // mas testes/scripts podem importar tudo daqui.
@@ -132,7 +133,7 @@ export async function detectEscalation(
       .select("*")
       .eq("ai_id", aiId)
     if (error) {
-      console.error("[IA] erro carregar triggers", error.message)
+      logger.error("[IA] erro carregar triggers", { error: error.message })
       return { shouldEscalate: false, reason: "Erro ao carregar triggers", severity: "low" }
     }
     const triggers = (data ?? []) as EscalationTrigger[]
@@ -141,7 +142,7 @@ export async function detectEscalation(
     }
     return avaliarTriggers(triggers, userMessage, conversationHistory, metadata?.maxMessages ?? 10)
   } catch (e) {
-    console.error("[IA] erro detectEscalation", e)
+    logger.error("[IA] erro detectEscalation", { error: e instanceof Error ? e.message : String(e) })
     return { shouldEscalate: false, reason: "Erro ao carregar triggers", severity: "low" }
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { evolutionConfig, wsupabase } from "@/lib/whatsapp/server"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
   } catch (err) {
     // Loga a causa real no servidor (sem expor URL/chave ao client)
     const cause = (err as any)?.cause?.code || (err as any)?.name || ""
-    console.log("[v0] whatsapp connect error:", err instanceof Error ? err.message : String(err), cause)
+    logger.error("Erro ao conectar WhatsApp na Evolution", { error: err instanceof Error ? err.message : String(err), cause })
     const host = safeHost(cfg.url)
     // Mensagens específicas por causa para o usuário saber o que corrigir no servidor
     const diagnosticos: Record<string, string> = {

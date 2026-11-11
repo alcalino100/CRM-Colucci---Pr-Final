@@ -5,6 +5,7 @@ import { normalizePhone } from "@/lib/labels"
 import { sendPresence, sendWhatsAppText } from "@/lib/whatsapp/server"
 import { getBoundInstances, getRules, dentroDoHorario, leadAptoParaResposta, nomeApresentacao, regrasParaPrompt, sleep, type AgentRules } from "./rules"
 import { consultarDisponibilidade, agendarOuRemarcar } from "./agenda-tools"
+import { logger } from "@/lib/logger"
 
 // Tools de agenda expostas à IA (quando rules.coordination.agendarVisitas).
 const AGENDA_TOOLS = [
@@ -397,7 +398,7 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
         return { ok: true, erro: `Escalação: ${esc.reason}` }
       }
     } catch (e) {
-      console.error("[IA] erro escalation check", e)
+      logger.error("[IA] erro escalation check", { error: e instanceof Error ? e.message : String(e) })
     }
 
     // 2) Trava de limite (sem trigger configurado): pausa com motivo registrado.
@@ -541,7 +542,7 @@ async function responderConversaIa({ convId, AI_ID, agenteNome, rules, leadIdEfe
     await registrarAnalytics({ convId, aiId: AI_ID, ms: Date.now() - t0, tokens: tokensUsed ?? 0, modelo: model ?? "", semEscalacao: true })
     return envRes.ok ? { ok: true } : { ok: false, erro: envRes.erro }
   } catch (e: any) {
-    console.error("[IA] erro responder", e)
+    logger.error("[IA] erro responder conversa", { error: e instanceof Error ? e.message : String(e) })
     try {
       await db().from("automation_logs").insert({
         lead_id: leadIdEfetivo ?? null,
@@ -897,7 +898,7 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
           return
         }
       } catch (e) {
-        console.error("[IA] erro rajada, segue com texto único", e)
+        logger.error("[IA] erro rajada, segue com texto único", { error: e instanceof Error ? e.message : String(e) })
       }
     }
 
@@ -917,7 +918,7 @@ export async function handlePatriciaInbound({ telefone, texto, leadId, instanceN
       })
     } catch { /* log é best-effort */ }
   }catch(e){
-    console.error("[IA] erro inbox", e)
+    logger.error("[IA] erro inbox handler inbound", { error: e instanceof Error ? e.message : String(e) })
     try {
       await db().from("automation_logs").insert({
         event_type: "ia_erro_fluxo",

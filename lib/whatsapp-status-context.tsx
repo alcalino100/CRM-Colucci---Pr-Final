@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
 import { useToast } from "@/components/ui/primitives"
+import { logger } from "@/lib/logger"
 
 export interface WhatsAppInstance {
   id: string
@@ -154,7 +155,7 @@ export function WhatsAppStatusProvider({ children }: { children: React.ReactNode
         setInstances(mapped)
       }
     } catch (err) {
-      console.warn("[whatsapp-status] falha ao buscar instâncias:", err)
+      logger.warn("[whatsapp-status] falha ao buscar instâncias", { error: err })
     } finally {
       if (!silent) setLoading(false)
     }

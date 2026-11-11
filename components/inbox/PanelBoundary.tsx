@@ -1,5 +1,6 @@
 "use client"
 import React from "react"
+import { logger } from "@/lib/logger"
 
 // Contém o erro num painel: em vez de derrubar a página inteira
 // ("This page couldn't load"), mostra fallback só naquele painel.
@@ -11,7 +12,7 @@ export class PanelBoundary extends React.Component<{ nome: string; children: Rea
   }
 
   componentDidCatch(erro: Error) {
-    console.error(`[inbox:${this.props.nome}]`, erro)
+    logger.error(`[inbox:${this.props.nome}] Erro no painel`, { error: erro.message })
   }
 
   render() {

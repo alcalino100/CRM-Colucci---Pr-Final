@@ -2,6 +2,7 @@ import { decryptToken } from "@/lib/encryption"
 import { providerFromModel } from "./generateResponse"
 import { agenteParaInstancia } from "./inboxHandler"
 import { transcreverAudioGemini, transcreverAudioWhisper } from "./audioTranscriber"
+import { logger } from "@/lib/logger"
 
 export type ProvedorMidia = "claude" | "gemini" | "openai"
 
@@ -89,7 +90,7 @@ export async function transcreverAudioSmart(
     return { texto: t.texto, provedor: "openai", modelo: t.modelo }
   } catch (e: unknown) {
     if (process.env.OPENAI_API_KEY) {
-      console.error("[mídia] Whisper falhou, caindo para Gemini:", e instanceof Error ? e.message : String(e))
+      logger.error("[mídia] Whisper falhou, caindo para Gemini", { error: e instanceof Error ? e.message : String(e) })
     }
   }
   const g = await transcreverAudioGemini(base64, mimeType)

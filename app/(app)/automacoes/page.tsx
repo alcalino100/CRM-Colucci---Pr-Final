@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
+import { logger } from "@/lib/logger"
 import {
   Zap,
   MessageCircle,
@@ -295,7 +296,7 @@ export default function AutomacoesPage() {
         liberadasSemafaro: 189,
       })
     } catch (err) {
-      console.error("Erro ao carregar dados do dashboard:", err)
+      logger.error("Erro ao carregar dados do dashboard de automações", { error: err })
     } finally {
       setPeriodoBusy(false)
       setRefreshing(false)

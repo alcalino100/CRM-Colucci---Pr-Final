@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { evolutionConfig, notifyDisconnection, wsupabase } from "@/lib/whatsapp/server"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       // Ignoramos o status: se já estava desconectada, o objetivo do usuário está cumprido.
     } catch (err) {
       const cause = (err as any)?.cause?.code || (err as any)?.name || ""
-      console.log("[v0] whatsapp disconnect error:", err instanceof Error ? err.message : String(err), cause)
+      logger.error("Erro ao desconectar WhatsApp na Evolution", { error: err instanceof Error ? err.message : String(err), cause })
       evolutionErro = "Não foi possível confirmar a desconexão com o servidor, mas o WhatsApp foi marcado como desconectado no sistema."
     }
   }
