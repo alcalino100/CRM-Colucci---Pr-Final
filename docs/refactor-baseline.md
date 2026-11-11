@@ -4,7 +4,7 @@
 **Repositório:** `alcalino100/CRM-Colucci---Pr-Final`  
 **Commit de Referência:** `3cb9baa` (incorporando baseline da auditoria `52d6d09`)  
 **Data:** 11 de Novembro de 2026  
-**Status:** FASE 0 — Diagnóstico Concluído (Aguardando Aprovação para Fase 1)
+**Status:** FASE 0, 1 e 2 CONCLUÍDAS — Pronto para FASE 3 (Arquitetura e Decomposição de Arquivos Grandes)
 
 ---
 
@@ -223,7 +223,39 @@ Antes de iniciar a divisão de qualquer arquivo gigante na Fase 3, os seguintes 
 
 ---
 
-## 7. Próximo Passo
+## 7. Progresso da Execução
 
-O diagnóstico está concluído e documentado. Nenhum arquivo de lógica da aplicação foi alterado nesta etapa.  
-**Aguardando autorização expressa do usuário para iniciar a FASE 1 (PR 1: Build, Tooling e CI).**
+### FASE 1 — Build, Tooling e CI (Concluída em PR #17)
+- [x] Remoção de \`typescript.ignoreBuildErrors\` e \`images.unoptimized\` de \`next.config.mjs\`.
+- [x] Instalação e configuração de ESLint 9 Flat Config (\`eslint.config.mjs\`) com \`@next/next\` e \`react-hooks\`.
+- [x] Padronização de metadados: pacote renomeado para \`"crm-colucci"\`, engines (Node >=20, pnpm >=9), \`.nvmrc\` (22).
+- [x] Isolamento de testes offline: mock de Supabase e OpenAI em \`__tests__/ai/generateResponse.test.ts\` e separação do teste de integração em \`test:int\`.
+- [x] Documentação e auditoria: criação de \`.env.example\`, \`README.md\` profissional e documentação de migrações canônicas em \`supabase/migrations/README.md\`.
+- [x] CI GitHub Actions rodando \`pnpm check\` (\`typecheck\`, \`lint\`, \`test\`, \`build\`) 100% verde.
+
+### FASE 2 — Qualidade de Código e Segurança (Concluída em PR #18)
+- [x] **Tipagem Supabase:** Mapeamento de todas as 44 tabelas do banco em \`lib/supabase/database.types.ts\`, tipando clientes \`supabase\` (\`client.ts\`), \`supabaseAdmin\` (\`admin.ts\`) e \`wsupabase\` (\`whatsapp/server.ts\`).
+- [x] **Logger LGPD:** Criação de \`lib/logger.ts\` com mascaramento automático de telefones, e-mails e proteção de corpo de mensagens. Substituição de todas as 36 chamadas diretas de \`console.*\` por chamadas ao \`logger\`.
+- [x] **Padronização de API:** Helpers \`lib/api/response.ts\` (\`ok\`, \`fail\`) e validação de corpo e query com Zod em \`lib/api/validate.ts\`.
+- [x] **Segurança:** Sanitização de filtros PostgREST (\`sanitizePostgrestFilter\`), renderização segura contra XSS no chat Meta AI (\`renderSafeBoldText\`), sanitização de \`bootStyle\` e eliminação de telefone pessoal hardcoded.
+- [x] **UI & Contraste (Lead Reativado):** Correção do fundo sólido (\`bg-card\`) e contraste de texto para modo noturno e diurno no bloco do lead e banner do Kanban.
+- [x] **Testes Unitários:** 4 novas suítes de testes (\`postgrest-sanitize\`, \`safe-markdown\`, \`logger\`, \`api-helpers\`), totalizando 16 arquivos e 128 testes passando.
+
+---
+
+## 8. Próximo Passo: FASE 3 (Arquitetura e Decomposição de Arquivos Grandes)
+
+Conforme estabelecido no planejamento, a Fase 3 atacará os 11 arquivos >600 linhas com **testes de caracterização prévios** e um PR por domínio de arquivo dividido:
+1. \`app/(app)/automacoes/page.tsx\` (1.596 linhas)
+2. \`app/api/automation/worker/route.ts\` (1.490 linhas)
+3. \`app/(app)/meta-ads/page.tsx\` (1.094 linhas)
+4. \`app/api/whatsapp/webhook/route.ts\` (1.023 linhas)
+5. \`components/kanban-board.tsx\` (1.001 linhas)
+6. \`app/(app)/arquivados/page.tsx\` (989 linhas)
+7. \`lib/ai/inboxHandler.ts\` (930 linhas)
+8. \`lib/leads-store.tsx\` (917 linhas)
+9. \`app/(app)/master/page.tsx\` (797 linhas)
+10. \`components/kanban-board-locacao.tsx\` (724 linhas)
+11. \`app/(app)/automacoes/nova/page.tsx\` (604 linhas)
+
+**Aguardando autorização expressa do usuário para iniciar a FASE 3.**
