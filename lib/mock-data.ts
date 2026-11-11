@@ -71,6 +71,26 @@ export interface Interaction {
   timestamp: string
 }
 
+export type MotivoArquivamento =
+  | "quer comprar em data futura"
+  | "sem orçamento agora"
+  | "sem interesse"
+  | "outro"
+
+export const MOTIVOS_ARQUIVAMENTO: MotivoArquivamento[] = [
+  "quer comprar em data futura",
+  "sem orçamento agora",
+  "sem interesse",
+  "outro",
+]
+
+export const MOTIVO_ARQUIVAMENTO_LABEL: Record<MotivoArquivamento, string> = {
+  "quer comprar em data futura": "Quer comprar em data futura",
+  "sem orçamento agora": "Sem orçamento agora",
+  "sem interesse": "Sem interesse no momento",
+  "outro": "Outro motivo",
+}
+
 export interface LeadRef {
   ref: string
   principal?: boolean
@@ -105,6 +125,16 @@ export interface Lead {
   criadoEm: string
   atualizadoEm: string
   arquivadoEm?: string | null
+  dataReaparecimento?: string | null
+  motivoArquivamento?: MotivoArquivamento | string | null
+  observacaoArquivamento?: string | null
+  statusAnterior?: LeadStatus | string | null
+  reativadoEm?: string | null
+  arquivadoPor?: string | null
+  arquivadoPorNome?: string | null
+  reativacoesCount?: number
+  consentimentoContato?: boolean
+  semInteressePermanente?: boolean
   fechadoEm?: string
   negociandoEm?: string
   interacoes: Interaction[]

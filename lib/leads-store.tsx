@@ -81,13 +81,29 @@ interface Store {
   addUser: (u: Omit<User, "id" | "criadoEm">) => Promise<{ ok: boolean; error?: string }>
   updateUser: (id: string, patch: Partial<User>) => Promise<{ ok: boolean; error?: string }>
   updateProfile: (patch: { avatar?: string }) => Promise<{ ok: boolean; error?: string }>
+  arquivarLeadComData: (
+    id: string,
+    params: {
+      motivo: string
+      dataReaparecimento: string
+      observacao?: string
+    }
+  ) => Promise<{ ok: boolean; error?: string }>
+  desarquivarLead: (id: string) => Promise<{ ok: boolean; error?: string }>
 }
 
 const Ctx = createContext<Store | null>(null)
 
 // ---------- Conversores entre o banco (colunas em pt) e o app (camelCase) ----------
 
+function extrairMetaArquivado(obs: string | null | undefined, chave: string): string | null {
+  if (!obs) return null
+  const m = obs.match(new RegExp(`\\[Hibernação:.*${chave}=([^;\\]]+)`, "i"))
+  return m ? m[1].trim() : null
+}
+
 function rowToLead(r: any): Lead {
+  const obs = r.observacoes ?? ""
   return {
     id: r.id,
     nome: r.nome ?? "",
@@ -108,10 +124,19 @@ function rowToLead(r: any): Lead {
     fbc: r.fbc ?? undefined,
     fbp: r.fbp ?? undefined,
     arquivadoEm: r.arquivado_em ?? undefined,
+    dataReaparecimento: r.data_reaparecimento ?? extrairMetaArquivado(obs, "data"),
+    motivoArquivamento: r.motivo_arquivamento ?? extrairMetaArquivado(obs, "motivo"),
+    observacaoArquivamento: r.observacao_arquivamento ?? extrairMetaArquivado(obs, "obs"),
+    statusAnterior: r.status_anterior ?? extrairMetaArquivado(obs, "status_anterior"),
+    reativadoEm: r.reativado_em ?? extrairMetaArquivado(obs, "reativado_em"),
+    arquivadoPor: r.arquivado_por ?? extrairMetaArquivado(obs, "arquivado_por"),
+    reativacoesCount: r.reativacoes_count ?? 0,
+    consentimentoContato: r.consentimento_contato ?? true,
+    semInteressePermanente: r.sem_interesse_permanente ?? false,
     fechadoEm: r.fechado_em ?? undefined,
     negociandoEm: r.negociando_em ?? undefined,
     origem: (r.origem ?? "Outro") as Origem,
-    observacoes: r.observacoes ?? "",
+    observacoes: obs,
     status: normalizeStatus(r.status ?? "novo"),
     valorNegociacao: r.valor_proposta ?? undefined,
     valorComissao: r.valor_comissao ?? undefined,
@@ -150,6 +175,15 @@ function leadPatchToRow(p: Partial<Lead>): Record<string, any> {
   if (p.corretorId !== undefined) row.corretor_id = p.corretorId || null
   if (p.gestorResponsavel !== undefined) row.gestor_responsavel = p.gestorResponsavel || null
   if (p.arquivadoEm !== undefined) row.arquivado_em = p.arquivadoEm || null
+  if (p.dataReaparecimento !== undefined) row.data_reaparecimento = p.dataReaparecimento || null
+  if (p.motivoArquivamento !== undefined) row.motivo_arquivamento = p.motivoArquivamento || null
+  if (p.observacaoArquivamento !== undefined) row.observacao_arquivamento = p.observacaoArquivamento || null
+  if (p.statusAnterior !== undefined) row.status_anterior = p.statusAnterior || null
+  if (p.reativadoEm !== undefined) row.reativado_em = p.reativadoEm || null
+  if (p.arquivadoPor !== undefined) row.arquivado_por = p.arquivadoPor || null
+  if (p.reativacoesCount !== undefined) row.reativacoes_count = p.reativacoesCount ?? 0
+  if (p.consentimentoContato !== undefined) row.consentimento_contato = p.consentimentoContato ?? true
+  if (p.semInteressePermanente !== undefined) row.sem_interesse_permanente = p.semInteressePermanente ?? false
   if (p.fechadoEm !== undefined) row.fechado_em = p.fechadoEm || null
   if (p.negociandoEm !== undefined) row.negociando_em = p.negociandoEm || null
   return row
@@ -521,6 +555,15 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       delete row.fbc
       delete row.fbp
       delete row.tipo_imovel_vendido
+      delete row.data_reaparecimento
+      delete row.motivo_arquivamento
+      delete row.observacao_arquivamento
+      delete row.status_anterior
+      delete row.reativado_em
+      delete row.arquivado_por
+      delete row.reativacoes_count
+      delete row.consentimento_contato
+      delete row.sem_interesse_permanente
       ;({ error } = await supabase.from("leads").update(row).eq("id", id))
     }
     if (error) {
@@ -547,6 +590,15 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       delete row.fbc
       delete row.fbp
       delete row.tipo_imovel_vendido
+      delete row.data_reaparecimento
+      delete row.motivo_arquivamento
+      delete row.observacao_arquivamento
+      delete row.status_anterior
+      delete row.reativado_em
+      delete row.arquivado_por
+      delete row.reativacoes_count
+      delete row.consentimento_contato
+      delete row.sem_interesse_permanente
       ;({ data, error } = await supabase.from("leads").update(row).in("id", ids).select("id"))
     }
     if (error) return { ok: false, error: error.message }
@@ -738,6 +790,105 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     return { ok: true }
   }
 
+  // Arquivar lead com data de reaparecimento (hibernação programada)
+  const arquivarLeadComData: Store["arquivarLeadComData"] = async (id, params) => {
+    if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
+    const lead = leads.find((l) => l.id === id)
+    if (!lead) return { ok: false, error: "Lead não encontrado." }
+
+    const agora = new Date().toISOString()
+    const usuarioNome = user?.nome ?? "Usuário"
+    const statusAnterior = lead.status
+
+    const reapareceFormatado = new Date(params.dataReaparecimento + "T12:00:00").toLocaleDateString("pt-BR")
+    const metaNote = `\n\n[Hibernação: data=${params.dataReaparecimento}; motivo=${params.motivo}; status_anterior=${statusAnterior}; arquivado_por=${userId}; data_ext=${reapareceFormatado}]`
+    const obsComMeta = `${lead.observacoes || ""}${metaNote}`.trim()
+
+    const patch: Partial<Lead> = {
+      arquivadoEm: agora,
+      dataReaparecimento: params.dataReaparecimento,
+      motivoArquivamento: params.motivo,
+      observacaoArquivamento: params.observacao || null,
+      statusAnterior: statusAnterior,
+      arquivadoPor: userId,
+      observacoes: obsComMeta,
+    }
+
+    const res = await updateLead(id, patch)
+    if (!res.ok) return res
+
+    logAudit({
+      leadId: lead.id,
+      leadNome: lead.nome,
+      usuarioNome,
+      tipo: "edicao",
+      descricao: `Lead arquivado com previsão de reaparecimento para ${reapareceFormatado}. Motivo: ${params.motivo}`,
+      motivo: params.motivo,
+      motivoDetalhe: params.observacao,
+    })
+
+    notify(`Lead ${lead.nome} arquivado até ${reapareceFormatado} por ${usuarioNome}`, {
+      tipo: "arquivamento",
+      paraRole: "gestor",
+      leadId: lead.id,
+    })
+
+    if (lead.corretorId && lead.corretorId !== userId) {
+      notify(`Seu lead ${lead.nome} foi arquivado até ${reapareceFormatado}`, {
+        tipo: "arquivamento",
+        paraUsuarioId: lead.corretorId,
+        leadId: lead.id,
+      })
+    }
+
+    return { ok: true }
+  }
+
+  // Desarquivar lead manualmente
+  const desarquivarLead: Store["desarquivarLead"] = async (id) => {
+    if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
+    const lead = leads.find((l) => l.id === id)
+    if (!lead) return { ok: false, error: "Lead não encontrado." }
+
+    const usuarioNome = user?.nome ?? "Usuário"
+    const statusDestino = (lead.statusAnterior as LeadStatus) || "novo"
+
+    const patch: Partial<Lead> = {
+      arquivadoEm: null,
+      dataReaparecimento: null,
+      motivoArquivamento: null,
+      observacaoArquivamento: null,
+      status: statusDestino,
+    }
+
+    const res = await updateLead(id, patch)
+    if (!res.ok) return res
+
+    logAudit({
+      leadId: lead.id,
+      leadNome: lead.nome,
+      usuarioNome,
+      tipo: "edicao",
+      descricao: `Lead desarquivado manualmente por ${usuarioNome} (retornou para etapa "${statusDestino}")`,
+    })
+
+    notify(`Lead ${lead.nome} desarquivado por ${usuarioNome}`, {
+      tipo: "desarquivamento",
+      paraRole: "gestor",
+      leadId: lead.id,
+    })
+
+    if (lead.corretorId && lead.corretorId !== userId) {
+      notify(`Seu lead ${lead.nome} foi desarquivado e retornou para "${statusDestino}"`, {
+        tipo: "desarquivamento",
+        paraUsuarioId: lead.corretorId,
+        leadId: lead.id,
+      })
+    }
+
+    return { ok: true }
+  }
+
   const corretores = users.filter((u) => isCorretorDe(u.role, "vendas"))
 
   return (
@@ -746,6 +897,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
         leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, ready, corretores, userName,
         checkPhoneDuplicate, addLead, updateLead, updateLeadsBulk, deleteLead, addInteraction, getLead, assumirLead,
         addVisit, updateVisit, removeVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification, addUser, updateUser, updateProfile,
+        arquivarLeadComData, desarquivarLead,
       }}
     >
       {children}
