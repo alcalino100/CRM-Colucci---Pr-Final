@@ -551,7 +551,7 @@ export function KanbanBoard({
     <>
       {/* Banner Visual de Leads Reativados para a Corretora / Gestor */}
       {leadsReativados.length > 0 && (
-        <div className="relative mb-3 flex flex-col gap-3 rounded-xl border-2 border-amber-500 bg-amber-500/[0.08] p-4 text-foreground shadow-md transition-colors dark:border-amber-400 dark:bg-amber-500/[0.12]">
+        <div className="relative mb-3 flex flex-col gap-3 rounded-xl border-2 border-amber-500 bg-card p-4 text-foreground shadow-md transition-colors dark:border-amber-400 dark:bg-card">
           <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1 rounded-t-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500" />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -560,22 +560,22 @@ export function KanbanBoard({
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-display font-bold text-base text-foreground">
+                  <span className="font-display font-bold text-base text-foreground dark:text-white">
                     {leadsReativados.length === 1
                       ? `🔔 1 Lead Reativado no seu funil: ${leadsReativados[0].nome}`
                       : `🔔 ${leadsReativados.length} Leads Reativados aguardando retomada de contato!`}
                   </span>
-                  <span className="inline-flex items-center rounded-full border border-amber-500/60 bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                  <span className="inline-flex items-center rounded-full border border-amber-500/60 bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:text-amber-200">
                     Retomar Contato
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-foreground/80 dark:text-stone-300 leading-relaxed">
+                <p className="mt-1 text-xs text-muted-foreground dark:text-stone-200 leading-relaxed">
                   {leadsReativados.length === 1 ? (
                     <>
-                      O lead <strong className="font-semibold text-foreground underline">{leadsReativados[0].nome}</strong> retornou ao funil como &quot;Novo Lead&quot; com o bloco destacado em dourado.
+                      O lead <strong className="font-semibold text-foreground dark:text-white underline">{leadsReativados[0].nome}</strong> retornou ao funil como &quot;Novo Lead&quot; com o bloco destacado em cor âmbar.
                     </>
                   ) : (
-                    "Estes leads atingiram a data programada de compra e retornaram como \"Novo Lead\" com bloco destacado em dourado."
+                    "Estes leads atingiram a data programada de compra e retornaram como \"Novo Lead\" com bloco destacado em cor âmbar."
                   )}
                 </p>
               </div>
