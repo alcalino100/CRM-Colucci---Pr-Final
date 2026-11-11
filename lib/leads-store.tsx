@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { logger } from "@/lib/logger"
 import {
   type AuditEntry,
   type AuditTipo,
@@ -404,7 +405,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       referencias: e.referencias ?? null,
       motivo: e.motivo ?? null,
       motivo_detalhe: e.motivoDetalhe ?? null,
-    }).then(() => loadAudit(), (err) => console.warn("[auditoria] falha ao gravar:", err?.message ?? err))
+    }).then(() => loadAudit(), (err) => logger.warn("[auditoria] falha ao gravar", { error: err?.message ?? err }))
   }
 
   // Log legado (admin/logs) — também gera registro na auditoria persistida
@@ -485,7 +486,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
           await Promise.all(updates)
         }
       } catch (err) {
-        console.warn("[notificacoes] falha ao marcar lidas:", err)
+        logger.warn("[notificacoes] falha ao marcar lidas", { error: err })
       }
     })()
   }, [notifications, userId])

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { instanceNameFor, wsupabase } from "@/lib/whatsapp/server"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     .select("*")
     .single()
   if (error) {
-    console.log("[v0] whatsapp instancia upsert error:", error.code, error.message)
+    logger.error("Erro no upsert da instância WhatsApp", { code: error.code, error: error.message })
     const detalhe = error.code === "42501" ? " Rode o script 007 no Supabase para desabilitar o RLS." : ""
     return NextResponse.json({ error: `Não foi possível criar a instância.${detalhe}` }, { status: 500 })
   }

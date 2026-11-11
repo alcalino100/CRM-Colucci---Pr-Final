@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { finalizarParaHumano } from "./qualificacao"
+import { logger } from "@/lib/logger"
 
 function db() {
   return createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -91,6 +92,6 @@ export async function notificarEscalacao(params: HandoffParams): Promise<void> {
     // TODO: notificações reais por canal do trigger (whatsapp/slack/email).
     // Hoje a escalação já pausa a IA, move o lead e audita; o aviso ativo sai na Tarefa 3b.
   } catch (e) {
-    console.error("[IA] erro notificarEscalacao", e)
+    logger.error("[IA] erro notificarEscalacao", { error: e instanceof Error ? e.message : String(e) })
   }
 }

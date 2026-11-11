@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         indexed = { chunks: r.chunks, dim: r.dim, model: r.model, erro: r.chunks === 0 ? (r.erro ?? "embedding falhou para todos os chunks") : null }
       } catch (e: unknown) {
         indexed.erro = e instanceof Error ? e.message : String(e)
-        console.error("[KB] falha ao indexar", indexed.erro)
+        logger.error("[KB] falha ao indexar documento", { error: indexed.erro, docId })
       }
     }
     try {

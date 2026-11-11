@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { calcularReconciliacao } from "./reconciliation"
 import { MOCK_ACCOUNTS, mockCampaigns, mockInsights } from "./mock"
+import { logger } from "@/lib/logger"
 
 function db() {
   return createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -161,7 +162,7 @@ export async function executeMcpTool(name: string, args: Record<string, any> = {
             campanhas,
           }
         } catch (e: any) {
-          console.error("Meta API error in MCP, using fallback:", e.message)
+          logger.error("Meta API error in MCP, using fallback", { error: e.message })
         }
       }
 
@@ -199,7 +200,7 @@ export async function executeMcpTool(name: string, args: Record<string, any> = {
             insightsMeta = await metaFetchAll(`${BASE}/${formatted}/insights?level=campaign&fields=campaign_id,spend,impressions,clicks,ctr,cpc,actions&${range}&limit=100&access_token=${token}`)
           }
         } catch (e: any) {
-          console.warn("Meta API fallback in audit:", e.message)
+          logger.warn("Meta API fallback in audit", { error: e.message })
         }
       }
 

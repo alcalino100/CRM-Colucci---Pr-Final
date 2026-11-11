@@ -136,7 +136,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
       .from("automation_message_templates")
       .select("*")
       .order("created_at", { ascending: false })
-    if (data) setTemplates(data)
+    if (data) setTemplates(data as unknown as AutomationMessageTemplate[])
   }, [])
 
   const loadGlobalSettings = useCallback(async () => {
@@ -167,7 +167,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     const from = (filters?.page ?? 0) * (filters?.pageSize ?? 100)
     q = q.range(from, from + (filters?.pageSize ?? 100) - 1)
     const { data } = await q
-    if (data) setLogs(data)
+    if (data) setLogs(data as unknown as AutomationLog[])
   }, [])
 
   const loadLeadSettings = useCallback(async (leadId: string) => {

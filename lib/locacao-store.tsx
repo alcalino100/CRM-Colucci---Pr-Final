@@ -8,6 +8,7 @@ import { supabase } from "./supabase/client"
 import { useAuth } from "./auth-context"
 import { normalizePhone } from "./labels"
 import { normalizeLocacaoStatus } from "./locacao-labels"
+import { logger } from "@/lib/logger"
 
 interface NotifyOpts {
   tipo?: string
@@ -264,7 +265,7 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
       motivo_detalhe: e.motivoDetalhe ?? null,
     }).then(
       () => {},
-      (err) => console.warn("[auditoria] falha ao gravar:", err?.message ?? err),
+      (err) => logger.warn("[auditoria] falha ao gravar", { error: err?.message ?? err }),
     )
   }
 
@@ -321,7 +322,7 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
           await Promise.all(updates)
         }
       } catch (err) {
-        console.warn("[notificacoes] falha ao marcar lidas:", err)
+        logger.warn("[notificacoes] falha ao marcar lidas", { error: err })
       }
     })()
   }, [notifications, userId])

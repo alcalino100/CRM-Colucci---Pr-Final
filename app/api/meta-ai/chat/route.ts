@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -163,7 +164,7 @@ export async function POST(req: Request) {
           metaOk = true
         }
       } catch (e: any) {
-        console.error("Meta API error:", e.message)
+        logger.error("Meta API error in AI chat", { error: e.message })
       }
     }
 
@@ -206,7 +207,7 @@ export async function POST(req: Request) {
           ctr: g.impressoes ? (g.cliques / g.impressoes) * 100 : 0, cpc: g.cliques ? g.gasto / g.cliques : 0,
         })).sort((a, b) => b.gasto - a.gasto)
       } catch (e: any) {
-        console.error("Supabase error:", e.message)
+        logger.error("Supabase error in AI chat", { error: e.message })
       }
     }
 
@@ -256,7 +257,7 @@ ${adsStr || "(nenhum com dados)"}`
     // ---------- GEMINI ----------
     if (GEMINI_KEY) {
       if (GEMINI_KEY.length < 10) {
-        console.error("GEMINI_API_KEY parece inválida (muito curta)")
+        logger.error("GEMINI_API_KEY parece inválida (muito curta)")
       } else {
         try {
           const sistema = `Você é o consultor executivo de tráfego e inteligência de vendas da Imobiliária Colucci.
@@ -289,18 +290,18 @@ Mencione números e valores exatos em R$, destacando retorno sobre investimento 
             const text = cand?.content?.parts?.[0]?.text || ""
             const reason = cand?.finishReason || ""
             if (reason === "SAFETY") {
-              console.error("Gemini: bloqueado por segurança", JSON.stringify(cand?.safetyRatings))
+              logger.error("Gemini: bloqueado por segurança", { safetyRatings: cand?.safetyRatings })
             }
             if (text) {
               return NextResponse.json({ response: text + "\n\n— 🤖 Análise por IA Gemini" })
             }
-            console.error("Gemini: resposta vazia, finishReason:", reason, JSON.stringify(gemJson).slice(0, 300))
+            logger.error("Gemini: resposta vazia", { finishReason: reason })
           } else {
             const errText = await gemRes.text()
-            console.error("Gemini HTTP error:", gemRes.status, errText.slice(0, 500))
+            logger.error("Gemini HTTP error", { status: gemRes.status, errorText: errText.slice(0, 500) })
           }
         } catch (e) {
-          console.error("Gemini exception:", e)
+          logger.error("Gemini exception in meta AI chat", { error: e instanceof Error ? e.message : String(e) })
         }
       }
     }

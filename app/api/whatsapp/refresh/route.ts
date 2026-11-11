@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { evolutionConfig, mapConnectionState, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
+import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -91,7 +92,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ status, numero })
   } catch (err) {
     const cause = (err as any)?.cause?.code || (err as any)?.name || ""
-    console.log("[v0] whatsapp refresh error:", err instanceof Error ? err.message : String(err), cause)
+    logger.error("Erro ao atualizar instância WhatsApp", { error: err instanceof Error ? err.message : String(err), cause })
     return NextResponse.json({ status: fallbackStatus, numero: fallbackNumero, stale: true })
   }
 }

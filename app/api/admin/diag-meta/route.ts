@@ -34,7 +34,7 @@ export async function GET(req: Request) {
 
     const adMap = new Map((adsHoje ?? []).map((a) => [a.id, a]))
     const ades = (insightsAdHoje ?? []).map((r) => {
-      const ad = adMap.get(r.ad_id)
+      const ad = r.ad_id ? adMap.get(r.ad_id) : undefined
       return { ad_id: r.ad_id, nome: ad?.nome ?? r.ad_id, campanha_id: ad?.campanha_id ?? null, gasto: r.gasto, impressoes: r.impressoes, cliques: r.cliques, mensagens: r.mensagens_iniciadas }
     }).filter((a) => a.gasto > 0 || a.impressoes > 0).sort((a, b) => b.gasto - a.gasto)
 

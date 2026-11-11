@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Bot, X, Send, MessageSquare, Sparkles } from "lucide-react"
+import { renderSafeBoldText } from "@/lib/safe-markdown"
 
 interface Mensagem {
   role: "user" | "assistant"
@@ -57,10 +58,9 @@ export default function MetaAiChat() {
   function formatarTexto(texto: string) {
     return texto.split("\n").map((linha, i) => {
       if (linha.startsWith("•") || linha.startsWith("-")) {
-        return <p key={i} className="pl-2 text-sm leading-relaxed">{linha}</p>
+        return <p key={i} className="pl-2 text-sm leading-relaxed">{renderSafeBoldText(linha)}</p>
       }
-      const bold = linha.replace(/\*(.*?)\*/g, (_, t) => `<strong>${t}</strong>`)
-      return <p key={i} className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: bold }} />
+      return <p key={i} className="text-sm leading-relaxed">{renderSafeBoldText(linha)}</p>
     })
   }
 

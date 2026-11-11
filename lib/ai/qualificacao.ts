@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { generateAIResponse } from "./generateResponse"
 import { semTagsFluxo } from "@/lib/labels"
+import { logger } from "@/lib/logger"
 
 function db() {
   return createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -221,7 +222,7 @@ export async function finalizarParaHumano(params: {
       })
     } catch { /* log é best-effort */ }
   } catch (e) {
-    console.error("[IA] erro finalizarParaHumano", e)
+    logger.error("[IA] erro finalizarParaHumano", { error: e instanceof Error ? e.message : String(e) })
   }
 }
 

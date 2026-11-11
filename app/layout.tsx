@@ -40,7 +40,7 @@ export default async function RootLayout({
     `--sidebar-foreground:${brand.sidebar_fg}`,
     `--sidebar-accent:${brand.sidebar_accent}`,
     `--sidebar-border:${brand.sidebar_accent}`,
-  ].join(";")
+  ].join(";").replace(/[<>{}]/g, "")
   const bootJson = JSON.stringify({
     brand_name: brand.brand_name,
     logo_url: brand.logo_url,

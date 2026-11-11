@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 })
   }
 
-  const senhaOk = await bcrypt.compare(senha, data.senha_hash)
+  const senhaOk = data.senha_hash ? await bcrypt.compare(senha, data.senha_hash) : false
   if (!senhaOk) {
     return NextResponse.json({ ok: false }, { status: 401 })
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { logger } from "@/lib/logger"
 import { TAG_FOLLOWUP, TAG_NAO_RESPONDEU_AUTOMACAO, TAG_RESPONDEU_AUTOMACAO, comRef, normalizePhone, semRef } from "@/lib/labels"
 import { baixarEArmazenarMidia, detectarMidia, mapConnectionState, notifyDisconnection, onlyDigits, wsupabase, type MidiaDetectada } from "@/lib/whatsapp/server"
 import { registrarRespostaDeLead, registrarStatusEntrega } from "@/lib/automation-services"
@@ -623,7 +624,7 @@ async function handleMessageUpsert(payload: any) {
 
   // Se não foi possível mapear o corretor da instância, avisa e não prossegue
   if (!corretorId) {
-    console.warn(`[whatsapp-webhook] Instância "${instanceName}" sem corretor_id associado em whatsapp_instancias.`)
+    logger.warn("Instância sem corretor_id associado em whatsapp_instancias", { instanceName })
     return
   }
 
@@ -852,7 +853,7 @@ async function handleMessageUpsert(payload: any) {
       .maybeSingle()
 
     if (errInsert) {
-      console.error("[whatsapp-webhook] Erro ao inserir lead com rastreio:", errInsert)
+      logger.error("Erro ao inserir lead com rastreio no webhook WhatsApp", { error: errInsert.message })
       const resFallback = await wsupabase
         .from("leads")
         .insert(baseLead)
@@ -860,7 +861,7 @@ async function handleMessageUpsert(payload: any) {
         .maybeSingle()
       novo = resFallback.data
       if (resFallback.error) {
-        console.error("[whatsapp-webhook] Erro ao inserir lead fallback:", resFallback.error)
+        logger.error("Erro ao inserir lead fallback no webhook WhatsApp", { error: resFallback.error.message })
         const resMin = await wsupabase
           .from("leads")
           .insert({
@@ -1016,7 +1017,7 @@ export async function POST(request: Request) {
 
     return ok()
   } catch (error) {
-    console.log("[v0] whatsapp webhook error:", error instanceof Error ? error.message : String(error))
+    logger.error("Erro no webhook WhatsApp", { error: error instanceof Error ? error.message : String(error) })
     return ok()
   }
 }
