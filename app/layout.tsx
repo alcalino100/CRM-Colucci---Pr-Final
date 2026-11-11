@@ -53,6 +53,7 @@ export default async function RootLayout({
       <head>
         <style dangerouslySetInnerHTML={{ __html: `:root{${bootStyle}}` }} />
         <script dangerouslySetInnerHTML={{ __html: `window.__BRAND__=${bootJson}` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var d=document.documentElement;if(window.matchMedia('(prefers-color-scheme: dark)').matches){d.classList.add('dark')}window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(e){d.classList.toggle('dark',e.matches)})}catch(e){}})()` }} />
       </head>
       <body className="font-sans antialiased">
         <AuthProvider>{children}</AuthProvider>

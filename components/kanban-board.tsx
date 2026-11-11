@@ -551,30 +551,31 @@ export function KanbanBoard({
     <>
       {/* Banner Visual de Leads Reativados para a Corretora / Gestor */}
       {leadsReativados.length > 0 && (
-        <div className="relative mb-3 flex flex-col gap-3 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-500/15 via-amber-100/70 to-card p-4 text-amber-950 shadow-md dark:from-amber-950/50 dark:via-card dark:to-card dark:text-amber-100 dark:border-amber-500">
+        <div className="relative mb-3 flex flex-col gap-3 rounded-xl border-2 border-amber-500 bg-card p-4 text-foreground shadow-md transition-colors dark:border-amber-400 dark:bg-card">
+          <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1 rounded-t-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500" />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm ring-2 ring-amber-400/40">
                 <Sparkles className="size-5" />
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-display font-bold text-base text-amber-950 dark:text-amber-100">
+                  <span className="font-display font-bold text-base text-foreground">
                     {leadsReativados.length === 1
                       ? `🔔 1 Lead Reativado no seu funil: ${leadsReativados[0].nome}`
                       : `🔔 ${leadsReativados.length} Leads Reativados aguardando retomada de contato!`}
                   </span>
-                  <Badge variant="amber" className="font-extrabold border border-amber-500/40 text-amber-900 bg-amber-300/80 dark:bg-amber-900 dark:text-amber-200">
+                  <span className="inline-flex items-center rounded-full border border-amber-500/60 bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300">
                     Retomar Contato
-                  </Badge>
+                  </span>
                 </div>
-                <p className="mt-1 text-xs text-amber-900/90 dark:text-amber-200/90 leading-relaxed">
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
                   {leadsReativados.length === 1 ? (
                     <>
-                      O lead <strong className="font-semibold underline">{leadsReativados[0].nome}</strong> retornou ao funil como &quot;Novo Lead&quot; com o <strong>bloco destacado em cor âmbar</strong>.
+                      O lead <strong className="font-semibold text-foreground underline">{leadsReativados[0].nome}</strong> retornou ao funil como &quot;Novo Lead&quot; com o bloco destacado em dourado.
                     </>
                   ) : (
-                    "Estes leads atingiram a data programada de compra e retornaram com destaque âmbar na coluna Novo Lead."
+                    "Estes leads atingiram a data programada de compra e retornaram como \"Novo Lead\" com bloco destacado em dourado."
                   )}
                 </p>
               </div>
@@ -586,8 +587,8 @@ export function KanbanBoard({
                 className={cn(
                   "font-bold shadow-sm transition-all",
                   filterReativados
-                    ? "bg-slate-800 text-white hover:bg-slate-900 dark:bg-slate-200 dark:text-slate-900"
-                    : "bg-amber-600 text-white hover:bg-amber-700"
+                    ? "border border-border bg-muted text-foreground hover:bg-muted/80"
+                    : "bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-500 dark:text-stone-950 dark:font-extrabold dark:hover:bg-amber-400"
                 )}
                 onClick={() => setFilterReativados((p) => !p)}
               >
@@ -629,7 +630,7 @@ export function KanbanBoard({
               onClick={() => setFilterReativados((p) => !p)}
               className={chip(
                 filterReativados,
-                "border-amber-500 bg-amber-500 text-white font-bold shadow-sm"
+                "border-amber-500 bg-amber-500 text-white dark:text-stone-950 font-bold shadow-sm"
               )}
             >
               <Sparkles className="size-3.5 inline mr-1" />

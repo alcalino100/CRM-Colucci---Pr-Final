@@ -736,7 +736,7 @@ export default function ArquivadosPage() {
                             </span>
                           )}
                           {lead.consentimentoContato === false && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 border border-amber-200">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-500/15 rounded px-1.5 py-0.5 border border-amber-500/30 dark:text-amber-300 dark:bg-amber-950/40">
                               <ShieldAlert className="size-2.5" />
                               Confirmar consentimento
                             </span>
@@ -778,8 +778,8 @@ export default function ArquivadosPage() {
                         <div className="flex flex-col gap-0.5">
                           <span
                             className={cn(
-                              "font-semibold text-xs",
-                              isVencido ? "text-red-600 font-bold" : "text-amber-700"
+                              "text-xs font-semibold",
+                              isVencido ? "text-destructive font-bold" : "text-amber-600 dark:text-amber-400"
                             )}
                           >
                             {fmtDataBr(lead.dataReaparecimento)}
