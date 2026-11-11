@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, Camera, Users, Megaphone, Store, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send, Archive, ArchiveRestore, Plus } from "lucide-react"
+import { AlertTriangle, AlertCircle, Camera, Users, Megaphone, Store, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send, Archive, ArchiveRestore, Plus } from "lucide-react"
 import { Badge } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
 import { usePresenca } from "@/lib/presence"
@@ -98,6 +98,32 @@ export function LeadCard({
       lead.gestorResponsavel && "ring-1 ring-violet-400/40",
     )}>
       {overdue && <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2 py-1.5 text-xs font-semibold text-destructive"><AlertTriangle className="size-3.5" /> Follow-up pendente</div>}
+      {lead.reativadoEm && (
+        <div className="mb-2 flex items-center justify-between gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200">
+          <span className="flex items-center gap-1.5">
+            <ArchiveRestore className="size-3.5 text-amber-600 dark:text-amber-400" />
+            Reativado em {fmtDate(lead.reativadoEm)}
+          </span>
+          {lead.reativacoesCount && lead.reativacoesCount > 1 ? (
+            <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-800 dark:text-amber-300">
+              {lead.reativacoesCount}x
+            </span>
+          ) : null}
+        </div>
+      )}
+      {lead.arquivadoEm && (
+        <div className="mb-2 flex items-center justify-between gap-1.5 rounded-lg border border-slate-300 bg-slate-100 px-2 py-1.5 text-xs font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <span className="flex items-center gap-1.5">
+            <Archive className="size-3.5 text-slate-500" />
+            Arquivado {lead.dataReaparecimento ? `(retorna ${fmtDate(lead.dataReaparecimento)})` : ""}
+          </span>
+        </div>
+      )}
+      {lead.consentimentoContato === false && (
+        <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-700 dark:text-red-300">
+          <AlertCircle className="size-3.5" /> Confirmar consentimento antes de contatar
+        </div>
+      )}
       {gestorNome && (
         <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-violet-100 px-2 py-1.5 text-xs font-semibold text-violet-700">
           <UserCheck className="size-3.5" /> Assumido por {gestorNome}
@@ -162,7 +188,7 @@ export function LeadCard({
                         <Send className="size-3.5" /> Enviar ao Meta
                       </button>
                     )}
-                    {isGestor && lead.status === "fechado" && !lead.arquivadoEm && (
+                    {!lead.arquivadoEm && (
                       <button
                         type="button"
                         onClick={(e) => { stop(e); setMenu(false); onArquivar?.(lead) }}
@@ -171,7 +197,7 @@ export function LeadCard({
                         <Archive className="size-3.5" /> Arquivar
                       </button>
                     )}
-                    {isGestor && lead.arquivadoEm && (
+                    {lead.arquivadoEm && (
                       <button
                         type="button"
                         onClick={(e) => { stop(e); setMenu(false); onDesarquivar?.(lead) }}

@@ -4,13 +4,16 @@ import { useState, use } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import useSWR from "swr"
-import { ArrowLeft, Clock, MessageSquarePlus, Phone, Mail, Home, ShieldCheck, Megaphone, Zap } from "lucide-react"
+import { ArrowLeft, Clock, MessageSquarePlus, Phone, Mail, Home, ShieldCheck, Megaphone, Zap, Archive, ArchiveRestore, Sparkles, AlertTriangle, ShieldAlert } from "lucide-react"
 import { queryFiltros } from "@/lib/leads-filtros"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel, podeVendas } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { Button } from "@/components/ui/button"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Select, Textarea, useToast } from "@/components/ui/primitives"
+import { ArquivarLeadDialog } from "@/components/arquivar-lead-dialog"
+import { MOTIVO_ARQUIVAMENTO_LABEL } from "@/lib/mock-data"
+import { cn } from "@/lib/utils"
 
 const metaFetcher = (u: string) => fetch(u).then((r) => r.json())
 import { AUDIT_TIPO_LABEL, AUDIT_TIPO_VARIANT, brl, fmtDateTime, STATUS_LABEL, STATUS_VARIANT, TEMP_LABEL, TEMP_VARIANT } from "@/lib/labels"
@@ -32,14 +35,19 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     }
     return "/painel-corretor"
   })()
-  const { getLead, addInteraction, qualityNotes, audit, addQualityNote } = useLeads()
+  const { getLead, addInteraction, qualityNotes, audit, addQualityNote, desarquivarLead, arquivarLeadComData, users } = useLeads()
   const toast = useToast()
   const [nota, setNota] = useState("")
   const [qualiTexto, setQualiTexto] = useState("")
+  const [arquivarOpen, setArquivarOpen] = useState(false)
+  const [desarquivando, setDesarquivando] = useState(false)
   const lead = getLead(id)
   if (!user || !podeVendas(user.role)) return null
   const isGestor = isGestorNivel(user.role)
+  const isOwner = lead ? lead.corretorId === user.id : false
+  const podeGerenciarArquivo = isGestor || isOwner
   const leadQuality = qualityNotes.filter((q) => q.leadId === id)
+  const corretorNome = lead ? (users.find((u) => u.id === lead.corretorId)?.nome || "—") : "—"
 
   if (!lead) {
     return (
@@ -48,6 +56,34 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         <Link href={voltarHref}><Button variant="outline"><ArrowLeft className="size-4" /> Voltar</Button></Link>
       </div>
     )
+  }
+
+  const isArquivado = Boolean(lead.arquivadoEm)
+  const isReativado = Boolean(lead.reativadoEm)
+  const fmtDataBr = (d?: string | null) => {
+    if (!d) return "—"
+    const raw = d.split("T")[0]
+    const p = raw.split("-")
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : raw
+  }
+  const getMotivoLabel = (m?: string | null) => {
+    if (!m) return "—"
+    return (MOTIVO_ARQUIVAMENTO_LABEL as Record<string, string>)[m] || m
+  }
+
+  async function handleDesarquivar() {
+    if (!lead) return
+    setDesarquivando(true)
+    try {
+      const res = await desarquivarLead(lead.id)
+      if (res.ok) {
+        toast("Lead desarquivado com sucesso!")
+      } else {
+        toast(res.error || "Erro ao desarquivar lead.", "error")
+      }
+    } finally {
+      setDesarquivando(false)
+    }
   }
 
   function salvarNota() {
@@ -105,19 +141,116 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Link href={voltarHref} className="rounded-md p-2 text-muted-foreground hover:bg-muted" aria-label="Voltar"><ArrowLeft className="size-5" /></Link>
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-display text-2xl font-bold">
-              <span className="text-foreground">{lead.nome}</span>
-            </h1>
-            <Badge variant={STATUS_VARIANT[lead.status]}>{STATUS_LABEL[lead.status]}</Badge>
-            <Badge variant={TEMP_VARIANT[lead.temperatura]}>{TEMP_LABEL[lead.temperatura]}</Badge>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Link href={voltarHref} className="rounded-md p-2 text-muted-foreground hover:bg-muted" aria-label="Voltar"><ArrowLeft className="size-5" /></Link>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-display text-2xl font-bold">
+                <span className="text-foreground">{lead.nome}</span>
+              </h1>
+              <Badge variant={STATUS_VARIANT[lead.status]}>{STATUS_LABEL[lead.status]}</Badge>
+              <Badge variant={TEMP_VARIANT[lead.temperatura]}>{TEMP_LABEL[lead.temperatura]}</Badge>
+              {isArquivado && (
+                <Badge variant="amber" className="flex items-center gap-1 font-semibold">
+                  <Archive className="size-3" />
+                  Arquivado até {fmtDataBr(lead.dataReaparecimento)}
+                </Badge>
+              )}
+              {isReativado && !isArquivado && (
+                <Badge variant="amber" className="flex items-center gap-1 font-semibold text-amber-800 bg-amber-100 border border-amber-300">
+                  <Sparkles className="size-3 text-amber-600" />
+                  Reativado em {fmtDataBr(lead.reativadoEm)}
+                  {(lead.reativacoesCount ?? 1) > 1 && (
+                    <span className="ml-1 rounded bg-amber-200/80 px-1 text-[10px] font-bold">
+                      {lead.reativacoesCount}x
+                    </span>
+                  )}
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">Ficha de atendimento</p>
           </div>
-          <p className="text-sm text-muted-foreground">Ficha de atendimento</p>
         </div>
+
+        {podeGerenciarArquivo && (
+          <div className="flex items-center gap-2">
+            {isArquivado ? (
+              <Button
+                variant="outline"
+                className="gap-2 border-emerald-600/30 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                onClick={handleDesarquivar}
+                disabled={desarquivando}
+              >
+                <ArchiveRestore className="size-4" />
+                {desarquivando ? "Desarquivando..." : "Desarquivar agora"}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="gap-2 border-amber-600/30 text-amber-800 hover:bg-amber-50"
+                onClick={() => setArquivarOpen(true)}
+              >
+                <Archive className="size-4 text-amber-600" />
+                Arquivar com Data
+              </Button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Banner de Aviso de Reativação Automática */}
+      {isReativado && !isArquivado && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 shadow-sm" role="status">
+          <Sparkles className="size-5 shrink-0 text-amber-600 mt-0.5" />
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-semibold">Lead Reativado Automaticamente</span>
+            <p>
+              Este lead foi arquivado em <strong>{fmtDataBr(lead.arquivadoEm || lead.criadoEm)}</strong>
+              {lead.arquivadoPor ? ` por ${lead.arquivadoPor}` : corretorNome ? ` por ${corretorNome}` : ""}
+              {lead.dataReaparecimento ? <> com a previsão de compra para <strong>{fmtDataBr(lead.dataReaparecimento)}</strong>.</> : "."}
+              {lead.motivoArquivamento && (
+                <> Motivo: <strong>{getMotivoLabel(lead.motivoArquivamento)}</strong>.</>
+              )}
+            </p>
+            {lead.observacaoArquivamento && (
+              <p className="text-xs text-amber-800/80 italic mt-0.5">Observação original: &ldquo;{lead.observacaoArquivamento}&rdquo;</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Banner de Aviso de Arquivamento Ativo */}
+      {isArquivado && (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-300 bg-blue-50 p-4 text-blue-900 shadow-sm" role="status">
+          <Archive className="size-5 shrink-0 text-blue-600 mt-0.5" />
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-semibold">Lead em Hibernação Programada (Arquivado)</span>
+            <p>
+              Data prevista para reaparecer no funil: <strong>{fmtDataBr(lead.dataReaparecimento)}</strong>
+              {lead.motivoArquivamento && (
+                <> · Motivo: <strong>{getMotivoLabel(lead.motivoArquivamento)}</strong></>
+              )}
+            </p>
+            {lead.observacaoArquivamento && (
+              <p className="text-xs text-blue-800/80 italic mt-0.5">Observação: &ldquo;{lead.observacaoArquivamento}&rdquo;</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Banner de Consentimento LGPD */}
+      {lead.consentimentoContato === false && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-400 bg-amber-100/70 p-3.5 text-amber-950 shadow-sm" role="alert">
+          <ShieldAlert className="size-5 shrink-0 text-amber-700" />
+          <div className="flex flex-col text-sm">
+            <span className="font-semibold text-amber-900">Atenção LGPD: Confirmar consentimento antes de contatar</span>
+            <span className="text-xs text-amber-800">
+              O consentimento prévio para contato não foi registrado ou expirou. Confirme a autorização com o titular antes de realizar chamadas ou mensagens.
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">
@@ -145,6 +278,32 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Valor negociação</span><span className="font-medium">{brl(lead.valorNegociacao)}</span>
             </div>
+            {lead.motivoArquivamento && (
+              <div className="flex items-center justify-between border-t border-border pt-3">
+                <span className="text-muted-foreground">Motivo arquivamento</span>
+                <span className="font-medium">{getMotivoLabel(lead.motivoArquivamento)}</span>
+              </div>
+            )}
+            {lead.dataReaparecimento && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Previsão reaparecimento</span>
+                <span className="font-medium text-amber-700">{fmtDataBr(lead.dataReaparecimento)}</span>
+              </div>
+            )}
+            {lead.reativadoEm && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Reativado em</span>
+                <span className="font-medium">{fmtDataBr(lead.reativadoEm)}</span>
+              </div>
+            )}
+            {lead.consentimentoContato !== undefined && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Consentimento LGPD</span>
+                <span className={cn("font-medium", lead.consentimentoContato ? "text-emerald-700" : "text-amber-700")}>
+                  {lead.consentimentoContato ? "Confirmado" : "Pendente confirmação"}
+                </span>
+              </div>
+            )}
             {lead.observacoes && <p className="rounded-lg bg-muted p-3 text-muted-foreground">{lead.observacoes}</p>}
             {lead.origem === "Tráfego Pago" && <MetaLink leadId={lead.id} atual={lead.metaCampaignId} />}
           </CardContent>
@@ -241,6 +400,26 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           </CardContent>
         </Card>
       )}
+
+      {/* Dialog de Arquivamento */}
+      <ArquivarLeadDialog
+        lead={arquivarOpen ? lead : null}
+        open={arquivarOpen}
+        onClose={() => setArquivarOpen(false)}
+        onConfirm={async ({ motivo, dataReaparecimento, observacao }) => {
+          if (!lead) return
+          const res = await arquivarLeadComData(lead.id, {
+            motivo,
+            dataReaparecimento,
+            observacao,
+          })
+          if (!res.ok) {
+            toast(res.error || "Erro ao arquivar lead.", "error")
+            return
+          }
+          toast("Lead arquivado com sucesso.")
+        }}
+      />
     </div>
   )
 }
