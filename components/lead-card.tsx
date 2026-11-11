@@ -97,7 +97,7 @@ export function LeadCard({
     <div className={cn(
       "group relative rounded-xl border p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
       isReativado
-        ? "border-2 border-amber-500 bg-card ring-2 ring-amber-400/40 shadow-md shadow-amber-500/10 dark:border-amber-400 dark:bg-card dark:ring-amber-400/30"
+        ? "border-2 border-amber-500 bg-amber-500/[0.08] ring-2 ring-amber-400/40 shadow-md shadow-amber-500/10 dark:border-amber-400 dark:bg-amber-500/[0.12] dark:ring-amber-400/30"
         : overdue
         ? "border-destructive/50 bg-card ring-1 ring-destructive/20"
         : "border-border bg-card hover:border-primary/30",
@@ -229,12 +229,21 @@ export function LeadCard({
           )}
         </div>
       </div>
-      <div className="mt-2 flex flex-col gap-1.5 text-xs text-muted-foreground">
+      <div className={cn(
+        "mt-2 flex flex-col gap-1.5 text-xs",
+        isReativado ? "text-foreground font-medium dark:text-stone-100" : "text-muted-foreground"
+      )}>
         {lead.telefone && (
-          <span className="flex items-center gap-1.5"><Phone className="size-3.5" />{lead.telefone}</span>
+          <span className="flex items-center gap-1.5">
+            <Phone className={cn("size-3.5 shrink-0", isReativado ? "text-amber-600 dark:text-amber-400" : "")} />
+            {lead.telefone}
+          </span>
         )}
         {lead.observacoes?.trim() ? (
-          <span className="flex items-start gap-1.5"><MessageSquare className="mt-0.5 size-3.5 shrink-0" /><span className="line-clamp-2">{lead.observacoes.trim()}</span></span>
+          <span className="flex items-start gap-1.5">
+            <MessageSquare className={cn("mt-0.5 size-3.5 shrink-0", isReativado ? "text-amber-600 dark:text-amber-400" : "")} />
+            <span className="line-clamp-2">{lead.observacoes.trim()}</span>
+          </span>
         ) : (
           <span className="flex items-center gap-1.5 italic opacity-70"><MessageSquare className="size-3.5" />Sem observação</span>
         )}
