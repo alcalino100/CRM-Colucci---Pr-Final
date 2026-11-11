@@ -551,11 +551,11 @@ export function KanbanBoard({
     <>
       {/* Banner Visual de Leads Reativados para a Corretora / Gestor */}
       {leadsReativados.length > 0 && (
-        <div className="relative mb-3 flex flex-col gap-3 rounded-xl border-2 border-amber-500 bg-card p-4 text-foreground shadow-md transition-colors dark:border-amber-400 dark:bg-card">
+        <div className="relative mb-3 flex flex-col gap-3 rounded-xl border-2 border-amber-500 bg-amber-500/[0.08] p-4 text-foreground shadow-md transition-colors dark:border-amber-400 dark:bg-amber-500/[0.12]">
           <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1 rounded-t-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500" />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm ring-2 ring-amber-400/40">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-stone-950 shadow-sm ring-2 ring-amber-400/40">
                 <Sparkles className="size-5" />
               </div>
               <div>
@@ -569,7 +569,7 @@ export function KanbanBoard({
                     Retomar Contato
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                <p className="mt-1 text-xs text-foreground/80 dark:text-stone-300 leading-relaxed">
                   {leadsReativados.length === 1 ? (
                     <>
                       O lead <strong className="font-semibold text-foreground underline">{leadsReativados[0].nome}</strong> retornou ao funil como &quot;Novo Lead&quot; com o bloco destacado em dourado.
@@ -588,7 +588,7 @@ export function KanbanBoard({
                   "font-bold shadow-sm transition-all",
                   filterReativados
                     ? "border border-border bg-muted text-foreground hover:bg-muted/80"
-                    : "bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-500 dark:text-stone-950 dark:font-extrabold dark:hover:bg-amber-400"
+                    : "bg-amber-500 text-stone-950 font-extrabold hover:bg-amber-400 dark:bg-amber-400 dark:text-stone-950 dark:hover:bg-amber-300"
                 )}
                 onClick={() => setFilterReativados((p) => !p)}
               >
@@ -630,7 +630,7 @@ export function KanbanBoard({
               onClick={() => setFilterReativados((p) => !p)}
               className={chip(
                 filterReativados,
-                "border-amber-500 bg-amber-500 text-white dark:text-stone-950 font-bold shadow-sm"
+                "border-amber-500 bg-amber-500 text-stone-950 font-bold shadow-sm dark:bg-amber-400 dark:text-stone-950"
               )}
             >
               <Sparkles className="size-3.5 inline mr-1" />
