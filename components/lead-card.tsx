@@ -97,23 +97,23 @@ export function LeadCard({
     <div className={cn(
       "group relative rounded-xl border p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
       isReativado
-        ? "border-amber-400/90 bg-gradient-to-b from-amber-100/70 via-amber-50/40 to-card ring-2 ring-amber-400/40 shadow-amber-500/10 dark:from-amber-950/40 dark:via-card dark:border-amber-500/80 dark:ring-amber-500/30"
+        ? "border-2 border-amber-500 bg-card ring-2 ring-amber-400/40 shadow-md shadow-amber-500/10 dark:border-amber-400 dark:bg-card dark:ring-amber-400/30"
         : overdue
         ? "border-destructive/50 bg-card ring-1 ring-destructive/20"
         : "border-border bg-card hover:border-primary/30",
       lead.gestorResponsavel && !isReativado && "ring-1 ring-violet-400/40",
     )}>
       {isReativado && (
-        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1.5 rounded-t-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 shadow-sm" />
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1.5 rounded-t-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 shadow-sm" />
       )}
       {overdue && <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2 py-1.5 text-xs font-semibold text-destructive"><AlertTriangle className="size-3.5" /> Follow-up pendente</div>}
       {isReativado && (
-        <div className="mb-2.5 flex items-center justify-between gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/20 px-2.5 py-1.5 text-xs font-bold text-amber-950 dark:text-amber-100 shadow-sm">
+        <div className="mb-2.5 flex items-center justify-between gap-1.5 rounded-lg border border-amber-500/60 bg-amber-500/15 px-2.5 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 shadow-sm">
           <span className="flex items-center gap-1.5">
             <ArchiveRestore className="size-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <span>REATIVADO • {fmtDate(lead.reativadoEm || "")}</span>
           </span>
-          <span className="rounded-full bg-amber-600/25 px-2 py-0.5 text-[10px] font-extrabold text-amber-950 dark:text-amber-200 uppercase tracking-wide">
+          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 dark:text-amber-300 uppercase tracking-wide">
             {lead.reativacoesCount && lead.reativacoesCount > 1 ? `${lead.reativacoesCount}ª vez` : "Retomar contato"}
           </span>
         </div>

@@ -201,20 +201,27 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Banner de Aviso de Reativação Automática */}
       {isReativado && !isArquivado && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 shadow-sm" role="status">
-          <Sparkles className="size-5 shrink-0 text-amber-600 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-xl border-2 border-amber-500 bg-card p-4 text-foreground shadow-sm dark:border-amber-400 dark:bg-card" role="status">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm mt-0.5 ring-2 ring-amber-400/40">
+            <Sparkles className="size-5" />
+          </div>
           <div className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold">Lead Reativado Automaticamente</span>
-            <p>
-              Este lead foi arquivado em <strong>{fmtDataBr(lead.arquivadoEm || lead.criadoEm)}</strong>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-base text-foreground">Lead Reativado Automaticamente</span>
+              <span className="inline-flex items-center rounded-full border border-amber-500/60 bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                Retomar Contato
+              </span>
+            </div>
+            <p className="text-muted-foreground leading-relaxed">
+              Este lead foi arquivado em <strong className="text-foreground">{fmtDataBr(lead.arquivadoEm || lead.criadoEm)}</strong>
               {lead.arquivadoPor ? ` por ${lead.arquivadoPor}` : corretorNome ? ` por ${corretorNome}` : ""}
-              {lead.dataReaparecimento ? <> com a previsão de compra para <strong>{fmtDataBr(lead.dataReaparecimento)}</strong>.</> : "."}
+              {lead.dataReaparecimento ? <> com a previsão de compra para <strong className="text-foreground">{fmtDataBr(lead.dataReaparecimento)}</strong>.</> : "."}
               {lead.motivoArquivamento && (
-                <> Motivo: <strong>{getMotivoLabel(lead.motivoArquivamento)}</strong>.</>
+                <> Motivo: <strong className="text-foreground">{getMotivoLabel(lead.motivoArquivamento)}</strong>.</>
               )}
             </p>
             {lead.observacaoArquivamento && (
-              <p className="text-xs text-amber-800/80 italic mt-0.5">Observação original: &ldquo;{lead.observacaoArquivamento}&rdquo;</p>
+              <p className="text-xs text-muted-foreground/80 italic mt-0.5">Observação original: &ldquo;{lead.observacaoArquivamento}&rdquo;</p>
             )}
           </div>
         </div>
@@ -222,18 +229,20 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Banner de Aviso de Arquivamento Ativo */}
       {isArquivado && (
-        <div className="flex items-start gap-3 rounded-xl border border-blue-300 bg-blue-50 p-4 text-blue-900 shadow-sm" role="status">
-          <Archive className="size-5 shrink-0 text-blue-600 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-xl border-2 border-sky-500/80 bg-card p-4 text-foreground shadow-sm dark:border-sky-400 dark:bg-card" role="status">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm mt-0.5">
+            <Archive className="size-5" />
+          </div>
           <div className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold">Lead em Hibernação Programada (Arquivado)</span>
-            <p>
-              Data prevista para reaparecer no funil: <strong>{fmtDataBr(lead.dataReaparecimento)}</strong>
+            <span className="font-bold text-base text-foreground">Lead em Hibernação Programada (Arquivado)</span>
+            <p className="text-muted-foreground leading-relaxed">
+              Data prevista para reaparecer no funil: <strong className="text-foreground">{fmtDataBr(lead.dataReaparecimento)}</strong>
               {lead.motivoArquivamento && (
-                <> · Motivo: <strong>{getMotivoLabel(lead.motivoArquivamento)}</strong></>
+                <> · Motivo: <strong className="text-foreground">{getMotivoLabel(lead.motivoArquivamento)}</strong></>
               )}
             </p>
             {lead.observacaoArquivamento && (
-              <p className="text-xs text-blue-800/80 italic mt-0.5">Observação: &ldquo;{lead.observacaoArquivamento}&rdquo;</p>
+              <p className="text-xs text-muted-foreground/80 italic mt-0.5">Observação: &ldquo;{lead.observacaoArquivamento}&rdquo;</p>
             )}
           </div>
         </div>
@@ -241,11 +250,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Banner de Consentimento LGPD */}
       {lead.consentimentoContato === false && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-400 bg-amber-100/70 p-3.5 text-amber-950 shadow-sm" role="alert">
-          <ShieldAlert className="size-5 shrink-0 text-amber-700" />
+        <div className="flex items-center gap-3 rounded-xl border-2 border-amber-500/80 bg-card p-3.5 text-foreground shadow-sm dark:border-amber-400 dark:bg-card" role="alert">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm">
+            <ShieldAlert className="size-5" />
+          </div>
           <div className="flex flex-col text-sm">
-            <span className="font-semibold text-amber-900">Atenção LGPD: Confirmar consentimento antes de contatar</span>
-            <span className="text-xs text-amber-800">
+            <span className="font-bold text-foreground">Atenção LGPD: Confirmar consentimento antes de contatar</span>
+            <span className="text-xs text-muted-foreground">
               O consentimento prévio para contato não foi registrado ou expirou. Confirme a autorização com o titular antes de realizar chamadas ou mensagens.
             </span>
           </div>
