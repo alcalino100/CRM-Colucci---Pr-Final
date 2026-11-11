@@ -37,10 +37,10 @@ jobs:
       - name: Instalar pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Configurar Node.js (v20) com Cache do pnpm
+      - name: Configurar Node.js (v22) com Cache do pnpm
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "pnpm"
 
       - name: Instalar Dependências
