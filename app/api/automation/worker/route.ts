@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { NextResponse } from "next/server"
+import { logger } from "@/lib/logger"
 import {
   getActiveAutomations,
   getJobsToProcess,
@@ -177,7 +178,7 @@ async function criarJobsFollowup(automation: any, results: { created: number }, 
 
     // Verifica se houve interação humana recente após o envio do D+2
     const ultima = await getLastHumanInteraction(d2.lead_id)
-    if (ultima.timestamp && new Date(ultima.timestamp).getTime() > new Date(d2.sent_at).getTime()) {
+    if (ultima.timestamp && d2.sent_at && new Date(ultima.timestamp).getTime() > new Date(d2.sent_at).getTime()) {
       continue
     }
 
@@ -248,7 +249,7 @@ async function criarJobsFollowup(automation: any, results: { created: number }, 
 
     // Verifica se houve interação humana recente após o envio do D+1
     const ultima = await getLastHumanInteraction(d1.lead_id)
-    if (ultima.timestamp && new Date(ultima.timestamp).getTime() > new Date(d1.sent_at).getTime()) {
+    if (ultima.timestamp && d1.sent_at && new Date(ultima.timestamp).getTime() > new Date(d1.sent_at).getTime()) {
       continue
     }
 
@@ -1087,7 +1088,7 @@ export async function runWorker() {
         }
 
         const rendered = renderMessage(template.content, {
-          lead: { nome: lead.nome, telefone: lead.telefone, origem: lead.origem },
+          lead: { nome: lead.nome, telefone: lead.telefone, origem: lead.origem ?? undefined },
           corretor: { nome: corretorNome },
           imobiliaria: nomeImobiliaria,
         })
@@ -1319,7 +1320,7 @@ export async function runWorker() {
                 payload: { lead_novo_status: "em_followup" },
               })
             } catch (errContencao) {
-              console.error("Erro pós-envio contenção IA:", errContencao)
+              logger.error("Erro pós-envio contenção IA", { error: errContencao })
             }
           }
         } else {

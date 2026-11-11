@@ -1,8 +1,9 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase/config"
+import type { Database } from "@/lib/supabase/database.types"
 
 // Cliente Supabase server-side (sem sessão persistida)
-export const wsupabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+export const wsupabase: SupabaseClient<Database> = createClient<Database>(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
 
 // Configuração da Evolution API. A chave fica em EVOLUTION_API_KEY_2 (com fallback).
 export function evolutionConfig() {
@@ -13,10 +14,10 @@ export function evolutionConfig() {
 
 // Cliente privilegiado para gravar no Storage (a chave publishable não tem permissão de
 // escrita em objetos; o webhook roda no servidor e pode usar a chave secreta).
-function storageClient() {
+function storageClient(): SupabaseClient<Database> | null {
   const secret = process.env.SUPABASE_SECRET_KEY
   if (!secret) return null
-  return createClient(SUPABASE_URL, secret, { auth: { persistSession: false } })
+  return createClient<Database>(SUPABASE_URL, secret, { auth: { persistSession: false } })
 }
 
 // ---------------------------------------------------------------------------

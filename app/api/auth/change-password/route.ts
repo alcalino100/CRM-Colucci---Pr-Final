@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Usuário não encontrado." }, { status: 404 })
   }
 
-  const senhaAtualOk = await bcrypt.compare(senhaAtual, data.senha_hash)
+  const senhaAtualOk = data.senha_hash ? await bcrypt.compare(senhaAtual, data.senha_hash) : false
   if (!senhaAtualOk) {
     return NextResponse.json({ ok: false, error: "Senha atual incorreta." }, { status: 401 })
   }
