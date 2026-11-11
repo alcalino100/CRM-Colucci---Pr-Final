@@ -1,0 +1,59 @@
+name: CI - Integridade e Qualidade
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Typecheck, Lint, Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Variáveis de ambiente FAKE para execução segura de build sem segredos reais
+      NEXT_PUBLIC_SUPABASE_URL: "https://fake-ci-project.supabase.co"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "fake-ci-anon-key-00000000000000000000000000000000"
+      SUPABASE_SECRET_KEY: "fake-ci-service-key-00000000000000000000000000000000"
+      CRON_SECRET: "fake-ci-cron-secret"
+      ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      NEXT_PUBLIC_MASTER_EMAIL: "ci@colucciimoveis.com.br"
+      OPENAI_API_KEY: "fake-openai-ci-key"
+      EVOLUTION_API_URL: "https://fake-evolution.ci"
+      EVOLUTION_API_KEY: "fake-evolution-key"
+      WHATSAPP_WEBHOOK_SECRET: "fake-webhook-secret"
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Configurar Node.js (v22) com Cache do pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Instalar Dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Checagem de Tipos (TypeScript)
+        run: pnpm typecheck
+
+      - name: Análise de Código (ESLint)
+        run: pnpm lint
+
+      - name: Testes Unitários e Isolados (Vitest)
+        run: pnpm test
+
+      - name: Build de Produção (Next.js)
+        run: pnpm build
