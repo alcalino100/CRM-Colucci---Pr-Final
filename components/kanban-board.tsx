@@ -7,6 +7,7 @@ import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-p
 import { Button } from "@/components/ui/button"
 import { Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
 import { LeadCard } from "@/components/lead-card"
+import { ArquivarLeadDialog } from "@/components/arquivar-lead-dialog"
 import { LeadForm, type LeadFormValues } from "@/components/lead-form"
 import { useSaleCelebration, SESSION_ID } from "@/components/sale-celebration"
 import { supabase } from "@/lib/supabase/client"
@@ -42,7 +43,7 @@ export function KanbanBoard({
   isGestor?: boolean
   heightClass?: string
 }) {
-  const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, assumirLead, visits, corretores, userName } = useLeads()
+  const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, assumirLead, visits, corretores, userName, arquivarLeadComData, desarquivarLead: storeDesarquivarLead } = useLeads()
   const { user } = useAuth()
   const visitante = isSomenteLeitura(user?.role)
   const router = useRouter()
@@ -458,23 +459,16 @@ export function KanbanBoard({
 
   async function handleDesarquivar() {
     if (!desarquivarLead || !user || submitting) return
-    if (!isGestorNivel(user.role)) {
-      setDesarquivarLead(null)
-      return
-    }
     setSubmitting(true)
     const alvo = desarquivarLead
-    await updateLead(alvo.id, { arquivadoEm: null })
-    logAudit({
-      leadId: alvo.id,
-      leadNome: alvo.nome,
-      usuarioNome: userName(user.id),
-      tipo: "edicao",
-      descricao: `Desarquivado por ${userName(user.id)}${alvo.refFechamento ? ` — Ref: ${alvo.refFechamento}` : ""}`,
-    })
-    setDesarquivarLead(null)
+    const res = await storeDesarquivarLead(alvo.id)
     setSubmitting(false)
-    toast("Lead desarquivado.")
+    setDesarquivarLead(null)
+    if (!res.ok) {
+      toast(res.error || "Erro ao desarquivar lead.", "error")
+      return
+    }
+    toast("Lead desarquivado com sucesso.")
   }
 
   const q = query.trim().toLowerCase()
@@ -845,28 +839,24 @@ export function KanbanBoard({
         </div>
       </Dialog>
 
-      <Dialog open={!!archiveLead} onClose={() => (!submitting ? setArchiveLead(null) : undefined)} title="Arquivar Lead">
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Lead: <span className="font-medium text-foreground">{archiveLead?.nome}</span>
-            {archiveLead && archiveLead.corretorId && (
-              <> — Corretor: <span className="font-medium text-foreground">{userName(archiveLead.corretorId)}</span></>
-            )}
-          </p>
-          {archiveLead && (
-            <p className="text-sm font-display font-semibold text-primary">{brl(archiveLead.valorNegociacao)}{archiveLead.refFechamento ? ` — Ref: ${archiveLead.refFechamento}` : ""}</p>
-          )}
-          <p className="text-sm text-muted-foreground">
-            O lead será <strong className="text-foreground">arquivado</strong> (sai do quadro, mas permanece no histórico). Nenhum evento será enviado ao Meta.
-          </p>
-          <div className="mt-1 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setArchiveLead(null)} disabled={submitting}>Cancelar</Button>
-            <Button type="button" onClick={handleArquivar} disabled={submitting}>
-              {submitting ? "Arquivando…" : "Arquivar"}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+      <ArquivarLeadDialog
+        lead={archiveLead}
+        open={!!archiveLead}
+        onClose={() => setArchiveLead(null)}
+        onConfirm={async ({ motivo, dataReaparecimento, observacao }) => {
+          if (!archiveLead) return
+          const res = await arquivarLeadComData(archiveLead.id, {
+            motivo,
+            dataReaparecimento,
+            observacao,
+          })
+          if (!res.ok) {
+            toast(res.error || "Erro ao arquivar lead.", "error")
+            return
+          }
+          toast("Lead arquivado com sucesso.")
+        }}
+      />
 
       <Dialog open={!!desarquivarLead} onClose={() => (!submitting ? setDesarquivarLead(null) : undefined)} title="Desarquivar Lead">
         <div className="flex flex-col gap-3">

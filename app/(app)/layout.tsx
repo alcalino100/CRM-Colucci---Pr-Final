@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox, ChevronDown, Bot, Crown } from "lucide-react"
+import { BellRing, Building2, CalendarDays, KanbanSquare, LayoutDashboard, LogOut, Menu, KeyRound, Shield, ScrollText, BarChart3, ClipboardCheck, FileSignature, MessageCircle, MessagesSquare, UserCircle, UsersRound, X, Handshake, UserPlus, Zap, Workflow, Inbox, ChevronDown, Bot, Crown, Archive } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import type { Role } from "@/lib/mock-data"
 import { ROLE_LABEL, isAdminRole, isGestorNivel, isSomenteLeitura, nivelRole, podeLocacao, podeVendas } from "@/lib/roles"
@@ -42,6 +42,7 @@ const NAV: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/contacts", label: "Contatos", icon: UsersRound, roles: ["gestor"] },
   { href: "/follow-ups", label: "Follow-ups", icon: Zap, roles: ["gestor"] },
   { href: "/painel-corretor", label: "Kanban", icon: KanbanSquare, roles: ["corretor", "gestor"] },
+  { href: "/arquivados", label: "Arquivados", icon: Archive, roles: ["corretor", "gestor"] },
   { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["corretor", "gestor"] },
   { href: "/dashboard-gestao", label: "Dashboard", icon: LayoutDashboard, roles: ["gestor"] },
   { href: "/chat", label: "Chat", icon: MessagesSquare, roles: ["gestor"] },
@@ -148,7 +149,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (pathname.startsWith("/ai-agents")) setSecIA(true)
     if (pathname.startsWith("/admin")) setSecAdmin(true)
     if (pathname.startsWith("/master")) setSecAdmin(true)
-    if (pathname.startsWith("/inbox") || pathname.startsWith("/painel-corretor") || pathname.startsWith("/contacts") || pathname.startsWith("/follow-ups")) setSecVendas(true)
+    if (pathname.startsWith("/inbox") || pathname.startsWith("/painel-corretor") || pathname.startsWith("/contacts") || pathname.startsWith("/follow-ups") || pathname.startsWith("/arquivados")) setSecVendas(true)
   }, [pathname])
 
   if (loading || !user) {
