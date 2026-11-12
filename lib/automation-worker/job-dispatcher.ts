@@ -26,6 +26,7 @@ import {
 } from "./constants"
 import { escolherConexaoAutomacao } from "./reativacao-creator"
 import { ehFalhaTransitoria } from "./retry-policy"
+import { orcamentoEsgotado } from "./time-budget"
 import { tagsDoLead } from "./ia-coordination"
 import {
   filtrarJobsComInstanciasConectadas,
@@ -39,13 +40,22 @@ export async function despacharJobsAgendados(
   automations: any[],
   results: WorkerResults,
   nomeImobiliaria: string,
-  tagsFollowUp: Set<string>
+  tagsFollowUp: Set<string>,
+  inicioRodadaMs: number = Date.now()
 ): Promise<void> {
   const jobsBrutos = await getJobsToProcess()
   const jobsToProcess = await filtrarJobsComInstanciasConectadas(jobsBrutos, automations)
   let enviadosNestaRodada = 0
+  let tempoEsgotado = false
 
   for (const job of jobsToProcess) {
+    // Orçamento de tempo: não inicia novo envio perto do limite da função (300 s).
+    // Os jobs que sobraram continuam na fila e saem na próxima rodada (30 min depois).
+    if (tempoEsgotado || orcamentoEsgotado(inicioRodadaMs, Date.now())) {
+      tempoEsgotado = true
+      break
+    }
+
     const locked = await acquireLock(job.id, WORKER_ID)
     if (!locked) continue
 
@@ -285,7 +295,14 @@ export async function despacharJobsAgendados(
         enviadosNestaRodada++
 
         // Respiro anti-ban humanizado entre envios (25 a 45 segundos simulando digitação real).
-        await new Promise((r) => setTimeout(r, 25000 + Math.random() * 20000))
+        // Se a pausa estouraria o orçamento de tempo, não dorme: o próximo envio só sai na
+        // rodada seguinte (30 min depois), o que também cumpre o espaçamento.
+        const pausaMs = 25000 + Math.random() * 20000
+        if (orcamentoEsgotado(inicioRodadaMs, Date.now(), pausaMs)) {
+          tempoEsgotado = true
+        } else {
+          await new Promise((r) => setTimeout(r, pausaMs))
+        }
 
         // Reativação lead_inactive: move lead para Em Automação + tag
         if (
@@ -463,5 +480,17 @@ export async function despacharJobsAgendados(
     }
 
     results.processed++
+  }
+
+  if (tempoEsgotado) {
+    await createLog({
+      automation_id: null,
+      event_type: "worker_orcamento_tempo",
+      event_title: "Rodada encerrada no orçamento de tempo",
+      event_description: `Enviados nesta rodada: ${results.sent}. Jobs restantes seguem na fila e saem na próxima rodada (rodada limitada a ~${Math.round(
+        (Date.now() - inicioRodadaMs) / 1000
+      )}s para não estourar o limite da função).`,
+      payload: { enviados: results.sent, decorrido_ms: Date.now() - inicioRodadaMs },
+    }).catch(() => {})
   }
 }
