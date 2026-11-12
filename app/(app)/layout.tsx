@@ -26,6 +26,7 @@ import { WhatsAppStatusIndicator } from "@/components/whatsapp/WhatsAppStatusInd
 import { WhatsAppReconnectModal } from "@/components/whatsapp/WhatsAppReconnectModal"
 import { SWRConfig } from "swr"
 import { SWR_DEFAULT_CONFIG } from "@/lib/swr-config"
+import { MobileBottomNav } from "@/components/mobile/MobileBottomNav"
 import { cn } from "@/lib/utils"
 
 // Mostra a foto de perfil (se houver) ou as iniciais. Precisa estar dentro do LeadsProvider.
@@ -318,9 +319,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <WhatsAppEmergencyBanner />
           <CrmTicker />
 
-          <main className="relative min-w-0 flex-1 overflow-x-hidden p-4 lg:p-6">
+          <main className="relative min-w-0 flex-1 overflow-x-hidden p-4 pb-24 lg:p-6 lg:pb-6">
             <div className="relative z-10">{children}</div>
           </main>
+          <MobileBottomNav onOpenMenu={() => setOpen(true)} />
         </div>
       </div>
       </WhatsAppStatusProvider>
