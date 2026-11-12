@@ -142,7 +142,7 @@ export async function runWorker() {
     }
 
     // FASE 2: Processar jobs agendados com teto anti-ban e pacing
-    await despacharJobsAgendados(automations, results, nomeImobiliaria, tagsFollowUp)
+    await despacharJobsAgendados(automations, results, nomeImobiliaria, tagsFollowUp, runStart)
 
     const durationMs = Date.now() - runStart
 
