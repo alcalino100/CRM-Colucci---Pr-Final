@@ -226,10 +226,6 @@ export function InboxClient(){
       <div className={`${selectedId ? "hidden lg:flex" : "flex"} w-full lg:w-[240px] shrink-0`}>
         <PanelBoundary nome="lateral"><WidgetPanel /></PanelBoundary>
       </div>
-      {/* Botão voltar mobile quando conversa selecionada */}
-      {selectedId && (
-        <button onClick={()=>setSelected(null)} className="fixed bottom-4 left-4 z-20 rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-lg md:hidden">← Voltar ao Inbox</button>
-      )}
     </div>
     </div>
   )

@@ -253,3 +253,31 @@
     animation: none !important;
   }
 }
+
+/* =========================================================================
+   FUNDAÇÃO DE DESIGN RESPONSIVO (FASE 6)
+   Tokens 8pt, prevenção de zoom involuntário iOS e tamanhos de toque mínimos
+   ========================================================================= */
+
+/* Previne zoom automático do iOS Safari ao focar inputs (< 16px causa zoom) */
+@media screen and (max-width: 767px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="search"],
+  input[type="url"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Alvos de clique confortáveis no mobile (WCAG 2.5.5 / min 44x44px) */
+@media screen and (max-width: 767px) {
+  .btn-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

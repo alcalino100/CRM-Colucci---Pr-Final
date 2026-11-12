@@ -326,4 +326,48 @@ Todos os **11 arquivos grandes** (>600 linhas) foram decompostos com testes de c
 
 ---
 
-## 8. Próximo Passo: FASE 6 — Fundação de Design Responsivo
+### FASE 6 — Fundação de Design Responsivo (Concluída em PR #34)
+- [x] **Grid e Tokens de Espaçamento 8pt:**
+  - Definição dos tokens fundamentais de espaçamento em `app/globals.css` baseados na escala padrão de 8pt (8px, 16px, 24px, 32px, 48px, 64px).
+  - Script automatizado de validação `scripts/check-spacing.mjs` adicionado a `package.json` (`pnpm check:spacing` e integrado a `pnpm check`), garantindo 0 violações de escala em todos os 223 arquivos do projeto.
+- [x] **Tamanhos Mínimos de Toque e Prevenção de Zoom iOS:**
+  - Regra CSS universal para dispositivos móveis (`@media (max-width: 767px)`) fixando `font-size: 16px` em inputs, textareas e selects, eliminando o zoom involuntário no Safari iOS.
+  - Classe utilitária `.btn-touch-target` com `min-height: 44px` e `min-width: 44px` para alvos de clique em touch screens.
+- [x] **Barra de Navegação Inferior Mobile (`MobileBottomNav`):**
+  - Componente fixo na base (`fixed inset-x-0 bottom-0 z-40 h-16`) para visualização mobile (`lg:hidden`).
+  - Rotas principais inteligentes de acordo com o nível de permissão:
+    - **Gestores:** Kanban (`/painel-corretor`), Inbox (`/inbox`), Cadastros (`/cadastros`), Follow-ups (`/follow-ups`), Mais/Gaveta.
+    - **Corretores:** Kanban (`/painel-corretor`), Agenda (`/agenda`), Arquivados (`/arquivados`), Perfil (`/perfil`), Mais/Gaveta.
+  - Ajuste de espaçamento inferior (`pb-24 lg:pb-6`) no layout global e nos painéis flutuantes (`bottom-20 lg:bottom-6`), prevenindo qualquer sobreposição de conteúdo ou botões de ação em lote.
+- [x] **Componente `<ResponsiveTable/>`:**
+  - Componente universal de tabela responsiva em `components/ui/responsive-table.tsx`.
+  - No desktop (`md:block`): renderiza `<table>` padrão estilizada com scroll horizontal se necessário.
+  - No mobile (`md:hidden`): converte automaticamente cada linha em card estruturado com colunas prioritárias (`priority: true`) destacadas no cabeçalho e detalhes secundários em linhas chave-valor legíveis.
+  - Aplicado com sucesso em `components/arquivados/ArquivadosTable.tsx` e `components/cadastros/CadastrosList.tsx`.
+- [x] **Kanban Responsivo com Abas por Coluna e Ação Rápida "Mover etapa...":**
+  - No mobile (`md:hidden`), Kanban converte as múltiplas colunas em uma barra horizontal de abas com scroll suave, indicando a cor da etapa, nome e contagem de leads. A coluna selecionada é exibida em largura total (100%).
+  - Nova ação rápida "Mover" no `LeadCard` mobile (e "Mover etapa..." no menu desktop) com diálogo acessível para transição imediata de estágio no funil sem depender de drag-and-drop em touch screens.
+  - No desktop (`md:flex`), mantém 100% da experiência clássica multi-coluna com arrasto e soltura (`@hello-pangea/dnd`).
+- [x] **Inbox Responsivo e Navegação Mobile:**
+  - Botão nativo "Voltar" (`ArrowLeft`) incorporado no cabeçalho de conversa no mobile (`md:hidden`), permitindo transição fluida entre a lista de conversas e o chat sem botões flutuantes sobrepostos.
+- [x] **Testes Automatizados de Responsividade:**
+  - Novas suítes criadas em `__tests__/resilience/`:
+    - `responsive-table.test.tsx`: validação da alternância entre tabela desktop e cards mobile.
+    - `mobile-nav.test.tsx`: validação dos itens de menu para gestores e corretores.
+    - `kanban-mobile.test.tsx`: validação das abas mobile de funil, renderização de cards e acionamento do fluxo de mover etapa.
+  - Total geral do projeto: 36 arquivos de teste e 249 testes unitários passando 100% verde em ~2,6s.
+
+---
+
+## 8. Conclusão da Auditoria "BASE SÓLIDA"
+
+Todas as 6 Fases da auditoria e refatoração arquitetural foram executadas e validadas:
+- **Fase 0:** Diagnóstico completo, medição e planejamento registrado no baseline.
+- **Fase 1:** Build, tooling, ESLint, TypeScript estrito, CI GitHub Actions e higienização.
+- **Fase 2:** Qualidade de código, eliminação de 75%+ de `any`, lib/logger, Zod em APIs e segurança PostgREST/XSS.
+- **Fase 3:** Arquitetura e modularização de todos os 8 arquivos gigantes (>600 linhas).
+- **Fase 4:** Performance de dados, projeção de colunas, virtualização, SafeInterval, Realtime unificado e índices SQL.
+- **Fase 5:** Resiliência, páginas 404/500/loading, dynamic imports ssr:false, acessibilidade e reduced motion.
+- **Fase 6:** Fundação de design responsivo, escala 8pt, anti-zoom iOS, mobile bottom nav, ResponsiveTable e touch kanban.
+
+O projeto encontra-se pronto, estável e com testes verdes para as próximas etapas (responsividade página a página e novas funcionalidades).

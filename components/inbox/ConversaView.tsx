@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { ArrowLeft } from "lucide-react"
 import { useInboxStore } from "@/lib/inbox-store"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/primitives"
@@ -26,7 +27,7 @@ function proximaEm(iso?: string){
 }
 
 export function ConversaView(){
-  const { conversas, mensagens, selectedId, enviarMensagem, assumirConversa, cancelarFollowUp, marcarRespondido, modoReal, instanciaSelecionada } = useInboxStore() as any
+  const { conversas, mensagens, selectedId, setSelected, enviarMensagem, assumirConversa, cancelarFollowUp, marcarRespondido, modoReal, instanciaSelecionada } = useInboxStore() as any
   const toast = useToast()
   const [texto, setTexto] = useState("")
   const [carregandoReal, setCarregandoReal] = useState(false)
@@ -119,9 +120,21 @@ export function ConversaView(){
     <motion.div key={conv.id} initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.2}} role="main" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       {/* Header breadcrumb + ações */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-3 dark:border-slate-800">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>{conv.leadName} <span className="font-normal text-slate-500 dark:text-slate-400">· {conv.status.replace("_"," ")}</span></p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{conv.telefone} · {conv.origem}</p>
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setSelected(null)}
+            className="md:hidden -ml-1 mr-1 rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            aria-label="Voltar à lista de conversas"
+          >
+            <ArrowLeft className="size-5" />
+          </button>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>
+              {conv.leadName} <span className="font-normal text-slate-500 dark:text-slate-400">· {conv.status.replace("_"," ")}</span>
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{conv.telefone} · {conv.origem}</p>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={()=>assumirConversa(conv.id)} className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-cyan-400">Assumir Conversa</button>

@@ -1,13 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, AlertCircle, Camera, Users, Megaphone, Store, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send, Archive, ArchiveRestore, Plus } from "lucide-react"
-import { Badge } from "@/components/ui/primitives"
+import { AlertTriangle, AlertCircle, Camera, Users, Megaphone, Store, Circle, Phone, Clock, MessageSquare, MessageCircle, MoreVertical, Pencil, Trash2, UserCheck, Send, Archive, ArchiveRestore, Plus, ArrowRightLeft } from "lucide-react"
+import { Badge, Dialog } from "@/components/ui/primitives"
 import { useLeads } from "@/lib/leads-store"
 import { usePresenca } from "@/lib/presence"
 import { OnlineDot } from "@/components/online-dot"
-import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate } from "@/lib/labels"
-import { type Lead, type Origem } from "@/lib/mock-data"
+import { ORIGEM_VARIANT, TEMP_LABEL, TEMP_VARIANT, brl, fmtDate, LEAD_STATUSES, STATUS_ACCENT, STATUS_LABEL } from "@/lib/labels"
+import { type Lead, type Origem, type LeadStatus } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 import { tagColor } from "@/lib/ai/tags-catalog"
 
@@ -34,6 +34,7 @@ export function LeadCard({
   onEnviarMeta,
   onArquivar,
   onDesarquivar,
+  onMoveStatus,
   tagColorMap = {},
 }: {
   lead: Lead
@@ -50,13 +51,15 @@ export function LeadCard({
   onEnviarMeta?: (lead: Lead) => void
   onArquivar?: (lead: Lead) => void
   onDesarquivar?: (lead: Lead) => void
+  onMoveStatus?: (lead: Lead, status: LeadStatus) => void
 }) {
   const { userName, users, updateLead } = useLeads()
   const { online } = usePresenca()
-  const OrigemIcon = ORIGEM_ICON[lead.origem]
+  const OrigemIcon = ORIGEM_ICON[lead.origem] || Circle
   const corretor = users.find((u) => u.id === lead.corretorId)
   const initials = userName(lead.corretorId).split(" ").map((n) => n[0]).slice(0, 2).join("")
   const [menu, setMenu] = useState(false)
+  const [showMoveModal, setShowMoveModal] = useState(false)
   const [showTagEditor, setShowTagEditor] = useState(false)
   const [newTag, setNewTag] = useState("")
   const [savingTag, setSavingTag] = useState(false)
@@ -154,6 +157,18 @@ export function LeadCard({
               <OnlineDot online={!!online[lead.corretorId]} className="absolute -bottom-0.5 -right-0.5" />
             </span>
           )}
+          {onMoveStatus && !lead.arquivadoEm && (
+            <button
+              type="button"
+              onPointerDown={stop}
+              onClick={(e) => { stop(e); setShowMoveModal(true) }}
+              aria-label="Mover etapa do lead"
+              className="md:hidden flex items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <ArrowRightLeft className="size-3 text-primary" />
+              <span>Mover</span>
+            </button>
+          )}
           {canManage && (
             <div className="relative">
               <button
@@ -168,7 +183,16 @@ export function LeadCard({
               {menu && (
                 <>
                   <div className="fixed inset-0 z-10" onPointerDown={stop} onClick={(e) => { stop(e); setMenu(false) }} />
-                  <div className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg" onPointerDown={stop}>
+                  <div className="absolute right-0 top-8 z-20 w-44 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg" onPointerDown={stop}>
+                    {onMoveStatus && !lead.arquivadoEm && (
+                      <button
+                        type="button"
+                        onClick={(e) => { stop(e); setMenu(false); setShowMoveModal(true) }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                      >
+                        <ArrowRightLeft className="size-3.5" /> Mover etapa...
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => { stop(e); setMenu(false); onEdit?.(lead) }}
@@ -292,6 +316,35 @@ export function LeadCard({
         <Clock className="size-3" />
         Atualizado em {fmtDate(lead.atualizadoEm)}
       </div>
+
+      {showMoveModal && (
+        <Dialog open={showMoveModal} onClose={() => setShowMoveModal(false)} title={`Mover ${lead.nome}`}>
+          <div className="flex flex-col gap-2 pt-1" onClick={stop}>
+            <p className="text-xs text-muted-foreground pb-1">
+              Selecione a etapa de destino no funil:
+            </p>
+            <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto pr-1">
+              {LEAD_STATUSES.filter((s) => s !== lead.status).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => {
+                    setShowMoveModal(false)
+                    onMoveStatus?.(lead, st)
+                  }}
+                  className="flex items-center justify-between rounded-xl border border-border p-2.5 text-left transition hover:border-primary hover:bg-muted/40"
+                >
+                  <span className="flex items-center gap-2 font-medium text-sm">
+                    <span className="size-2.5 rounded-full" style={{ backgroundColor: STATUS_ACCENT[st] }} />
+                    {STATUS_LABEL[st]}
+                  </span>
+                  <span className="text-xs text-muted-foreground font-semibold">Mover para cá</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </Dialog>
+      )}
     </div>
   )
 }

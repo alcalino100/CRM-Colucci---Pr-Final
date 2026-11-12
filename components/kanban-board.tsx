@@ -68,6 +68,7 @@ export function KanbanBoard({
   const {
     canManage,
     onDragEnd,
+    moveLead,
     setEditLead,
     setDelLead,
     setAssumirDialog,
@@ -220,6 +221,7 @@ export function KanbanBoard({
           onEnviarMeta={(item) => setUploadMeta(item)}
           onArquivar={(item) => setArchiveLead(item)}
           onDesarquivar={(item) => setDesarquivarLead(item)}
+          onMoveLead={moveLead}
         />
       )}
 

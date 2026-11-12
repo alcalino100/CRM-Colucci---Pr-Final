@@ -182,53 +182,57 @@ export function CadastrosList({
                 <div
                   key={l.id}
                   className={cn(
-                    "flex flex-wrap items-center gap-2 rounded-lg border border-border p-3 transition",
+                    "flex flex-col gap-2 rounded-xl border border-border p-3 transition sm:flex-row sm:items-center sm:gap-2",
                     selectedIds.has(l.id) && "border-primary bg-primary/5",
                     isNovo && "border-emerald-500/30 bg-emerald-500/[0.02]",
                     isReativado && "border-amber-500/40 bg-amber-500/[0.03]"
                   )}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(l.id)}
-                    onChange={() => onToggleSelect(l.id)}
-                    className="size-4 accent-primary"
-                  />
+                  <div className="flex items-center gap-2 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(l.id)}
+                      onChange={() => onToggleSelect(l.id)}
+                      className="size-4 shrink-0 accent-primary"
+                    />
 
-                  <Link href={`/painel-corretor/${l.id}`} className="min-w-0 font-semibold hover:text-primary">
-                    {l.nome}
-                  </Link>
+                    <Link href={`/painel-corretor/${l.id}`} className="min-w-0 truncate font-semibold hover:text-primary">
+                      {l.nome}
+                    </Link>
 
-                  {/* Badges de Identificação de Origem e Idade do Lead */}
-                  {isNovo ? (
-                    <Badge variant="green" className="flex items-center gap-1 text-[11px] font-bold">
-                      <Sparkles className="size-3" />
-                      Novo Cadastro
-                    </Badge>
-                  ) : isReativado ? (
-                    <Badge variant="amber" className="flex items-center gap-1 text-[11px] font-bold">
-                      <ArchiveRestore className="size-3" />
-                      Reativado {l.reativadoEm ? `(${fmtDateLead(l.reativadoEm)})` : ""}
-                    </Badge>
-                  ) : (
-                    <Badge variant="gray" className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <History className="size-3" />
-                      Base Anterior ({fmtDateLead(l.criadoEm)})
-                    </Badge>
-                  )}
+                    {/* Badges de Identificação de Origem e Idade do Lead */}
+                    {isNovo ? (
+                      <Badge variant="green" className="shrink-0 flex items-center gap-1 text-[11px] font-bold">
+                        <Sparkles className="size-3" />
+                        Novo Cadastro
+                      </Badge>
+                    ) : isReativado ? (
+                      <Badge variant="amber" className="shrink-0 flex items-center gap-1 text-[11px] font-bold">
+                        <ArchiveRestore className="size-3" />
+                        Reativado {l.reativadoEm ? `(${fmtDateLead(l.reativadoEm)})` : ""}
+                      </Badge>
+                    ) : (
+                      <Badge variant="gray" className="shrink-0 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <History className="size-3" />
+                        Base Anterior ({fmtDateLead(l.criadoEm)})
+                      </Badge>
+                    )}
+                  </div>
 
-                  {isArquivado && (
-                    <Badge variant="gray" className="flex items-center gap-1 text-[11px]">
-                      <Archive className="size-3 text-slate-500" />
-                      Arquivado
-                    </Badge>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1.5 pl-6 sm:pl-0">
+                    {isArquivado && (
+                      <Badge variant="gray" className="flex items-center gap-1 text-[11px]">
+                        <Archive className="size-3 text-slate-500" />
+                        Arquivado
+                      </Badge>
+                    )}
 
-                  {refsTexto(l) && <Badge variant="gray">{refsTexto(l)}</Badge>}
-                  <Badge variant={STATUS_VARIANT[l.status]}>{STATUS_LABEL[l.status]}</Badge>
-                  <Badge variant={TEMP_VARIANT[l.temperatura]}>{TEMP_LABEL[l.temperatura]}</Badge>
+                    {refsTexto(l) && <Badge variant="gray">{refsTexto(l)}</Badge>}
+                    <Badge variant={STATUS_VARIANT[l.status]}>{STATUS_LABEL[l.status]}</Badge>
+                    <Badge variant={TEMP_VARIANT[l.temperatura]}>{TEMP_LABEL[l.temperatura]}</Badge>
+                  </div>
 
-                  <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground pl-6 sm:pl-0 sm:ml-auto">
                     <span className="font-medium text-foreground/80">{l.origem}</span>
                     <span>{userName(l.corretorId)}</span>
                     <span
@@ -237,7 +241,7 @@ export function CadastrosList({
                     >
                       {isNovo ? fmtDateTimeLead(l.criadoEm) : `Ativo em ${fmtDateLead(l.atualizadoEm)}`}
                     </span>
-                  </span>
+                  </div>
                 </div>
               )
             })}
@@ -247,7 +251,7 @@ export function CadastrosList({
 
       {/* Floating bulk actions bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-border bg-background p-3 shadow-lg">
+        <div className="fixed bottom-20 lg:bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-border bg-background/95 backdrop-blur p-3 shadow-xl">
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium">
               {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} selecionado{selectedIds.size !== 1 ? "s" : ""}
