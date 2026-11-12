@@ -2,21 +2,27 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Search, SearchX, X } from "lucide-react"
+import { SearchX } from "lucide-react"
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
-import { Button } from "@/components/ui/button"
-import { Dialog, Input, Label, Select, Textarea, useToast } from "@/components/ui/primitives"
+import { useToast } from "@/components/ui/primitives"
 import { LeadCard } from "@/components/lead-card-locacao"
-import { LocacaoLeadForm, type LocacaoLeadFormValues } from "@/components/locacao-lead-form"
+import { type LocacaoLeadFormValues } from "@/components/locacao-lead-form"
 import { useSaleCelebration, SESSION_ID } from "@/components/sale-celebration"
 import { supabase } from "@/lib/supabase/client"
 import { useLocacao } from "@/lib/locacao-store"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
-import { LOCACAO_STATUSES, MOTIVOS_EXCLUSAO, LOCACAO_STATUS_ACCENT, LOCACAO_STATUS_LABEL, TEMPERATURAS, TEMP_LABEL, TIPOS_IMOVEL_LOCACAO, QUARTOS_OPCOES, brl, normalizePhone, refsTexto } from "@/lib/locacao-labels"
-import { ORIGENS, type Origem, type Temperatura } from "@/lib/mock-data"
+import { LOCACAO_STATUSES, LOCACAO_STATUS_ACCENT, LOCACAO_STATUS_LABEL, brl, refsTexto } from "@/lib/locacao-labels"
 import type { LocacaoLead, LocacaoStatus } from "@/lib/locacao-labels"
-import { cn } from "@/lib/utils"
+import { KanbanLocacaoFilterBar } from "./kanban-locacao/KanbanLocacaoFilterBar"
+import { KanbanLocacaoDialogs } from "./kanban-locacao/KanbanLocacaoDialogs"
+import {
+  INITIAL_LOCACAO_FILTERS,
+  filterLocacaoLeads,
+  sortLocacaoLeads,
+  hasActiveLocacaoFilters,
+  type LocacaoFilters,
+} from "./kanban-locacao/kanban-locacao-utils"
 
 export function KanbanBoardLocacao({
   leads,
@@ -31,11 +37,13 @@ export function KanbanBoardLocacao({
   isGestor?: boolean
   heightClass?: string
 }) {
-  const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, assumirLead, visits, corretores, userName } = useLocacao()
+  const { updateLead, deleteLead, addVisit, addInteraction, notify, logChange, logAudit, corretores, userName } = useLocacao()
   const { user } = useAuth()
   const router = useRouter()
   const toast = useToast()
   const celebrate = useSaleCelebration()
+
+  // Modal target leads
   const [visitLead, setVisitLead] = useState<LocacaoLead | null>(null)
   const [propLead, setPropLead] = useState<LocacaoLead | null>(null)
   const [closeLead, setCloseLead] = useState<LocacaoLead | null>(null)
@@ -47,23 +55,36 @@ export function KanbanBoardLocacao({
   const [delMotivo, setDelMotivo] = useState("")
   const [delDetalhe, setDelDetalhe] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [tempFilter, setTempFilter] = useState<Temperatura | "todas">("todas")
-  const [origemFilter, setOrigemFilter] = useState<Origem | "todas">("todas")
-  const [statusFilter, setStatusFilter] = useState<LocacaoStatus | "todos">("todos")
-  const [corretorFilter, setCorretorFilter] = useState<string>("todos")
-  const [tipoFilter, setTipoFilter] = useState<string>("todos")
-  const [quartosFilter, setQuartosFilter] = useState<string>("todos")
-  const [aluguelMaxFilter, setAluguelMaxFilter] = useState<string>("")
-  const [bairrosFilter, setBairrosFilter] = useState("")
-  const [query, setQuery] = useState("")
-  const [showArchived, setShowArchived] = useState(false)
+
+  // Filters state
+  const [filters, setFilters] = useState<LocacaoFilters>(INITIAL_LOCACAO_FILTERS)
+
+  // Form states for modals
+  const [vData, setVData] = useState("")
+  const [vHora, setVHora] = useState("10:00")
+  const [vCorretor, setVCorretor] = useState("")
+  const [vRefs, setVRefs] = useState("")
+  const [vObs, setVObs] = useState("")
+  const [pValor, setPValor] = useState("")
+  const [pRefs, setPRefs] = useState("")
+  const [pObs, setPObs] = useState("")
+  const [fRefs, setFRefs] = useState("")
+  const [fValor, setFValor] = useState("")
 
   const usuarioNome = user ? userName(user.id) : "Sistema"
   const canManage = (lead: LocacaoLead) => isGestor || lead.corretorId === currentCorretorId
+
+  function handleUpdateFilters(updates: Partial<LocacaoFilters>) {
+    setFilters((prev) => ({ ...prev, ...updates }))
+  }
+
+  function handleClearFilters() {
+    setFilters(INITIAL_LOCACAO_FILTERS)
+  }
+
   function handleEditSubmit(v: LocacaoLeadFormValues) {
     if (!editLead) return
     if (v.status === "locado" && editLead.status !== "locado") {
-      // Fechamento só é gravado pelo fluxo obrigatório (REF + valor do aluguel)
       setFRefs(refsTexto(editLead))
       setFValor(editLead.valorAluguel ? String(editLead.valorAluguel) : "")
       setCloseLead(editLead)
@@ -71,10 +92,15 @@ export function KanbanBoardLocacao({
       return
     }
     setSubmitting(true)
-    const fields: (keyof LocacaoLeadFormValues)[] = ["nome", "telefone", "email", "imovelRef", "origem", "observacoes", "status", "valorAluguel", "corretorId", "temperatura", "tipoImovelDesejado", "quartos", "aluguelMax", "garantia", "vagas", "metragemMin", "aceitaCondominio", "salas", "atividadeComercial"]
+    const fields: (keyof LocacaoLeadFormValues)[] = [
+      "nome", "telefone", "email", "imovelRef", "origem", "observacoes",
+      "status", "valorAluguel", "corretorId", "temperatura", "tipoImovelDesejado",
+      "quartos", "aluguelMax", "garantia", "vagas", "metragemMin",
+      "aceitaCondominio", "salas", "atividadeComercial",
+    ]
     for (const f of fields) {
-      const before = (editLead as any)[f]
-      const after = (v as any)[f]
+      const before = (editLead as unknown as Record<string, unknown>)[f]
+      const after = (v as unknown as Record<string, unknown>)[f]
       if (String(before ?? "") !== String(after ?? "")) {
         logChange({ usuario: usuarioNome, acao: "edicao", entidade: "lead", campo: f, valorAnterior: String(before ?? "-"), valorNovo: String(after ?? "-") })
         if (f === "temperatura") {
@@ -119,20 +145,6 @@ export function KanbanBoardLocacao({
     toast("Lead excluído com sucesso")
   }
 
-  // visit form
-  const [vData, setVData] = useState("")
-  const [vHora, setVHora] = useState("10:00")
-  const [vCorretor, setVCorretor] = useState("")
-  const [vRefs, setVRefs] = useState("")
-  const [vObs, setVObs] = useState("")
-  // proposal form
-  const [pValor, setPValor] = useState("")
-  const [pRefs, setPRefs] = useState("")
-  const [pObs, setPObs] = useState("")
-  // fechamento form
-  const [fRefs, setFRefs] = useState("")
-  const [fValor, setFValor] = useState("")
-
   function onDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result
     if (!destination || destination.droppableId === source.droppableId) return
@@ -144,7 +156,6 @@ export function KanbanBoardLocacao({
 
   function moveLead(lead: LocacaoLead, newStatus: LocacaoStatus) {
     if (newStatus === "locado") {
-      // status só é gravado após confirmar a referência e o valor do aluguel
       setFRefs(refsTexto(lead))
       setFValor(lead.valorAluguel ? String(lead.valorAluguel) : "")
       setCloseLead(lead)
@@ -208,9 +219,6 @@ export function KanbanBoardLocacao({
       notify(`Proposta registrada no seu lead ${propLead.nome}: ${brl(valor)}`, { tipo: "proposta", paraUsuarioId: propLead.corretorId, leadId: propLead.id })
     }
     toast("Proposta registrada. Gestores notificados.")
-    // Locação NÃO dispara o "🤝 LEAD EM NEGOCIAÇÃO 🤝" no WhatsApp — esse aviso é
-    // exclusivo das negociações de VENDA (kanban-board.tsx). As notificações
-    // internas acima continuam valendo para locação.
     setPropLead(null)
   }
 
@@ -235,7 +243,6 @@ export function KanbanBoardLocacao({
       tipo: "Locação",
       corretor: userName(closeLead.corretorId),
     })
-    // Transmite em tempo real para o corretor do lead e para os gestores
     supabase
       .channel("crm-celebracoes")
       .send({
@@ -316,408 +323,169 @@ export function KanbanBoardLocacao({
     toast("Lead desarquivado.")
   }
 
-  const q = query.trim().toLowerCase()
-  const qDigits = normalizePhone(query)
-  const matchesQuery = (l: LocacaoLead) => {
-    if (!q) return true
-    const refs = (l.referencias?.map((r) => r.ref).join(" ") ?? "") + " " + (l.imovelRef ?? "")
-    if (qDigits && normalizePhone(l.telefone).includes(qDigits)) return true
-    return (
-      l.nome.toLowerCase().includes(q) ||
-      refs.toLowerCase().includes(q) ||
-      (l.observacoes ?? "").toLowerCase().includes(q)
-    )
-  }
-  const filtered = leads.filter(
-    (l) =>
-      (showArchived || !l.arquivadoEm) &&
-      (tempFilter === "todas" || l.temperatura === tempFilter) &&
-      (origemFilter === "todas" || l.origem === origemFilter) &&
-      (statusFilter === "todos" || l.status === statusFilter) &&
-      (corretorFilter === "todos" || l.corretorId === corretorFilter) &&
-      (tipoFilter === "todos" || l.tipoImovelDesejado === tipoFilter) &&
-      (quartosFilter === "todos" || l.quartos === quartosFilter) &&
-      (!aluguelMaxFilter || (l.aluguelMax != null && l.aluguelMax <= Number(aluguelMaxFilter))) &&
-      (!bairrosFilter || l.bairrosDesejados.some((b) => b.toLowerCase().includes(bairrosFilter.toLowerCase()))) &&
-      matchesQuery(l),
-  )
-  const byStatus = (s: LocacaoStatus) =>
-    filtered
-      .filter((l) => l.status === s)
-      .sort((a, b) => {
-        const da = a.atualizadoEm || a.criadoEm || ""
-        const db = b.atualizadoEm || b.criadoEm || ""
-        return db.localeCompare(da)
-      })
-  const temFiltros = tempFilter !== "todas" || origemFilter !== "todas" || statusFilter !== "todos" || corretorFilter !== "todos" || tipoFilter !== "todos" || quartosFilter !== "todos" || !!aluguelMaxFilter || !!bairrosFilter || !!q
+  const filtered = filterLocacaoLeads(leads, filters)
+  const byStatus = (s: LocacaoStatus) => sortLocacaoLeads(filtered.filter((l) => l.status === s))
+  const temFiltros = hasActiveLocacaoFilters(filters)
   const noResults = temFiltros && filtered.length === 0
-
-  const limparFiltros = () => {
-    setQuery(""); setTempFilter("todas"); setOrigemFilter("todas"); setStatusFilter("todos"); setCorretorFilter("todos"); setTipoFilter("todos"); setQuartosFilter("todos"); setAluguelMaxFilter(""); setBairrosFilter("")
-  }
-
-  const chip = (active: boolean, color?: string) =>
-    cn(
-      "rounded-full border px-3 py-1 text-xs font-medium transition",
-      active ? (color ?? "border-primary bg-primary text-primary-foreground") : "border-border bg-card text-muted-foreground hover:text-foreground",
-    )
 
   return (
     <>
-      <div className="relative mb-3 flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-primary/0 via-primary/70 to-primary/0" />
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Pesquisar por nome, telefone ou ref"
-            aria-label="Pesquisar leads"
-            className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-9 text-sm outline-none transition focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Limpar pesquisa"
-              className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Temperatura:</span>
-          <button type="button" onClick={() => setTempFilter("todas")} className={chip(tempFilter === "todas")}>Todas</button>
-          {TEMPERATURAS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTempFilter(t)}
-              className={chip(
-                tempFilter === t,
-                t === "quente" ? "border-red-600 bg-red-600 text-white" : t === "morno" ? "border-amber-500 bg-amber-500 text-white" : "border-slate-500 bg-slate-500 text-white",
-              )}
-            >
-              {TEMP_LABEL[t]}
-            </button>
-          ))}
-          <span className="ml-2 h-5 w-px bg-border" aria-hidden />
-          <Select value={origemFilter} onChange={(e) => setOrigemFilter(e.target.value as Origem | "todas")} aria-label="Filtrar por origem" className="w-36 text-xs">
-            <option value="todas">Origem: todas</option>
-            {ORIGENS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </Select>
-          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as LocacaoStatus | "todos")} aria-label="Filtrar por status" className="w-44 text-xs">
-            <option value="todos">Status: todos</option>
-            {LOCACAO_STATUSES.map((s) => <option key={s} value={s}>{LOCACAO_STATUS_LABEL[s]}</option>)}
-          </Select>
-          {isGestor && (
-            <Select value={corretorFilter} onChange={(e) => setCorretorFilter(e.target.value)} aria-label="Filtrar por corretor" className="w-40 text-xs">
-              <option value="todos">Corretor: todos</option>
-              {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </Select>
-          )}
-          <span className="ml-2 h-5 w-px bg-border" aria-hidden />
-          <Select value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)} aria-label="Filtrar por tipo" className="w-40 text-xs">
-            <option value="todos">Tipo: todos</option>
-            {TIPOS_IMOVEL_LOCACAO.map((t) => <option key={t} value={t}>{t}</option>)}
-          </Select>
-          <Select value={quartosFilter} onChange={(e) => setQuartosFilter(e.target.value)} aria-label="Filtrar por quartos" className="w-36 text-xs">
-            <option value="todos">Quartos: todos</option>
-            {QUARTOS_OPCOES.map((q) => <option key={q} value={q}>{q} quarto(s)</option>)}
-          </Select>
-          <input
-            type="number"
-            value={aluguelMaxFilter}
-            onChange={(e) => setAluguelMaxFilter(e.target.value)}
-            placeholder="Aluguel máx."
-            aria-label="Filtrar por aluguel máximo"
-            className="h-7 w-28 rounded-lg border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-          />
-          <input
-            type="text"
-            value={bairrosFilter}
-            onChange={(e) => setBairrosFilter(e.target.value)}
-            placeholder="Bairros"
-            aria-label="Filtrar por bairros"
-            className="h-7 w-28 rounded-lg border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-          />
-          {temFiltros && (
-            <button type="button" onClick={limparFiltros} className="rounded-full border border-dashed border-border px-3 py-1 text-xs font-medium text-primary transition hover:border-primary/40 hover:bg-primary/5">
-              Limpar filtros
-            </button>
-          )}
-          <span className="ml-2 h-5 w-px bg-border" aria-hidden />
-          <button
-            type="button"
-            onClick={() => setShowArchived(!showArchived)}
-            className={chip(showArchived, "#a1a1aa")}
-          >
-            {showArchived ? "Ocultar arquivados" : "Mostrar arquivados"}
-          </button>
-        </div>
-      </div>
+      <KanbanLocacaoFilterBar
+        filters={filters}
+        onChangeFilters={handleUpdateFilters}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={temFiltros}
+        isGestor={isGestor}
+        corretores={corretores}
+      />
+
       {noResults ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/60 py-16 text-center">
           <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <SearchX className="size-6" />
           </div>
           <p className="text-sm font-medium text-foreground">Nenhum lead encontrado para estes filtros</p>
-          <button type="button" onClick={limparFiltros} className="text-xs font-medium text-primary hover:underline">Limpar filtros</button>
+          <button type="button" onClick={handleClearFilters} className="text-xs font-medium text-primary hover:underline">
+            Limpar filtros
+          </button>
         </div>
       ) : (
-      <DragDropContext onDragEnd={onDragEnd}>
-        <div className="kanban-scroll w-full flex-1 overflow-x-auto overflow-y-hidden pb-3">
-          <div className={`flex w-max flex-nowrap gap-4 ${heightClass}`}>
-          {LOCACAO_STATUSES.map((status) => {
-            const col = byStatus(status)
-            return (
-              <Droppable droppableId={status} key={status}>
-                {(provided, snapshot) => (
-                  <div className="flex w-72 flex-shrink-0 flex-col">
-                    <div className="mb-2 flex shrink-0 items-center justify-between rounded-t-xl border border-b-0 border-border bg-card px-3 py-2.5 shadow-sm" style={{ borderTopColor: LOCACAO_STATUS_ACCENT[status], borderTopWidth: 3, boxShadow: `0 6px 18px -8px ${LOCACAO_STATUS_ACCENT[status]}66` }}>
-                      <span className="flex items-center gap-2 font-display text-sm font-semibold">
-                        <span className="size-2 rounded-full" style={{ backgroundColor: LOCACAO_STATUS_ACCENT[status] }} aria-hidden />
-                        {LOCACAO_STATUS_LABEL[status]}
-                      </span>
-                      <span className="flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs font-semibold text-muted-foreground">{col.length}</span>
-                    </div>
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className={`-mt-2 flex min-h-32 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl border border-t-0 border-border p-2 transition-colors ${snapshot.isDraggingOver ? "bg-primary/5 ring-2 ring-inset ring-primary/30" : "bg-muted/40"}`}
-                    >
-                      {col.length === 0 && !snapshot.isDraggingOver && (
-                        <p className="px-2 py-6 text-center text-xs text-muted-foreground">Nenhum lead nesta etapa</p>
-                      )}
-                      {col.map((lead, i) => (
-                        <Draggable draggableId={lead.id} index={i} key={lead.id}>
-                          {(dp, ds) => (
-                            <div
-                              ref={dp.innerRef}
-                              {...dp.draggableProps}
-                              {...dp.dragHandleProps}
-                              style={dp.draggableProps.style}
-                              className={ds.isDragging ? "opacity-60" : ""}
-                            >
-                              <LeadCard
-                                lead={lead}
-                                showCorretor={showCorretor}
-                                canManage={canManage(lead)}
-                                podeExcluir={isGestor}
-                                isGestor={isGestor}
-                                onOpen={(item) => router.push(`/locacao/${item.id}`)}
-                                onEdit={(item) => setEditLead(item)}
-                                onDelete={(item) => setDelLead(item)}
-                                onAssumir={(item) => setAssumirDialog(item)}
-                                onArquivar={(item) => setArchiveLead(item)}
-                                onDesarquivar={(item) => setDesarquivarLead(item)}
-                              />
-                            </div>
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="kanban-scroll w-full flex-1 overflow-x-auto overflow-y-hidden pb-3">
+            <div className={`flex w-max flex-nowrap gap-4 ${heightClass}`}>
+              {LOCACAO_STATUSES.map((status) => {
+                const col = byStatus(status)
+                return (
+                  <Droppable droppableId={status} key={status}>
+                    {(provided, snapshot) => (
+                      <div className="flex w-72 flex-shrink-0 flex-col">
+                        <div
+                          className="mb-2 flex shrink-0 items-center justify-between rounded-t-xl border border-b-0 border-border bg-card px-3 py-2.5 shadow-sm"
+                          style={{
+                            borderTopColor: LOCACAO_STATUS_ACCENT[status],
+                            borderTopWidth: 3,
+                            boxShadow: `0 6px 18px -8px ${LOCACAO_STATUS_ACCENT[status]}66`,
+                          }}
+                        >
+                          <span className="flex items-center gap-2 font-display text-sm font-semibold">
+                            <span className="size-2 rounded-full" style={{ backgroundColor: LOCACAO_STATUS_ACCENT[status] }} aria-hidden />
+                            {LOCACAO_STATUS_LABEL[status]}
+                          </span>
+                          <span className="flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs font-semibold text-muted-foreground">
+                            {col.length}
+                          </span>
+                        </div>
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                          className={`-mt-2 flex min-h-32 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl border border-t-0 border-border p-2 transition-colors ${
+                            snapshot.isDraggingOver ? "bg-primary/5 ring-2 ring-inset ring-primary/30" : "bg-muted/40"
+                          }`}
+                        >
+                          {col.length === 0 && !snapshot.isDraggingOver && (
+                            <p className="px-2 py-6 text-center text-xs text-muted-foreground">Nenhum lead nesta etapa</p>
                           )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  </div>
-                )}
-              </Droppable>
-            )
-          })}
+                          {col.map((lead, i) => (
+                            <Draggable draggableId={lead.id} index={i} key={lead.id}>
+                              {(dp, ds) => (
+                                <div
+                                  ref={dp.innerRef}
+                                  {...dp.draggableProps}
+                                  {...dp.dragHandleProps}
+                                  style={dp.draggableProps.style}
+                                  className={ds.isDragging ? "opacity-60" : ""}
+                                >
+                                  <LeadCard
+                                    lead={lead}
+                                    showCorretor={showCorretor}
+                                    canManage={canManage(lead)}
+                                    podeExcluir={isGestor}
+                                    isGestor={isGestor}
+                                    onOpen={(item) => router.push(`/locacao/${item.id}`)}
+                                    onEdit={(item) => setEditLead(item)}
+                                    onDelete={(item) => setDelLead(item)}
+                                    onAssumir={(item) => setAssumirDialog(item)}
+                                    onArquivar={(item) => setArchiveLead(item)}
+                                    onDesarquivar={(item) => setDesarquivarLead(item)}
+                                  />
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
+                      </div>
+                    )}
+                  </Droppable>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      </DragDropContext>
+        </DragDropContext>
       )}
 
-      <Dialog open={!!visitLead} onClose={() => setVisitLead(null)} title="Agendar Visita">
-        <form onSubmit={confirmVisit} className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">Lead: <span className="font-medium text-foreground">{visitLead?.nome}</span> — {visitLead?.imovelRef || "sem imóvel"}</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="vd">Data *</Label>
-              <Input id="vd" type="date" value={vData} onChange={(e) => setVData(e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="vh">Horário *</Label>
-              <Input id="vh" type="time" value={vHora} onChange={(e) => setVHora(e.target.value)} />
-            </div>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="vr">Referência(s) do imóvel *</Label>
-            <Input id="vr" value={vRefs} onChange={(e) => setVRefs(e.target.value)} placeholder="Ex: AP-1006, CA-2005" required />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="vc">Corretor responsável</Label>
-            <Select id="vc" value={vCorretor} onChange={(e) => setVCorretor(e.target.value)}>
-              {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="vo">Observações</Label>
-            <Textarea id="vo" value={vObs} onChange={(e) => setVObs(e.target.value)} />
-          </div>
-          <div className="mt-1 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setVisitLead(null)}>Cancelar</Button>
-            <Button type="submit">Agendar visita</Button>
-          </div>
-        </form>
-      </Dialog>
+      <KanbanLocacaoDialogs
+        visitLead={visitLead}
+        onCloseVisit={() => setVisitLead(null)}
+        onConfirmVisit={confirmVisit}
+        vData={vData}
+        setVData={setVData}
+        vHora={vHora}
+        setVHora={setVHora}
+        vCorretor={vCorretor}
+        setVCorretor={setVCorretor}
+        vRefs={vRefs}
+        setVRefs={setVRefs}
+        vObs={vObs}
+        setVObs={setVObs}
 
-      <Dialog open={!!propLead} onClose={() => setPropLead(null)} title="Registrar Proposta de Locação">
-        <form onSubmit={confirmProposal} className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">Lead: <span className="font-medium text-foreground">{propLead?.nome}</span> — {propLead?.imovelRef || "sem imóvel"}</p>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="pv">Valor do aluguel (R$) *</Label>
-            <Input id="pv" type="number" value={pValor} onChange={(e) => setPValor(e.target.value)} placeholder="2500" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="pr">Referência(s) da proposta *</Label>
-            <Input id="pr" value={pRefs} onChange={(e) => setPRefs(e.target.value)} placeholder="Ex: AP-1006" required />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="po">Observações</Label>
-            <Textarea id="po" value={pObs} onChange={(e) => setPObs(e.target.value)} />
-          </div>
-          <div className="mt-1 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPropLead(null)}>Cancelar</Button>
-            <Button type="submit">Registrar proposta</Button>
-          </div>
-        </form>
-      </Dialog>
+        propLead={propLead}
+        onCloseProp={() => setPropLead(null)}
+        onConfirmProposal={confirmProposal}
+        pValor={pValor}
+        setPValor={setPValor}
+        pRefs={pRefs}
+        setPRefs={setPRefs}
+        pObs={pObs}
+        setPObs={setPObs}
 
-      <Dialog open={!!closeLead} onClose={() => setCloseLead(null)} title="Registrar Locação Fechada">
-        <form onSubmit={confirmClose} className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">Lead: <span className="font-medium text-foreground">{closeLead?.nome}</span> — {closeLead ? brl(closeLead.valorAluguel) : ""}</p>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="fr">Referência(s) do imóvel locado *</Label>
-            <Input id="fr" value={fRefs} onChange={(e) => setFRefs(e.target.value)} placeholder="Ex: AP-1006" required />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="fvalor">Valor do aluguel (R$) *</Label>
-            <Input id="fvalor" type="number" value={fValor} onChange={(e) => setFValor(e.target.value)} placeholder="2500" required />
-          </div>
-          <div className="mt-1 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setCloseLead(null)}>Cancelar</Button>
-            <Button type="submit">Confirmar locação</Button>
-          </div>
-        </form>
-      </Dialog>
+        closeLead={closeLead}
+        onCloseClose={() => setCloseLead(null)}
+        onConfirmClose={confirmClose}
+        fRefs={fRefs}
+        setFRefs={setFRefs}
+        fValor={fValor}
+        setFValor={setFValor}
 
-      <Dialog open={!!editLead} onClose={() => setEditLead(null)} title="Editar Lead">
-        {editLead && (
-          <LocacaoLeadForm
-            initial={editLead}
-            defaultCorretorId={editLead.corretorId}
-            showCorretor={isGestor}
-            showStatus
-            submitting={submitting}
-            onSubmit={handleEditSubmit}
-            onCancel={() => setEditLead(null)}
-          />
-        )}
-      </Dialog>
+        editLead={editLead}
+        onCloseEdit={() => setEditLead(null)}
+        onEditSubmit={handleEditSubmit}
+        isGestor={isGestor}
 
-      <Dialog open={!!assumirDialog} onClose={() => setAssumirDialog(null)} title="Assumir Atendimento">
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Lead: <span className="font-medium text-foreground">{assumirDialog?.nome}</span>
-            {assumirDialog && assumirDialog.corretorId && (
-              <> — Corretor: <span className="font-medium text-foreground">{userName(assumirDialog.corretorId)}</span></>
-            )}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            {assumirDialog?.gestorResponsavel
-              ? `Este lead está atualmente sob responsabilidade de ${userName(assumirDialog.gestorResponsavel)}. Deseja remover a supervisão deste lead?`
-              : "Você está assumindo a supervisão deste lead. O corretor será notificado sobre sua supervisão."}
-          </p>
-          <div className="mt-1 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setAssumirDialog(null)}>Cancelar</Button>
-            <Button type="button" onClick={handleAssumir}>
-              {assumirDialog?.gestorResponsavel ? "Remover supervisão" : "Assumir lead"}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+        assumirDialog={assumirDialog}
+        onCloseAssumir={() => setAssumirDialog(null)}
+        onConfirmAssumir={handleAssumir}
 
-      <Dialog open={!!archiveLead} onClose={() => (!submitting ? setArchiveLead(null) : undefined)} title="Arquivar Lead">
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Lead: <span className="font-medium text-foreground">{archiveLead?.nome}</span>
-            {archiveLead && archiveLead.corretorId && (
-              <> — Corretor: <span className="font-medium text-foreground">{userName(archiveLead.corretorId)}</span></>
-            )}
-          </p>
-          {archiveLead && (
-            <p className="text-sm font-display font-semibold text-primary">{brl(archiveLead.valorAluguel)}{refsTexto(archiveLead) ? ` — Ref: ${refsTexto(archiveLead)}` : ""}</p>
-          )}
-          <p className="text-sm text-muted-foreground">
-            O lead será <strong className="text-foreground">arquivado</strong> (sai do quadro, mas permanece no histórico). Nenhum evento será enviado ao Meta.
-          </p>
-          <div className="mt-1 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setArchiveLead(null)} disabled={submitting}>Cancelar</Button>
-            <Button type="button" onClick={handleArquivar} disabled={submitting}>
-              {submitting ? "Arquivando…" : "Arquivar"}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+        archiveLead={archiveLead}
+        onCloseArchive={() => setArchiveLead(null)}
+        onConfirmArchive={handleArquivar}
 
-      <Dialog open={!!desarquivarLead} onClose={() => (!submitting ? setDesarquivarLead(null) : undefined)} title="Desarquivar Lead">
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Lead: <span className="font-medium text-foreground">{desarquivarLead?.nome}</span>
-            {desarquivarLead && desarquivarLead.corretorId && (
-              <> — Corretor: <span className="font-medium text-foreground">{userName(desarquivarLead.corretorId)}</span></>
-            )}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            O lead voltará para o quadro (etapa: <strong className="text-foreground">{desarquivarLead ? LOCACAO_STATUS_LABEL[desarquivarLead.status] : ""}</strong>).
-          </p>
-          <div className="mt-1 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setDesarquivarLead(null)} disabled={submitting}>Cancelar</Button>
-            <Button type="button" onClick={handleDesarquivar} disabled={submitting}>
-              {submitting ? "Desarquivando…" : "Desarquivar"}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+        desarquivarLead={desarquivarLead}
+        onCloseDesarquivar={() => setDesarquivarLead(null)}
+        onConfirmDesarquivar={handleDesarquivar}
 
-      <Dialog open={!!delLead} onClose={() => (!submitting ? closeDelete() : undefined)} title="Excluir Lead">
-        <p className="text-sm text-muted-foreground">
-          Tem certeza que deseja excluir este lead? Esta ação não pode ser desfeita e será registrada na auditoria.
-        </p>
-        {delLead && (
-          <p className="mt-2 text-sm font-medium text-foreground">{delLead.nome} — {delLead.imovelRef || "sem imóvel"}</p>
-        )}
-        <div className="mt-4 grid gap-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="del-motivo">Motivo da exclusão</Label>
-            <Select id="del-motivo" value={delMotivo} onChange={(e) => setDelMotivo(e.target.value)}>
-              <option value="">Selecione…</option>
-              {MOTIVOS_EXCLUSAO.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="del-detalhe">Detalhe (obrigatório)</Label>
-            <Textarea
-              id="del-detalhe"
-              rows={3}
-              value={delDetalhe}
-              onChange={(e) => setDelDetalhe(e.target.value)}
-              placeholder="Explique o motivo desta exclusão para o registro de auditoria."
-            />
-          </div>
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={closeDelete} disabled={submitting}>Cancelar</Button>
-          <Button type="button" className="bg-destructive text-white hover:bg-destructive/90" onClick={handleDeleteConfirm} disabled={submitting}>
-            {submitting ? "Excluindo…" : "Excluir"}
-          </Button>
-        </div>
-      </Dialog>
+        delLead={delLead}
+        onCloseDelete={closeDelete}
+        onConfirmDelete={handleDeleteConfirm}
+        delMotivo={delMotivo}
+        setDelMotivo={setDelMotivo}
+        delDetalhe={delDetalhe}
+        setDelDetalhe={setDelDetalhe}
+
+        submitting={submitting}
+        corretores={corretores}
+        userName={userName}
+      />
     </>
   )
 }
