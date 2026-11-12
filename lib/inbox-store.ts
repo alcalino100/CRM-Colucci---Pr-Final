@@ -65,7 +65,13 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   setMensagens: (m) => set({ mensagens: m }),
   setModoReal: (v) => set({ modoReal: v }),
   setInstancia: (v) => {
-    if(typeof window!=="undefined") try{ localStorage.setItem("inbox-instancia", v) }catch{}
+    if(typeof window!=="undefined") {
+      try {
+        localStorage.setItem("inbox-instancia", v)
+      } catch {
+        // localStorage indisponível em ambiente restrito
+      }
+    }
     set({ instanciaSelecionada: v })
   },
   setOrdenacao: (v) => set({ ordenacao: v }),

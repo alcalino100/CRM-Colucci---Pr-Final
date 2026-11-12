@@ -1,8 +1,16 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts"
+import dynamic from "next/dynamic"
 import { Check, Coins, Handshake, Banknote, BadgeCheck, PieChart as PieIcon, Pencil, X } from "lucide-react"
+
+const FechamentoMesChart = dynamic(
+  () => import("@/components/fechamento/FechamentoMesChart").then((m) => m.FechamentoMesChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-60 w-full rounded-lg bg-muted/40 animate-pulse" />,
+  }
+)
 import { useLocacao } from "@/lib/locacao-store"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel, podeLocacao } from "@/lib/roles"
@@ -246,21 +254,7 @@ export default function LocacaoContratosPage() {
         <Card className="lg:col-span-2">
           <CardHeader>          <CardTitle>Mês a mês — total em {corLabel === "Locado" ? "locações" : "negociações"}</CardTitle></CardHeader>
           <CardContent>
-            {porMes.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">Nenhum registro neste período</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={porMes}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="#71717a" tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#71717a" tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(v: any) => brl(Number(v) || 0)} />
-                  <Bar dataKey="total" radius={[4, 4, 0, 0]}>
-                    {porMes.map((_, i) => <Cell key={i} fill={cor} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+            <FechamentoMesChart porMes={porMes} cor={cor} />
           </CardContent>
         </Card>
 

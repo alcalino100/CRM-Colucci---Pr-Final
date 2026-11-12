@@ -1,11 +1,11 @@
 import { Suspense } from "react"
 import Link from "next/link"
-import { ChevronRight, Workflow, Plus, Sparkles, Layers } from "lucide-react"
+import { ChevronRight, Workflow, Sparkles } from "lucide-react"
 import FlowList, { FlowListSkeleton } from "@/components/automation/flow-list"
-import FlowEditor from "@/components/automation/flow-editor"
 import { RequireGestor } from "@/components/RequireGestor"
 import { EditorSkeleton } from "@/components/automation/flow-editor"
 import { AutomationSubNav } from "@/components/automation/AutomationSubNav"
+import { DynamicFlowEditor } from "@/components/automation/DynamicFlowEditor"
 
 // Server Component — Next 16: searchParams é uma Promise (async).
 export default async function FluxosPage({
@@ -50,7 +50,7 @@ export default async function FluxosPage({
         {/* 3. Conteúdo Principal */}
         {fluxo ? (
           <Suspense fallback={<EditorSkeleton />}>
-            <FlowEditor key={fluxo} flowId={fluxo} />
+            <DynamicFlowEditor key={fluxo} flowId={fluxo} />
           </Suspense>
         ) : (
           <Suspense fallback={<FlowListSkeleton />}>

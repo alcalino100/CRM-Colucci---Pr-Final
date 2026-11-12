@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import { useInboxStore } from "@/lib/inbox-store"
 import { Select } from "@/components/ui/primitives"
+import { logger } from "@/lib/logger"
 
 type Inst = { instance_name: string; corretorNome: string; status: string }
 
@@ -15,7 +16,9 @@ export function InstanceSelector(){
     try{
       const saved = localStorage.getItem("inbox-instancia")
       if(saved && saved!==instancia) setInstancia(saved)
-    }catch{}
+    }catch{
+      // localStorage indisponível
+    }
     fetch("/api/whatsapp/instancias")
       .then(r=>r.json())
       .then(j=>{
@@ -26,7 +29,9 @@ export function InstanceSelector(){
           // se instancia salva não existe mais, volta para patricia
           // não força, só mantém
         }
-      }).catch(()=>{})
+      }).catch((err)=>{
+        logger.warn("Falha ao carregar lista de instâncias WhatsApp no InstanceSelector", { error: err instanceof Error ? err.message : String(err) })
+      })
   },[])
 
   if(lista.length===0) return null

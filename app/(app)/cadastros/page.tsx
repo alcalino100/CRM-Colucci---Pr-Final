@@ -21,10 +21,22 @@ import {
   type CriterioData,
   type AbaCadastros,
 } from "@/components/cadastros/cadastros-utils"
+import dynamic from "next/dynamic"
 import { CadastrosFilterBar } from "@/components/cadastros/CadastrosFilterBar"
 import { CadastrosKpis } from "@/components/cadastros/CadastrosKpis"
-import { CadastrosChart } from "@/components/cadastros/CadastrosChart"
 import { CadastrosList } from "@/components/cadastros/CadastrosList"
+
+const CadastrosChart = dynamic(
+  () => import("@/components/cadastros/CadastrosChart").then((m) => m.CadastrosChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 w-full rounded-xl border border-border/50 bg-card p-4 animate-pulse">
+        <div className="h-full w-full rounded-lg bg-muted/30" />
+      </div>
+    ),
+  }
+)
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json())
 

@@ -1,6 +1,7 @@
 "use client"
 import { useState, use, Component, type ReactNode } from "react"
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import { useAIAgentsStore } from "@/lib/ai-agents-store"
 import { BotSettings } from "@/components/ai-agents/BotSettings"
 import { KnowledgeBase } from "@/components/ai-agents/KnowledgeBase"
@@ -8,10 +9,14 @@ import { PromptsVoice } from "@/components/ai-agents/PromptsVoice"
 import { Goals } from "@/components/ai-agents/Goals"
 import { Escalation } from "@/components/ai-agents/Escalation"
 import { Testing } from "@/components/ai-agents/Testing"
-import { Analytics } from "@/components/ai-agents/Analytics"
 import { ApiAudit } from "@/components/ai-agents/ApiAudit"
 import { ControlCenter } from "@/components/ai-agents/ControlCenter"
 import { TagsPanel } from "@/components/ai-agents/TagsPanel"
+
+const Analytics = dynamic(() => import("@/components/ai-agents/Analytics").then((m) => m.Analytics), {
+  ssr: false,
+  loading: () => <div className="h-64 w-full rounded-xl bg-card border border-border/50 animate-pulse" />,
+})
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
