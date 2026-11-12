@@ -1,6 +1,7 @@
 import { normalizePhone } from "@/lib/labels"
 import { getBoundInstances, getRules } from "./rules"
 import { db } from "./inbox-common"
+import { AI_AGENTS_COLUMNS } from "@/lib/supabase/projections"
 
 export interface AiAgentRecord {
   id: string
@@ -19,7 +20,7 @@ export interface AiAgentRecord {
 // estar ATIVO (is_active) com regras habilitadas (rules.enable). Sem isso, não responde NUNCA.
 export async function agenteParaInstancia(instanceName: string | undefined): Promise<AiAgentRecord | null> {
   if (!instanceName) return null
-  const { data: agentes, error } = await db().from("ai_agents").select("*")
+  const { data: agentes, error } = await db().from("ai_agents").select(AI_AGENTS_COLUMNS)
   if (error || !agentes?.length) return null
   const ativos = (agentes as AiAgentRecord[]).filter((a) => a.is_active && getRules(a.config).enable)
   return ativos.find((a) => getBoundInstances(a.config).includes(instanceName)) || null
@@ -32,7 +33,7 @@ export async function agenteParaNumeroTeste(telefone: string | undefined): Promi
   const alvo = normalizePhone(telefone)
   if (!alvo) return null
   try {
-    const { data: agentes, error } = await db().from("ai_agents").select("*")
+    const { data: agentes, error } = await db().from("ai_agents").select(AI_AGENTS_COLUMNS)
     if (error || !agentes?.length) return null
     const ativos = (agentes as AiAgentRecord[]).filter((a) => a.is_active && getRules(a.config).enable)
     return (

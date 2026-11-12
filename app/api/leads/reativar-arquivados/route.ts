@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
 import { logger } from "@/lib/logger"
+import { LEAD_COLUMNS } from "@/lib/supabase/projections"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -54,7 +55,7 @@ async function processarReativacao(request: Request) {
   // 1. Buscar todos os leads arquivados
   const { data: leadsArquivados, error: errLeads } = await wsupabase
     .from("leads")
-    .select("*")
+    .select(LEAD_COLUMNS)
     .not("arquivado_em", "is", null)
 
   if (errLeads) {

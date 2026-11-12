@@ -1,6 +1,7 @@
 import { supabase } from "../supabase/client"
 import { isGestorNivel, modulosRole } from "../roles"
 import { logger } from "@/lib/logger"
+import { NOTIFICACOES_COLUMNS } from "@/lib/supabase/projections"
 import type { Notification, Role, Modulo } from "../mock-data"
 import type { NotifyOpts } from "./types"
 import { rowToNotification } from "./mappers"
@@ -13,7 +14,7 @@ export async function fetchUserNotifications({
   userRole: Role
 }): Promise<Notification[]> {
   if (!userId) return []
-  let q = supabase.from("notificacoes").select("*").order("timestamp", { ascending: false }).limit(100)
+  let q = supabase.from("notificacoes").select(NOTIFICACOES_COLUMNS).order("timestamp", { ascending: false }).limit(100)
   if (isGestorNivel(userRole)) {
     q = q.or(`para_role.eq.gestor,para_role.is.null,para_usuario_id.eq.${userId}`)
   } else {
@@ -39,7 +40,7 @@ export async function fetchAdminSentNotifications({
   if (!isGestorNivel(userRole)) return []
   const { data: sent } = await supabase
     .from("notificacoes")
-    .select("*")
+    .select(NOTIFICACOES_COLUMNS)
     .eq("tipo", "comunicado_gestao")
     .order("timestamp", { ascending: false })
     .limit(100)

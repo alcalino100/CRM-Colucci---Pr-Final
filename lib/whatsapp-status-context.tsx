@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
 import { useToast } from "@/components/ui/primitives"
 import { logger } from "@/lib/logger"
+import { safeSetInterval } from "@/hooks/use-safe-interval"
 
 export interface WhatsAppInstance {
   id: string
@@ -164,10 +165,10 @@ export function WhatsAppStatusProvider({ children }: { children: React.ReactNode
   // Initial load and periodic refresh
   useEffect(() => {
     void fetchInstances()
-    const interval = setInterval(() => {
+    const stopInterval = safeSetInterval(() => {
       void fetchInstances(true)
     }, 60_000)
-    return () => clearInterval(interval)
+    return () => stopInterval()
   }, [fetchInstances])
 
   // Real-time subscription to postgres_changes on whatsapp_instancias

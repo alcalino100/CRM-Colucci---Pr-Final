@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
+import { safeSetInterval } from "@/hooks/use-safe-interval"
 
 interface Presenca {
   // userId -> online?
@@ -147,10 +148,10 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     }
 
     void lerEstado()
-    const poll = window.setInterval(lerEstado, 15_000)
+    const stopPoll = safeSetInterval(lerEstado, 15_000)
     return () => {
       disposed = true
-      window.clearInterval(poll)
+      stopPoll()
     }
   }, [user?.id])
 

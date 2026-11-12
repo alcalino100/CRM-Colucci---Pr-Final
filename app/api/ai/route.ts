@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { AI_AGENTS_COLUMNS } from "@/lib/supabase/projections"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
 
 export async function GET(){
   try{
-    const { data, error } = await db().from("ai_agents").select("*").order("created_at", {ascending:false})
+    const { data, error } = await db().from("ai_agents").select(AI_AGENTS_COLUMNS).order("created_at", {ascending:false})
     if(error) throw error
     return NextResponse.json(data)
   }catch(e:any){
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest){
       is_active: !!body.isActive,
       config: body.config || null,
     }
-    const { data, error } = await db().from("ai_agents").insert(row).select("*").single()
+    const { data, error } = await db().from("ai_agents").insert(row).select(AI_AGENTS_COLUMNS).single()
     if(error) throw error
     return NextResponse.json(data)
   }catch(e:any){

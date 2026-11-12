@@ -266,16 +266,38 @@ Todos os **11 arquivos grandes** (>600 linhas) foram decompostos com testes de c
 
 ---
 
-## 8. Próximo Passo: FASE 4 — Dados e Performance
+### FASE 4 — Dados e Performance (Concluída em PR #31 e PR #32)
+- [x] **Organização de Cadastros (Novos vs Base Antiga):**
+  - Implementação de abas dedicadas em `/cadastros` ("Novos Cadastros", "Base Anterior Ativa", "Todos"), separando leads novos criados no período de leads antigos movimentados recentemente (PR #31).
+  - Critério de data selecionável ("Apenas Data de Cadastro" vs "Cadastro + Atividade Recente").
+  - Badges visuais de alto contraste (`✨ Novo Cadastro`, `🔁 Reativado`, `📜 Base Anterior`).
+- [x] **Eliminação Total de `select("*")` (68 -> 0):**
+  - Criação de `lib/supabase/projections.ts` contendo constantes canônicas de projeção de colunas (`LEAD_COLUMNS`, `VISITAS_COLUMNS`, `NOTIFICACOES_COLUMNS`, `LOCACAO_LEADS_COLUMNS`, `AI_AGENTS_COLUMNS`, `CONVERSATIONS_IA_COLUMNS`, etc.).
+  - Substituição de todas as ocorrências de `select("*")` em `lib/leads-store.tsx`, `lib/locacao-store.tsx`, `lib/automation-store.tsx`, `lib/meta/mcp-server.ts`, `lib/automation-services.ts`, e rotas de API (`/api/leads`, `/api/ai`, `/api/conversations`, `/api/whatsapp`, `/api/meta`, `/api/admin`).
+  - Redução massiva de payload de rede e tempo de deserialização JSON.
+- [x] **Intervalos Seguros (`useSafeInterval` & `safeSetInterval`):**
+  - Criação de `hooks/use-safe-interval.ts` com suspensão automática de timers quando `document.visibilityState === "hidden"`.
+  - Substituição de polling bruto em `automacoes/page.tsx`, `lib/whatsapp-status-context.tsx`, `lib/presence.tsx`, `components/whatsapp-connection-card.tsx`, `components/inbox/ConversaView.tsx` e `components/inbox/InboxClient.tsx`.
+  - Economia de recursos de CPU, bateria e requisições ociosas no Supabase.
+- [x] **Consolidação de Canais Realtime:**
+  - Multiplexação das tabelas em canais unificados por contexto (`crm-realtime`, `crm-realtime-locacao`, `automations-realtime`, `crm-whatsapp-status-realtime`).
+  - Eliminação de canais duplicados (ex.: canal de celebração isolado em locação substituído por dispatcher compartilhado).
+  - Desinscrição garantida (`supabase.removeChannel`) em desmontagem.
+- [x] **Migração de Índices de Performance (`supabase/migrations/20261112120000_fase4_performance_indexes.sql`):**
+  - Geração de script SQL com índices otimizados para as consultas mais frequentes:
+    - `leads(corretor_id, status, arquivado_em)`: index scan para filtros de Kanban e listagens.
+    - `leads(data_reaparecimento) WHERE data_reaparecimento IS NOT NULL AND arquivado_em IS NOT NULL`: índice parcial leve para o cron de hibernação.
+    - `leads(criado_em DESC)` e `leads(atualizado_em DESC)`: ordenação sem sort em disco.
+    - `conversations_ia(ai_id, last_message_at DESC)` e `messages_ia(conversation_id, created_at DESC)`: histórico instantâneo do chat IA.
+    - `automation_jobs(status, scheduled_at ASC)`: busca rápida de jobs agendados no worker.
+    - `notificacoes(para_usuario_id, timestamp DESC)` e `notificacoes(para_role, timestamp DESC)`: feed de notificações.
+    - `meta_insights_campaign_daily(campanha_id, data DESC)` e `meta_insights_ad_daily(ad_id, data DESC)`: dashboards de tráfego.
+  - Script gerado e documentado sem execução no banco de produção (Regra Inegociável #3).
+- [x] **Cache e Deduplicação SWR Sem Rajadas de Requests:**
+  - Criação de `lib/swr-config.ts` com `SWR_DEFAULT_CONFIG` (`revalidateOnFocus: false`, `dedupingInterval: 10_000`, `errorRetryCount: 2`).
+  - Provedor global `<SWRConfig>` no layout principal protegendo todos os componentes de rajadas de requisições ao alternar entre abas do navegador.
+- [x] **Testes Automatizados:** 29 arquivos de teste e 235 testes unitários passando em ~1,7s.
 
-A Fase 4 atacará a eficiência no consumo de dados e ciclo de vida do cliente:
-1. **Auditoria e Eliminação de `select("*")`:**
-   - Projeção de colunas necessárias (`LEAD_LIST_COLUMNS`, etc.) em `lib/leads-store.tsx`, rotas de API e queries Supabase para reduzir payload e latência.
-2. **Ciclo de Vida de `setInterval` e Polling:**
-   - Auditoria dos 10 `setInterval` ativos na aplicação para garantir limpeza correta (`clearInterval`) em desmontagem de componentes e suspensão quando a aba está em background (`document.visibilityState`).
-3. **Canais Realtime Supabase:**
-   - Consolidação de conexões realtime para evitar criação redundante de canais.
-4. **Tratamento de Exceções & Promises:**
-   - Auditoria de catches vazios (`/* silent */`), adicionando logs estruturados com o novo `lib/logger.ts` para observabilidade sem vazamento de dados pessoais.
-5. **Dynamic Imports (`next/dynamic`):**
-   - Import dinâmico de pacotes pesados (`recharts`, `@xyflow/react`) apenas nas rotas que os utilizam.
+---
+
+## 8. Próximo Passo: FASE 5 — Error Handling, Loading States e Resiliência

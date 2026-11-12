@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client"
+import { WORKSPACE_SETTINGS_COLUMNS } from "@/lib/supabase/projections"
 
 // Painel Master: acesso exclusivo do proprietário.
 // Por env (NEXT_PUBLIC_MASTER_EMAIL) para cada whitelabel ter o seu dono;
@@ -94,7 +95,7 @@ export function applyBrand(b: Partial<BrandSettings>): void {
 
 export async function loadBrand(): Promise<{ ok: boolean; settings: BrandSettings; faltaTabela: boolean }> {
   try {
-    const { data, error } = await supabase.from("workspace_settings").select("*").eq("id", "main").maybeSingle()
+    const { data, error } = await supabase.from("workspace_settings").select(WORKSPACE_SETTINGS_COLUMNS).eq("id", "main").maybeSingle()
     if (error) {
       const faltaTabela = String(error.message || "").toLowerCase().includes("does not exist")
         || String((error as { code?: string }).code || "") === "42P01"

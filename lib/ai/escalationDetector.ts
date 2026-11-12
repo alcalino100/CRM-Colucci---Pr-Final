@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { ESCALATION_TRIGGERS_COLUMNS } from "@/lib/supabase/projections"
 import type { EscalationCheck, EscalationTrigger } from "./types"
 import { logger } from "@/lib/logger"
 
@@ -130,7 +131,7 @@ export async function detectEscalation(
     if (!aiId) return { shouldEscalate: false, reason: "Agente não informado", severity: "low" }
     const { data, error } = await db()
       .from("escalation_triggers")
-      .select("*")
+      .select(ESCALATION_TRIGGERS_COLUMNS)
       .eq("ai_id", aiId)
     if (error) {
       logger.error("[IA] erro carregar triggers", { error: error.message })

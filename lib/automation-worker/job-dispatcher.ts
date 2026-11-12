@@ -4,6 +4,7 @@
 
 import { logger } from "@/lib/logger"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { AUTOMATION_TEMPLATES_COLUMNS } from "@/lib/supabase/projections"
 import {
   acquireLock,
   releaseLock,
@@ -135,7 +136,7 @@ export async function despacharJobsAgendados(
 
       const { data: template } = await wsupabase
         .from("automation_message_templates")
-        .select("*")
+        .select(AUTOMATION_TEMPLATES_COLUMNS)
         .eq("id", targetTemplateId)
         .maybeSingle()
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { CONVERSATIONS_IA_COLUMNS, MESSAGES_IA_COLUMNS } from "@/lib/supabase/projections"
 import { generateAIResponse } from "@/lib/ai/generateResponse"
 import { logger } from "@/lib/logger"
 
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { message, aiId } = await req.json().catch(() => ({}))
   if (!message || !aiId) return NextResponse.json({ error: "message e aiId obrigatórios" }, { status: 400 })
   try {
-    const { data: conv } = await db().from("conversations_ia").select("*").eq("id", id).single()
+    const { data: conv } = await db().from("conversations_ia").select(CONVERSATIONS_IA_COLUMNS).eq("id", id).single()
     if (!conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
     // Lead vinculado (contact_id pode ser UUID de lead) para handoff completo.
     let leadIdEfetivo: string | undefined
@@ -59,7 +60,7 @@ const { data: historyDesc } = await db()
     const userMsg = await db()
       .from("messages_ia")
       .insert({ id: `msg_${Date.now()}`, conversation_id: id, role: "user", content: message })
-      .select("*")
+      .select(MESSAGES_IA_COLUMNS)
       .single()
     try {
       await db()
@@ -100,7 +101,7 @@ const { data: historyDesc } = await db()
           content: `🚨 ESCALADO: ${esc.reason}`,
           metadata: { escalated: true, trigger: esc.triggerName ?? null, severity: esc.severity },
         })
-        .select("*")
+        .select(MESSAGES_IA_COLUMNS)
         .single()
     } else {
       const { message: aiResp, tokensUsed, model } = await generateAIResponse({
@@ -111,7 +112,7 @@ const { data: historyDesc } = await db()
       aiMsg = await db()
         .from("messages_ia")
         .insert({ id: `msg_${Date.now() + 1}`, conversation_id: id, role: "ai", content: aiResp, metadata: { tokensUsed, model } })
-        .select("*")
+        .select(MESSAGES_IA_COLUMNS)
         .single()
     }
 

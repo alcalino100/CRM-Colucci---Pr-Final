@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Clock } from "lucide-react"
+import { safeSetInterval } from "@/hooks/use-safe-interval"
 
 const BRT = "America/Sao_Paulo"
 
@@ -52,8 +53,8 @@ export function BRTClock() {
       )
     }
     update()
-    const id = setInterval(update, 1000)
-    return () => clearInterval(id)
+    const stopInterval = safeSetInterval(update, 1000)
+    return () => stopInterval()
   }, [])
 
   return (

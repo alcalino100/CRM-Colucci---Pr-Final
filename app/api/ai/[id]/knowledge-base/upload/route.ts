@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { DOCUMENTS_COLUMNS } from "@/lib/supabase/projections"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
 
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{id:s
       file_size: file.size,
       knowledge_base_id: kbId,
     }
-    const { data, error } = await db().from("documents").insert(doc).select("*").single()
+    const { data, error } = await db().from("documents").insert(doc).select(DOCUMENTS_COLUMNS).single()
     if(error) throw error
     return NextResponse.json(data)
   }catch(e:any){

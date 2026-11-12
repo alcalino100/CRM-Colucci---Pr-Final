@@ -5,6 +5,7 @@
 
 import { wsupabase } from "@/lib/whatsapp/server"
 import { onlyDigits } from "@/lib/whatsapp/server"
+import { AUTOMATIONS_COLUMNS, AUTOMATION_JOBS_COLUMNS } from "@/lib/supabase/projections"
 import type {
   Automation,
   AutomationCondition,
@@ -500,7 +501,7 @@ export async function hasActiveJob(leadId: string, automationId: string): Promis
 export async function getActiveAutomations(): Promise<Automation[]> {
   const { data } = await wsupabase
     .from("automations")
-    .select("*")
+    .select(AUTOMATIONS_COLUMNS)
     .eq("status", "active")
     .is("deleted_at", null)
     .order("priority", { ascending: false })
@@ -519,7 +520,7 @@ export async function getJobsToProcess(): Promise<AutomationJob[]> {
   // sem isso, apodrecem na fila para sempre mesmo com a janela aberta.
   const { data: readyJobs } = await wsupabase
     .from("automation_jobs")
-    .select("*")
+    .select(AUTOMATION_JOBS_COLUMNS)
     .in("status", ["scheduled", "pending_validation", "retrying", "blocked_hour"])
     .lte("scheduled_at", nowIso)
     .order("scheduled_at", { ascending: true })
@@ -533,7 +534,7 @@ export async function getJobsToProcess(): Promise<AutomationJob[]> {
 
   const { data: todayJobs } = await wsupabase
     .from("automation_jobs")
-    .select("*")
+    .select(AUTOMATION_JOBS_COLUMNS)
     .in("status", ["scheduled"])
     .gt("scheduled_at", nowIso)
     .lte("scheduled_at", todayEnd.toISOString())

@@ -2,6 +2,7 @@
 // Protegido por CRON_SECRET.
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { META_INSIGHTS_CAMPAIGN_COLUMNS, META_INSIGHTS_AD_COLUMNS } from "@/lib/supabase/projections"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,10 +24,10 @@ export async function GET(req: Request) {
   try {
     const [{ data: campanhas }, { data: insightsHoje }, { data: leadsHoje }, { data: adsHoje }, { data: insightsAdHoje }] = await Promise.all([
       wsupabase.from("meta_campanhas").select("id, nome, status, corretor_id").order("nome"),
-      wsupabase.from("meta_insights_campaign_daily").select("*").eq("data", hoje),
+      wsupabase.from("meta_insights_campaign_daily").select(META_INSIGHTS_CAMPAIGN_COLUMNS).eq("data", hoje),
       wsupabase.from("leads").select("id, nome, corretor_id, origem, criado_em, meta_campaign_id").gte("criado_em", `${hoje}T00:00:00-03:00`).lte("criado_em", `${hoje}T23:59:59.999-03:00`),
       wsupabase.from("meta_ads").select("id, nome, campanha_id"),
-      wsupabase.from("meta_insights_ad_daily").select("*").eq("data", hoje),
+      wsupabase.from("meta_insights_ad_daily").select(META_INSIGHTS_AD_COLUMNS).eq("data", hoje),
     ])
 
     const leadsPorCamp = new Map<string, number>()

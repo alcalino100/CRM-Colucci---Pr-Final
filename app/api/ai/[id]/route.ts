@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { AI_AGENTS_COLUMNS } from "@/lib/supabase/projections"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
 
@@ -66,13 +67,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{id:st
     const { data: existing } = await db().from("ai_agents").select("id").eq("id", id).maybeSingle()
     let data, error
     if(existing){
-      const r = await db().from("ai_agents").update(patch).eq("id", id).select("*").single()
+      const r = await db().from("ai_agents").update(patch).eq("id", id).select(AI_AGENTS_COLUMNS).single()
       data = r.data; error = r.error
     } else {
       // usa dados do mock como base se for um dos agentes conhecidos
       const mockDefaults: any = id==="ai_patricia_01" ? { name:"Patrícia - Reativação", description:"IA para reativação de base da Patrícia (Tráfego Pago)", bot_template:"vendas", channels:["whatsapp"], response_mode:"auto", wait_time_ms:2000, message_cap:10, is_active:true, system_prompt:"Você é uma assistente especialista em reativação de leads frios de Tráfego Pago...", additional_instructions:"Sempre ofereça visita, nunca prometa desconto sem autorização.", brand_voice:"Profissional, acolhedora, objetiva" } : { name: body.name || "Novo Agente", bot_template: "vendas", channels: ["whatsapp"], response_mode: "auto", wait_time_ms: 2000, message_cap: 10, is_active: false }
       const row = { id, ...mockDefaults, ...patch }
-      const r = await db().from("ai_agents").insert(row).select("*").single()
+      const r = await db().from("ai_agents").insert(row).select(AI_AGENTS_COLUMNS).single()
       data = r.data; error = r.error
     }
     if(error) throw error

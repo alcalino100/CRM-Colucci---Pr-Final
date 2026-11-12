@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger"
 import { detectarMidia, wsupabase } from "@/lib/whatsapp/server"
+import { RASTREIO_CLIQUES_COLUMNS } from "@/lib/supabase/projections"
 import { registrarRespostaDeLead } from "@/lib/automation-services"
 import { agenteParaInstancia, handlePatriciaInbound, isNumeroTesteIA, pausarIaMensagemManual, saudarLeadCTWA } from "@/lib/ai/inboxHandler"
 import { isBlocked, isBlockedName, extrairTelefoneContato } from "./contact-filters"
@@ -123,7 +124,7 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
   const { data: clique } = codigo
     ? await wsupabase
         .from("rastreio_cliques")
-        .select("*")
+        .select(RASTREIO_CLIQUES_COLUMNS)
         .eq("click_id", codigo)
         .gt("expira_em", new Date().toISOString())
         .maybeSingle()

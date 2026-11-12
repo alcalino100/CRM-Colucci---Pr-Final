@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import {
+  META_INSIGHTS_CAMPAIGN_COLUMNS,
+  META_INSIGHTS_ADSET_COLUMNS,
+  META_INSIGHTS_AD_COLUMNS,
+} from "@/lib/supabase/projections"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -64,11 +69,11 @@ export async function GET(req: Request) {
     const supabase = db()
 
     const [campRows, , , campanhas, leadsData] = await Promise.all([
-      supabase.from("meta_insights_campaign_daily").select("*")
+      supabase.from("meta_insights_campaign_daily").select(META_INSIGHTS_CAMPAIGN_COLUMNS)
         .gte("data", since).lte("data", until),
-      supabase.from("meta_insights_adset_daily").select("*")
+      supabase.from("meta_insights_adset_daily").select(META_INSIGHTS_ADSET_COLUMNS)
         .gte("data", since).lte("data", until),
-      supabase.from("meta_insights_ad_daily").select("*")
+      supabase.from("meta_insights_ad_daily").select(META_INSIGHTS_AD_COLUMNS)
         .gte("data", since).lte("data", until),
       supabase.from("meta_campanhas").select("id, nome, status"),
       supabase.from("leads").select("meta_campaign_id").eq("origem", "Tráfego Pago").not("meta_campaign_id", "is", null),

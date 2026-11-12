@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase/config"
+import { NOTIFICACOES_COLUMNS } from "@/lib/supabase/projections"
 
 type Payload = {
   senderId?: string
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     usuario_id: sender.id,
     para_role: body.paraRole ?? null,
     para_usuario_id: body.paraUsuarioId ?? null,
-  }).select("*").single()
+  }).select(NOTIFICACOES_COLUMNS).single()
   if (error) return fail(500, "DATABASE_ERROR", "Não foi possível enviar a notificação.", error.message)
   return NextResponse.json({ ok: true, data })
 }

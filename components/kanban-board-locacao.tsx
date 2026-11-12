@@ -7,8 +7,8 @@ import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-p
 import { useToast } from "@/components/ui/primitives"
 import { LeadCard } from "@/components/lead-card-locacao"
 import { type LocacaoLeadFormValues } from "@/components/locacao-lead-form"
-import { useSaleCelebration, SESSION_ID } from "@/components/sale-celebration"
-import { supabase } from "@/lib/supabase/client"
+import { useSaleCelebration } from "@/components/sale-celebration"
+import { broadcastSaleCelebration } from "@/lib/kanban-sale-dispatcher"
 import { useLocacao } from "@/lib/locacao-store"
 import { useAuth } from "@/lib/auth-context"
 import { isGestorNivel } from "@/lib/roles"
@@ -243,21 +243,13 @@ export function KanbanBoardLocacao({
       tipo: "Locação",
       corretor: userName(closeLead.corretorId),
     })
-    supabase
-      .channel("crm-celebracoes")
-      .send({
-        type: "broadcast",
-        event: "sale",
-        payload: {
-          nome: closeLead.nome,
-          valor,
-          ref: fRefs.trim(),
-          tipo: "Locação",
-          corretor: userName(closeLead.corretorId),
-          session: SESSION_ID,
-        },
-      })
-      .then(() => {})
+    broadcastSaleCelebration({
+      nome: closeLead.nome,
+      valor,
+      ref: fRefs.trim(),
+      tipo: "Locação",
+      corretorNome: userName(closeLead.corretorId),
+    })
     setCloseLead(null)
   }
 

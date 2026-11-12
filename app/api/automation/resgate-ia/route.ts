@@ -6,6 +6,7 @@
 
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { AUTOMATION_TEMPLATES_COLUMNS, AUTOMATIONS_COLUMNS } from "@/lib/supabase/projections"
 import {
   TEMPLATE_CONTENCAO_IA,
   AUTOMATION_CONTENCAO_IA_ID,
@@ -120,8 +121,8 @@ export async function GET() {
 
     // Carrega dados da automação e template
     const [{ data: template }, { data: automacao }] = await Promise.all([
-      wsupabase.from("automation_message_templates").select("*").eq("id", TEMPLATE_CONTENCAO_IA).maybeSingle(),
-      wsupabase.from("automations").select("*").eq("id", AUTOMATION_CONTENCAO_IA_ID).maybeSingle(),
+      wsupabase.from("automation_message_templates").select(AUTOMATION_TEMPLATES_COLUMNS).eq("id", TEMPLATE_CONTENCAO_IA).maybeSingle(),
+      wsupabase.from("automations").select(AUTOMATIONS_COLUMNS).eq("id", AUTOMATION_CONTENCAO_IA_ID).maybeSingle(),
     ])
 
     return NextResponse.json({

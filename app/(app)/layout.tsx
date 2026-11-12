@@ -24,6 +24,8 @@ import { WhatsAppStatusProvider } from "@/lib/whatsapp-status-context"
 import { WhatsAppEmergencyBanner } from "@/components/whatsapp/WhatsAppEmergencyBanner"
 import { WhatsAppStatusIndicator } from "@/components/whatsapp/WhatsAppStatusIndicator"
 import { WhatsAppReconnectModal } from "@/components/whatsapp/WhatsAppReconnectModal"
+import { SWRConfig } from "swr"
+import { SWR_DEFAULT_CONFIG } from "@/lib/swr-config"
 import { cn } from "@/lib/utils"
 
 // Mostra a foto de perfil (se houver) ou as iniciais. Precisa estar dentro do LeadsProvider.
@@ -268,16 +270,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <ToastProvider>
-      <SaleCelebrationProvider>
-      <LeadsProvider>
-      <AutomationProvider>
-      <LocacaoProvider>
-      <PresenceProvider>
-      <WhatsAppStatusProvider>
-      <WhatsAppReconnectModal />
-      <DailySummary />
-      <div className="flex min-h-screen bg-background">
+    <SWRConfig value={SWR_DEFAULT_CONFIG}>
+      <ToastProvider>
+        <SaleCelebrationProvider>
+        <LeadsProvider>
+        <AutomationProvider>
+        <LocacaoProvider>
+        <PresenceProvider>
+        <WhatsAppStatusProvider>
+        <WhatsAppReconnectModal />
+        <DailySummary />
+        <div className="flex min-h-screen bg-background">
         {/* Sidebar desktop */}
         <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col bg-sidebar lg:flex">{SidebarContent}</aside>
 
@@ -327,5 +330,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </LeadsProvider>
       </SaleCelebrationProvider>
     </ToastProvider>
+    </SWRConfig>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { logger } from "@/lib/logger"
+import { safeSetInterval } from "@/hooks/use-safe-interval"
 import { Skeleton } from "@/components/ui/primitives"
 import { useAutomation, type DashboardMetrics } from "@/lib/automation-store"
 import { useLeads } from "@/lib/leads-store"
@@ -258,10 +259,10 @@ export default function AutomacoesPage() {
         })
         .catch(() => {})
     buscar()
-    const t = setInterval(buscar, 60_000)
+    const stopInterval = safeSetInterval(buscar, 60_000, { immediateOnVisible: false })
     return () => {
       vivo = false
-      clearInterval(t)
+      stopInterval()
     }
   }, [])
 

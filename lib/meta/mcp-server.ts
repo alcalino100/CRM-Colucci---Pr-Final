@@ -4,6 +4,7 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { LEAD_COLUMNS, VISITAS_COLUMNS } from "@/lib/supabase/projections"
 import { calcularReconciliacao } from "./reconciliation"
 import { MOCK_ACCOUNTS, mockCampaigns, mockInsights } from "./mock"
 import { logger } from "@/lib/logger"
@@ -179,11 +180,11 @@ export async function executeMcpTool(name: string, args: Record<string, any> = {
       // 1. Busca leads reais no Supabase
       const { data: leadsRows } = await supabase
         .from("leads")
-        .select("*")
+        .select(LEAD_COLUMNS)
         .order("criado_em", { ascending: false })
 
       // 2. Busca visitas
-      const { data: visitsRows } = await supabase.from("visitas").select("*")
+      const { data: visitsRows } = await supabase.from("visitas").select(VISITAS_COLUMNS)
 
       // 3. Busca campanhas e insights Meta
       let campanhasMeta: any[] = []

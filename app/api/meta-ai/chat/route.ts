@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { logger } from "@/lib/logger"
+import { META_INSIGHTS_CAMPAIGN_COLUMNS, META_INSIGHTS_AD_COLUMNS } from "@/lib/supabase/projections"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -172,9 +173,9 @@ export async function POST(req: Request) {
       // Fallback: Supabase
       try {
         const [campRows, adRows, campanhas] = await Promise.all([
-          supabase.from("meta_insights_campaign_daily").select("*")
+          supabase.from("meta_insights_campaign_daily").select(META_INSIGHTS_CAMPAIGN_COLUMNS)
             .gte("data", trintaDias).lte("data", hoje),
-          supabase.from("meta_insights_ad_daily").select("*")
+          supabase.from("meta_insights_ad_daily").select(META_INSIGHTS_AD_COLUMNS)
             .gte("data", trintaDias).lte("data", hoje),
           supabase.from("meta_campanhas").select("id, nome, status"),
         ])
