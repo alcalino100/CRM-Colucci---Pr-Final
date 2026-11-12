@@ -95,20 +95,32 @@ export const PRESETS: { label: string; get: () => Periodo }[] = [
 
 export function fmtDia(key: string): string {
   if (!key) return "—"
-  const [y, m, d] = key.split("-").map(Number)
-  if (!y) return key
-  return new Date(y, m - 1, d).toLocaleDateString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-  })
+  const parts = key.split("-")
+  if (parts.length >= 3) {
+    const [, m, d] = parts
+    return `${d.padStart(2, "0")}/${m.padStart(2, "0")}`
+  }
+  return key
 }
 
 export function fmtDateLead(iso?: string | null): string {
   if (!iso) return "—"
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number)
-  if (!y) return "—"
-  return new Date(y, m - 1, d).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+  if (iso.includes("T")) {
+    try {
+      const d = new Date(iso)
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+      }
+    } catch {
+      // fallback
+    }
+  }
+  const parts = iso.slice(0, 10).split("-")
+  if (parts.length === 3) {
+    const [y, m, d] = parts
+    return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`
+  }
+  return "—"
 }
 
 export function fmtDateTimeLead(iso?: string | null): string {
