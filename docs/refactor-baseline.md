@@ -2,9 +2,9 @@
 
 **Projeto:** CRM Colucci Imóveis (white-label)  
 **Repositório:** `alcalino100/CRM-Colucci---Pr-Final`  
-**Commit de Referência:** `3cb9baa` (incorporando baseline da auditoria `52d6d09`)  
+**Commit de Referência:** `1b1fcc3` (incorporando baseline da auditoria `52d6d09`)  
 **Data:** 11 de Novembro de 2026  
-**Status:** FASE 0, 1 e 2 CONCLUÍDAS — Pronto para FASE 3 (Arquitetura e Decomposição de Arquivos Grandes)
+**Status:** FASES 0, 1, 2 e 3 CONCLUÍDAS — Pronto para FASE 4 (Dados e Performance)
 
 ---
 
@@ -243,19 +243,39 @@ Antes de iniciar a divisão de qualquer arquivo gigante na Fase 3, os seguintes 
 
 ---
 
-## 8. Próximo Passo: FASE 3 (Arquitetura e Decomposição de Arquivos Grandes)
+### FASE 3 — Arquitetura e Decomposição de Arquivos Grandes (Concluída em PRs #19 a #29)
+Todos os **11 arquivos grandes** (>600 linhas) foram decompostos com testes de caracterização prévios, 0 regressões funcionais e 100% de integridade no build e testes:
 
-Conforme estabelecido no planejamento, a Fase 3 atacará os 11 arquivos >600 linhas com **testes de caracterização prévios** e um PR por domínio de arquivo dividido:
-1. \`app/(app)/automacoes/page.tsx\` (1.596 linhas)
-2. \`app/api/automation/worker/route.ts\` (1.490 linhas)
-3. \`app/(app)/meta-ads/page.tsx\` (1.094 linhas)
-4. \`app/api/whatsapp/webhook/route.ts\` (1.023 linhas)
-5. \`components/kanban-board.tsx\` (1.001 linhas)
-6. \`app/(app)/arquivados/page.tsx\` (989 linhas)
-7. \`lib/ai/inboxHandler.ts\` (930 linhas)
-8. \`lib/leads-store.tsx\` (917 linhas)
-9. \`app/(app)/master/page.tsx\` (797 linhas)
-10. \`components/kanban-board-locacao.tsx\` (724 linhas)
-11. \`app/(app)/automacoes/nova/page.tsx\` (604 linhas)
+| Item | Arquivo Original | Linhas Antes | Linhas Depois | PR | Módulos Extraídos & Testes |
+|---|---|---|---|---|---|
+| 1 | `app/(app)/automacoes/page.tsx` | 1.596 | **447** | #19 | `AutomationMetrics.tsx`, `AutomacoesFilaTable.tsx`, `AutomacoesGraficos.tsx`, `dashboard-utils.ts`, `dashboard-utils.test.ts` (19 testes) |
+| 2 | `app/api/automation/worker/route.ts` | 1.490 | **248** | #20 | `worker-cadence.ts`, `worker-stages.ts`, `worker-stages.test.ts` (5 testes) |
+| 3 | `app/(app)/meta-ads/page.tsx` | 1.094 | **463** | #21 | `MetaAdsCampanhasTable.tsx`, `MetaAdsMetricsCards.tsx`, `meta-ads-utils.ts`, `meta-ads-utils.test.ts` (6 testes) |
+| 4 | `app/api/whatsapp/webhook/route.ts` | 1.023 | **56** | #22 | `ad-detection.ts`, `inbound-handler.ts`, `lead-attribution.ts`, `webhook-stages.test.ts` (7 testes), `webhook-lead-detection.test.ts` (11 testes) |
+| 5 | `components/kanban-board.tsx` | 1.001 | **229** | #23 | `KanbanDialogs.tsx`, `KanbanFilterBar.tsx`, `KanbanReativadosBanner.tsx`, `kanban-utils.ts`, `use-kanban-actions.ts`, `kanban-utils.test.ts` (8 testes) |
+| 6 | `app/(app)/arquivados/page.tsx` | 989 | **341** | #24 | `ArquivadosKpiCards.tsx`, `ArquivadosFilterBar.tsx`, `ArquivadosBatchActions.tsx`, `ArquivadosTable.tsx`, `ArquivadosModals.tsx`, `arquivados-utils.ts`, `arquivados-utils.test.ts` (7 testes) |
+| 7 | `lib/ai/inboxHandler.ts` | 930 | **408** | #25 | `inbox-common.ts`, `inbox-resolution.ts`, `inbox-agenda-prompt.ts`, `inbox-responder.ts`, `inbox-saudacao.ts`, `inbox-pause.ts`, `inbox-common.test.ts` (8 testes) |
+| 8 | `lib/leads-store.tsx` | 917 | **537** | #26 | `types.ts`, `mappers.ts`, `hibernacao.ts`, `visits.ts`, `users.ts`, `lead-mutations.ts`, `notifications.ts`, `leads-store-mappers.test.ts` (8 testes) |
+| 9 | `app/(app)/master/page.tsx` | 797 | **84** | #27 | `MarcaSection.tsx`, `IAsSection.tsx`, `AutomacoesSection.tsx`, `TagsSection.tsx`, `EquipeSection.tsx`, `PipelinesSection.tsx`, `RelatoriosSection.tsx`, `AgenciaSection.tsx`, `ClonarSection.tsx`, `MasterUiAtoms.tsx`, `master-utils.test.ts` (3 testes) |
+| 10 | `components/kanban-board-locacao.tsx` | 724 | **491** | #28 | `KanbanLocacaoFilterBar.tsx`, `KanbanLocacaoDialogs.tsx`, `kanban-locacao-utils.ts`, `kanban-locacao-utils.test.ts` (12 testes) |
+| 11 | `app/(app)/automacoes/nova/page.tsx` | 604 | **381** | #29 | `NovaAutomacaoConfigSteps.tsx`, `NovaAutomacaoConditionsStep.tsx`, `NovaAutomacaoMessageStep.tsx`, `NovaAutomacaoReviewSteps.tsx`, `nova-automacao-utils.ts`, `nova-automacao-utils.test.ts` (7 testes) |
+| **Total** | | **10.165** | **3.685** | | **-63,7% de linhas nos pontos de entrada centrais** |
 
-**Aguardando autorização expressa do usuário para iniciar a FASE 3.**
+- **Suíte de Testes:** Cresceu de 12 para **27 arquivos de testes**, com **218 testes automatizados** passando em ~1,6s.
+- **Build & Rotas:** Turbopack build compilando 49/49 rotas limpas em ~6,2s.
+
+---
+
+## 8. Próximo Passo: FASE 4 — Dados e Performance
+
+A Fase 4 atacará a eficiência no consumo de dados e ciclo de vida do cliente:
+1. **Auditoria e Eliminação de `select("*")`:**
+   - Projeção de colunas necessárias (`LEAD_LIST_COLUMNS`, etc.) em `lib/leads-store.tsx`, rotas de API e queries Supabase para reduzir payload e latência.
+2. **Ciclo de Vida de `setInterval` e Polling:**
+   - Auditoria dos 10 `setInterval` ativos na aplicação para garantir limpeza correta (`clearInterval`) em desmontagem de componentes e suspensão quando a aba está em background (`document.visibilityState`).
+3. **Canais Realtime Supabase:**
+   - Consolidação de conexões realtime para evitar criação redundante de canais.
+4. **Tratamento de Exceções & Promises:**
+   - Auditoria de catches vazios (`/* silent */`), adicionando logs estruturados com o novo `lib/logger.ts` para observabilidade sem vazamento de dados pessoais.
+5. **Dynamic Imports (`next/dynamic`):**
+   - Import dinâmico de pacotes pesados (`recharts`, `@xyflow/react`) apenas nas rotas que os utilizam.
