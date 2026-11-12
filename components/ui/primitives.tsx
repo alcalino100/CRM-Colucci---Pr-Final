@@ -83,6 +83,13 @@ export function Skeleton({ className, ...p }: React.ComponentProps<"div">) {
 export function Dialog({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: React.ReactNode; title: string }) {
   const dialogRef = React.useRef<HTMLDivElement>(null)
   const prevFocusRef = React.useRef<HTMLElement | null>(null)
+  // Mantém o onClose mais recente sem recriar o efeito de foco: callers passam arrow functions
+  // inline (nova identidade a cada render), o que reexecutava o efeito a cada tecla digitada e
+  // devolvia o foco ao diálogo, tirando o cursor do input.
+  const onCloseRef = React.useRef(onClose)
+  React.useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   React.useEffect(() => {
     if (!open) return
@@ -93,7 +100,7 @@ export function Dialog({ open, onClose, children, title }: { open: boolean; onCl
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key === "Tab" && dialogRef.current) {
@@ -115,7 +122,10 @@ export function Dialog({ open, onClose, children, title }: { open: boolean; onCl
 
     document.addEventListener("keydown", handleKeyDown)
     const timer = setTimeout(() => {
-      dialogRef.current?.focus()
+      // Foco inicial no diálogo só se o usuário ainda não estiver dentro dele (ex.: autoFocus em um campo)
+      if (dialogRef.current && !dialogRef.current.contains(document.activeElement)) {
+        dialogRef.current.focus()
+      }
     }, 20)
 
     return () => {
@@ -129,7 +139,7 @@ export function Dialog({ open, onClose, children, title }: { open: boolean; onCl
         }
       }
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
   return (
