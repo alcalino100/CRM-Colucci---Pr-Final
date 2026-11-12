@@ -1,273 +1,80 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import { logger } from "@/lib/logger"
-import {
-  type AuditEntry,
-  type AuditTipo,
-  type ChangeLog,
-  type Interaction,
-  type Lead,
-  type LeadRef,
-  type LeadStatus,
-  type Modulo,
-  type Notification,
-  type OperationalJustification,
-  type Origem,
-  type QualityNote,
-  type Role,
-  type ScheduledNotification,
-  type Temperatura,
-  type User,
-  type Visit,
+import type {
+  AuditEntry,
+  ChangeLog,
+  Interaction,
+  Lead,
+  Notification,
+  OperationalJustification,
+  QualityNote,
+  ScheduledNotification,
+  User,
+  Visit,
 } from "./mock-data"
-import bcrypt from "bcryptjs"
-import { isCorretorDe, isGestorNivel, isMaster, isSomenteLeitura, modulosRole } from "./roles"
+import { isCorretorDe, isGestorNivel, isSomenteLeitura } from "./roles"
 import { supabase } from "./supabase/client"
 import { useAuth } from "./auth-context"
-import { normalizePhone, normalizeStatus } from "./labels"
-import { isTelefoneBloqueado } from "./telefones-bloqueados"
+import { normalizePhone } from "./labels"
+import type { Store, NotifyOpts, AuditInput } from "./leads-store/types"
+import {
+  rowToLead,
+  leadPatchToRow,
+  rowToVisit,
+  rowToUser,
+  rowToNotification,
+  rowToJustification,
+  rowToQuality,
+  rowToAudit,
+  extrairMetaArquivado,
+  isPhoneUniqueViolation,
+} from "./leads-store/mappers"
+import {
+  executarArquivarLeadComData,
+  executarDesarquivarLead,
+} from "./leads-store/hibernacao"
+import {
+  executarAddVisit,
+  executarUpdateVisit,
+  executarRemoveVisit,
+} from "./leads-store/visits"
+import {
+  executarAddUser,
+  executarUpdateUser,
+  executarUpdateProfile,
+} from "./leads-store/users"
+import {
+  executarAddLead,
+  executarUpdateLead,
+  executarUpdateLeadsBulk,
+  executarDeleteLead,
+  executarAddJustification,
+} from "./leads-store/lead-mutations"
+import {
+  fetchUserNotifications,
+  fetchAdminSentNotifications,
+  enviarNotificacaoGeral,
+  enviarNotificacaoAdmin,
+  persistirNotificacoesLidas,
+} from "./leads-store/notifications"
 
-interface NotifyOpts {
-  tipo?: string
-  modulo?: Modulo | null
-  paraRole?: Role | null // null = todos
-  paraUsuarioId?: string | null
-  leadId?: string | null
-}
-
-interface AuditInput {
-  leadId?: string | null
-  leadNome?: string | null
-  usuarioNome: string
-  tipo: AuditTipo
-  descricao: string
-  referencias?: string | null
-  motivo?: string | null
-  motivoDetalhe?: string | null
-}
-
-interface Store {
-  leads: Lead[]
-  visits: Visit[]
-  notifications: Notification[] // já filtradas para o usuário logado
-  sentNotifications: Notification[]
-  scheduledNotifications: ScheduledNotification[]
-  users: User[]
-  changeLogs: ChangeLog[]
-  qualityNotes: QualityNote[]
-  justifications: OperationalJustification[]
-  audit: AuditEntry[]
-  ready: boolean // dados iniciais já carregados (para UX de resumo/primeira render)
-  corretores: User[]
-  userName: (id: string) => string
-  checkPhoneDuplicate: (phone: string, excludeId?: string) => { nome: string; corretorId: string; status: LeadStatus } | null
-  addLead: (l: Omit<Lead, "id" | "criadoEm" | "atualizadoEm" | "interacoes">) => Promise<{ ok: boolean; error?: string }>
-  updateLead: (id: string, patch: Partial<Lead>) => Promise<{ ok: boolean; error?: string }>
-  updateLeadsBulk: (ids: string[], patch: Partial<Lead>) => Promise<{ ok: boolean; updated?: number; error?: string }>
-  deleteLead: (id: string, motivo: string, motivoDetalhe?: string) => Promise<{ ok: boolean; error?: string }>
-  addInteraction: (leadId: string, i: Omit<Interaction, "id" | "timestamp">) => void
-  getLead: (id: string) => Lead | undefined
-  assumirLead: (leadId: string) => Promise<{ ok: boolean; error?: string }>
-  addVisit: (v: Omit<Visit, "id">) => void
-  updateVisit: (id: string, patch: Partial<Pick<Visit, "data" | "hora" | "referencias" | "observacoes">>) => Promise<{ ok: boolean; error?: string }>
-  removeVisit: (id: string) => Promise<{ ok: boolean; error?: string }>
-  notify: (texto: string, opts?: NotifyOpts) => void
-  sendAdminNotification: (input: { mensagem: string; modulo?: Modulo | null; paraRole?: Role | null; paraUsuarioId?: string | null }) => Promise<{ ok: boolean; error?: string }>
-  markNotificationsRead: () => void
-  logChange: (e: Omit<ChangeLog, "id" | "dataHora">) => void
-  logAudit: (e: AuditInput) => void
-  addQualityNote: (leadId: string, texto: string) => void
-  addJustification: (leadId: string, motivo: string, observacao?: string) => Promise<{ ok: boolean; error?: string }>
-  addUser: (u: Omit<User, "id" | "criadoEm">) => Promise<{ ok: boolean; error?: string }>
-  updateUser: (id: string, patch: Partial<User>) => Promise<{ ok: boolean; error?: string }>
-  updateProfile: (patch: { avatar?: string }) => Promise<{ ok: boolean; error?: string }>
-  arquivarLeadComData: (
-    id: string,
-    params: {
-      motivo: string
-      dataReaparecimento: string
-      observacao?: string
-    }
-  ) => Promise<{ ok: boolean; error?: string }>
-  desarquivarLead: (id: string) => Promise<{ ok: boolean; error?: string }>
+export type { Store, NotifyOpts, AuditInput }
+export {
+  rowToLead,
+  leadPatchToRow,
+  rowToVisit,
+  rowToUser,
+  rowToNotification,
+  rowToJustification,
+  rowToQuality,
+  rowToAudit,
+  extrairMetaArquivado,
+  isPhoneUniqueViolation,
 }
 
 const Ctx = createContext<Store | null>(null)
-
-// ---------- Conversores entre o banco (colunas em pt) e o app (camelCase) ----------
-
-function extrairMetaArquivado(obs: string | null | undefined, chave: string): string | null {
-  if (!obs) return null
-  const m = obs.match(new RegExp(`\\[Hibernação:.*${chave}=([^;\\]]+)`, "i"))
-  return m ? m[1].trim() : null
-}
-
-function rowToLead(r: any): Lead {
-  const obs = r.observacoes ?? ""
-  return {
-    id: r.id,
-    nome: r.nome ?? "",
-    telefone: r.telefone ?? "",
-    email: r.email ?? "",
-    imovelRef: r.referencia_imovel ?? "",
-    referencias: Array.isArray(r.referencias) ? (r.referencias as LeadRef[]) : [],
-    temperatura: (r.temperatura ?? "morno") as Temperatura,
-    refProposta: r.ref_proposta ?? undefined,
-    refFechamento: r.ref_fechamento ?? undefined,
-    tipoImovelVendido: r.tipo_imovel_vendido ?? undefined,
-    metaCampaignId: r.meta_campaign_id ?? undefined,
-    metaAdsetId: r.meta_adset_id ?? undefined,
-    metaAdId: r.meta_ad_id ?? undefined,
-    utmCampaign: r.utm_campaign ?? undefined,
-    utmAdset: r.utm_adset ?? undefined,
-    utmAd: r.utm_ad ?? undefined,
-    fbc: r.fbc ?? undefined,
-    fbp: r.fbp ?? undefined,
-    arquivadoEm: r.arquivado_em ?? undefined,
-    dataReaparecimento: r.data_reaparecimento ?? extrairMetaArquivado(obs, "data"),
-    motivoArquivamento: r.motivo_arquivamento ?? extrairMetaArquivado(obs, "motivo"),
-    observacaoArquivamento: r.observacao_arquivamento ?? extrairMetaArquivado(obs, "obs"),
-    statusAnterior: r.status_anterior ?? extrairMetaArquivado(obs, "status_anterior"),
-    reativadoEm: r.reativado_em ?? extrairMetaArquivado(obs, "reativado_em"),
-    arquivadoPor: r.arquivado_por ?? extrairMetaArquivado(obs, "arquivado_por"),
-    reativacoesCount: r.reativacoes_count ?? 0,
-    consentimentoContato: r.consentimento_contato ?? true,
-    semInteressePermanente: r.sem_interesse_permanente ?? false,
-    fechadoEm: r.fechado_em ?? undefined,
-    negociandoEm: r.negociando_em ?? undefined,
-    origem: (r.origem ?? "Outro") as Origem,
-    observacoes: obs,
-    status: normalizeStatus(r.status ?? "novo"),
-    valorNegociacao: r.valor_proposta ?? undefined,
-    valorComissao: r.valor_comissao ?? undefined,
-    corretorId: r.corretor_id ?? "",
-    gestorResponsavel: r.gestor_responsavel ?? undefined,
-    criadoEm: r.criado_em,
-    atualizadoEm: r.atualizado_em,
-    interacoes: [],
-  }
-}
-
-function leadPatchToRow(p: Partial<Lead>): Record<string, any> {
-  const row: Record<string, any> = {}
-  if (p.nome !== undefined) row.nome = p.nome
-  if (p.telefone !== undefined) row.telefone = p.telefone
-  if (p.email !== undefined) row.email = p.email
-  if (p.imovelRef !== undefined) row.referencia_imovel = p.imovelRef
-  if (p.referencias !== undefined) row.referencias = p.referencias
-  if (p.temperatura !== undefined) row.temperatura = p.temperatura
-  if (p.refProposta !== undefined) row.ref_proposta = p.refProposta
-  if (p.refFechamento !== undefined) row.ref_fechamento = p.refFechamento
-  if (p.tipoImovelVendido !== undefined) row.tipo_imovel_vendido = p.tipoImovelVendido || null
-  if (p.metaCampaignId !== undefined) row.meta_campaign_id = p.metaCampaignId || null
-  if (p.metaAdsetId !== undefined) row.meta_adset_id = p.metaAdsetId || null
-  if (p.metaAdId !== undefined) row.meta_ad_id = p.metaAdId || null
-  if (p.utmCampaign !== undefined) row.utm_campaign = p.utmCampaign || null
-  if (p.utmAdset !== undefined) row.utm_adset = p.utmAdset || null
-  if (p.utmAd !== undefined) row.utm_ad = p.utmAd || null
-  if (p.fbc !== undefined) row.fbc = p.fbc || null
-  if (p.fbp !== undefined) row.fbp = p.fbp || null
-  if (p.origem !== undefined) row.origem = p.origem
-  if (p.observacoes !== undefined) row.observacoes = p.observacoes
-  if (p.status !== undefined) row.status = p.status
-  if (p.valorNegociacao !== undefined) row.valor_proposta = p.valorNegociacao
-  if (p.valorComissao !== undefined) row.valor_comissao = p.valorComissao ?? null
-  if (p.corretorId !== undefined) row.corretor_id = p.corretorId || null
-  if (p.gestorResponsavel !== undefined) row.gestor_responsavel = p.gestorResponsavel || null
-  if (p.arquivadoEm !== undefined) row.arquivado_em = p.arquivadoEm || null
-  if (p.dataReaparecimento !== undefined) row.data_reaparecimento = p.dataReaparecimento || null
-  if (p.motivoArquivamento !== undefined) row.motivo_arquivamento = p.motivoArquivamento || null
-  if (p.observacaoArquivamento !== undefined) row.observacao_arquivamento = p.observacaoArquivamento || null
-  if (p.statusAnterior !== undefined) row.status_anterior = p.statusAnterior || null
-  if (p.reativadoEm !== undefined) row.reativado_em = p.reativadoEm || null
-  if (p.arquivadoPor !== undefined) row.arquivado_por = p.arquivadoPor || null
-  if (p.reativacoesCount !== undefined) row.reativacoes_count = p.reativacoesCount ?? 0
-  if (p.consentimentoContato !== undefined) row.consentimento_contato = p.consentimentoContato ?? true
-  if (p.semInteressePermanente !== undefined) row.sem_interesse_permanente = p.semInteressePermanente ?? false
-  if (p.fechadoEm !== undefined) row.fechado_em = p.fechadoEm || null
-  if (p.negociandoEm !== undefined) row.negociando_em = p.negociandoEm || null
-  return row
-}
-
-function rowToVisit(r: any): Visit {
-  return {
-    id: r.id,
-    leadId: r.lead_id,
-    data: r.data,
-    hora: r.horario ?? "",
-    corretorId: r.corretor_id ?? "",
-    imovelRef: r.referencias ?? "",
-    referencias: r.referencias ?? "",
-    observacoes: r.observacoes ?? "",
-  }
-}
-
-function rowToUser(r: any): User {
-  return {
-    id: r.id,
-    nome: r.nome,
-    email: r.email,
-    senha: r.senha_hash ?? "",
-    role: r.role,
-    ativo: r.status === "ativo",
-    criadoEm: r.criado_em,
-    avatar: r.avatar ?? undefined,
-  }
-}
-
-function rowToNotification(r: any, userId: string): Notification {
-  const lidaPor: string[] = Array.isArray(r.lida_por) ? r.lida_por : []
-  // Colunas reais da tabela: mensagem, tipo, usuario_id, criado_por, para_role, para_usuario_id, lead_id, lida_por, lida, timestamp
-  return {
-    id: r.id,
-    texto: r.mensagem ?? "",
-    titulo: null,
-    prioridade: null,
-    criadoPor: r.usuario_id ?? null,
-    criadoPorNome: null,
-    timestamp: r.timestamp,
-    read: lidaPor.includes(userId) || r.lida === true,
-    tipo: r.tipo ?? "geral",
-    modulo: r.modulo ?? null,
-    paraRole: r.para_role ?? null,
-    paraUsuarioId: r.para_usuario_id ?? null,
-    leadId: r.lead_id ?? null,
-  }
-}
-
-function rowToJustification(r: any): OperationalJustification {
-  return {
-    id: r.id,
-    leadId: r.lead_id,
-    motivo: r.motivo,
-    observacao: r.observacao ?? undefined,
-    etapa: normalizeStatus(r.etapa),
-    // A tabela real usa a coluna usuario_id (mantemos fallback p/ esquemas antigos)
-    autorId: r.usuario_id ?? r.autor_id ?? "",
-    autorNome: r.autor_nome ?? "",
-    criadoEm: r.criado_em,
-  }
-}
-
-function rowToQuality(r: any): QualityNote {
-  return { id: r.id, leadId: r.lead_id, autorId: r.autor_id ?? undefined, autorNome: r.autor_nome, texto: r.texto, criadoEm: r.criado_em }
-}
-
-function rowToAudit(r: any): AuditEntry {
-  return {
-    id: r.id,
-    leadId: r.lead_id,
-    leadNome: r.lead_nome,
-    usuarioNome: r.usuario_nome,
-    tipo: r.tipo as AuditTipo,
-    descricao: r.descricao,
-    referencias: r.referencias,
-    motivo: r.motivo ?? null,
-    motivoDetalhe: r.motivo_detalhe ?? null,
-    criadoEm: r.criado_em,
-  }
-}
 
 export function LeadsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
@@ -276,7 +83,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<User[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [sentNotifications, setSentNotifications] = useState<Notification[]>([])
-  const [scheduledNotifications, setScheduledNotifications] = useState<ScheduledNotification[]>([])
+  const [scheduledNotifications] = useState<ScheduledNotification[]>([])
   const [qualityNotes, setQualityNotes] = useState<QualityNote[]>([])
   const [justifications, setJustifications] = useState<OperationalJustification[]>([])
   const [audit, setAudit] = useState<AuditEntry[]>([])
@@ -291,74 +98,67 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     const { data } = await supabase.from("leads").select("*").order("criado_em", { ascending: false })
     if (data) setLeads(data.map(rowToLead))
   }, [])
+
   const loadVisits = useCallback(async () => {
     const { data } = await supabase.from("visitas").select("*")
     if (data) setVisits(data.map(rowToVisit))
   }, [])
+
   const loadUsers = useCallback(async () => {
     // Não seleciona senha_hash: a senha nunca deve trafegar para o navegador.
-    const { data } = await supabase.from("usuarios").select("id, nome, email, role, status, avatar, criado_em").order("criado_em", { ascending: true })
+    const { data } = await supabase
+      .from("usuarios")
+      .select("id, nome, email, role, status, avatar, criado_em")
+      .order("criado_em", { ascending: true })
     if (data) setUsers(data.map(rowToUser))
   }, [])
+
   const loadNotifications = useCallback(async () => {
-    if (!userId) return
-    // Segmentação por papel: corretor vê as próprias/operacionais; gestor vê gerenciais e de equipe
-    let q = supabase.from("notificacoes").select("*").order("timestamp", { ascending: false }).limit(100)
-    if (isGestorNivel(userRole)) {
-      q = q.or(`para_role.eq.gestor,para_role.is.null,para_usuario_id.eq.${userId}`)
-    } else {
-      q = q.or(`para_usuario_id.eq.${userId},and(para_role.eq.corretor,para_usuario_id.is.null),and(para_role.is.null,para_usuario_id.is.null)`)
-    }
-    const { data } = await q
-    if (data) {
-      // Compartimentação por módulo: só aparecem notificações do módulo do usuário
-      const mods = modulosRole(userRole)
-      setNotifications(
-        data
-          .map((r) => rowToNotification(r, userId))
-          .filter((n) => !n.modulo || mods.includes(n.modulo)),
-      )
-    }
+    const list = await fetchUserNotifications({ userId, userRole })
+    setNotifications(list)
   }, [userId, userRole])
+
   const loadAdminNotifications = useCallback(async () => {
-    if (!isGestorNivel(userRole)) {
-      setSentNotifications([])
-      setScheduledNotifications([])
-      return
-    }
-    // Histórico de comunicados enviados pela gestão (identificados pelo tipo).
-    // Agendamento foi desativado: a tabela notificacoes_agendadas não existe no banco.
-    const { data: sent } = await supabase
-      .from("notificacoes")
-      .select("*")
-      .eq("tipo", "comunicado_gestao")
-      .order("timestamp", { ascending: false })
-      .limit(100)
-    setScheduledNotifications([])
-    if (sent) setSentNotifications(sent.map((r) => rowToNotification(r, userId)))
+    const sent = await fetchAdminSentNotifications({ userId, userRole })
+    setSentNotifications(sent)
   }, [userId, userRole])
+
   const loadJustifications = useCallback(async () => {
     if (!userId) return
-    const { data } = await supabase.from("justificativas_operacionais").select("*").order("criado_em", { ascending: false })
+    const { data } = await supabase
+      .from("justificativas_operacionais")
+      .select("*")
+      .order("criado_em", { ascending: false })
     if (data) setJustifications(data.map(rowToJustification))
   }, [userId])
+
   const loadQuality = useCallback(async () => {
-    if (!isGestorNivel(userRole)) return setQualityNotes([]) // corretores nunca carregam esse dado
-    const { data } = await supabase.from("observacoes_qualidade").select("*").order("criado_em", { ascending: false })
+    if (!isGestorNivel(userRole)) return setQualityNotes([])
+    const { data } = await supabase
+      .from("observacoes_qualidade")
+      .select("*")
+      .order("criado_em", { ascending: false })
     if (data) setQualityNotes(data.map(rowToQuality))
   }, [userRole])
+
   const loadAudit = useCallback(async () => {
     if (!isGestorNivel(userRole)) return setAudit([])
-    const { data } = await supabase.from("auditoria").select("*").order("criado_em", { ascending: false }).limit(1000)
+    const { data } = await supabase
+      .from("auditoria")
+      .select("*")
+      .order("criado_em", { ascending: false })
+      .limit(1000)
     if (data) setAudit(data.map(rowToAudit))
   }, [userRole])
 
-  // Agendamento de notificações desativado: o banco não possui a tabela notificacoes_agendadas.
-  const processScheduledNotifications = useCallback(async () => {}, [])
-
   useEffect(() => {
     void loadLeads().finally(() => setReady(true))
-    loadVisits(); loadUsers(); loadNotifications(); loadAdminNotifications(); loadQuality(); loadAudit()
+    loadVisits()
+    loadUsers()
+    loadNotifications()
+    loadAdminNotifications()
+    loadQuality()
+    loadAudit()
 
     const canal = supabase
       .channel("crm-realtime")
@@ -381,8 +181,14 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "visitas" }, loadVisits)
       .on("postgres_changes", { event: "*", schema: "public", table: "usuarios" }, loadUsers)
-      .on("postgres_changes", { event: "*", schema: "public", table: "notificacoes" }, () => { loadNotifications(); loadAdminNotifications() })
-      .on("broadcast", { event: "refresh" }, () => { loadNotifications(); loadAdminNotifications() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "notificacoes" }, () => {
+        loadNotifications()
+        loadAdminNotifications()
+      })
+      .on("broadcast", { event: "refresh" }, () => {
+        loadNotifications()
+        loadAdminNotifications()
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "observacoes_qualidade" }, loadQuality)
       .on("postgres_changes", { event: "*", schema: "public", table: "auditoria" }, loadAudit)
       .subscribe()
@@ -390,68 +196,86 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     return () => {
       supabase.removeChannel(canal)
     }
-  }, [loadLeads, loadVisits, loadUsers, loadNotifications, loadAdminNotifications, loadQuality, loadAudit, processScheduledNotifications, userRole])
+  }, [
+    loadLeads,
+    loadVisits,
+    loadUsers,
+    loadNotifications,
+    loadAdminNotifications,
+    loadQuality,
+    loadAudit,
+    userRole,
+  ])
 
   const userName = (id: string) => users.find((u) => u.id === id)?.nome ?? "—"
 
   // ---------- Auditoria (persistida) ----------
   const logAudit: Store["logAudit"] = (e) => {
-    void supabase.from("auditoria").insert({
-      lead_id: e.leadId ?? null,
-      lead_nome: e.leadNome ?? null,
-      usuario_nome: e.usuarioNome,
-      tipo: e.tipo,
-      descricao: e.descricao,
-      referencias: e.referencias ?? null,
-      motivo: e.motivo ?? null,
-      motivo_detalhe: e.motivoDetalhe ?? null,
-    }).then(() => loadAudit(), (err) => logger.warn("[auditoria] falha ao gravar", { error: err?.message ?? err }))
+    void supabase
+      .from("auditoria")
+      .insert({
+        lead_id: e.leadId ?? null,
+        lead_nome: e.leadNome ?? null,
+        usuario_nome: e.usuarioNome,
+        tipo: e.tipo,
+        descricao: e.descricao,
+        referencias: e.referencias ?? null,
+        motivo: e.motivo ?? null,
+        motivo_detalhe: e.motivoDetalhe ?? null,
+      })
+      .then(
+        () => loadAudit(),
+        (err) => logger.warn("[auditoria] falha ao gravar", { error: err?.message ?? err })
+      )
   }
 
   // Log legado (admin/logs) — também gera registro na auditoria persistida
   const logChange: Store["logChange"] = (e) => {
     setChangeLogs((prev) => [
-      { ...e, id: `cl${Date.now()}${Math.random().toString(36).slice(2, 6)}`, dataHora: new Date().toISOString() },
+      {
+        ...e,
+        id: `cl${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+        dataHora: new Date().toISOString(),
+      },
       ...prev,
     ])
     if (e.entidade === "lead") {
       logAudit({
         usuarioNome: e.usuario,
-        tipo: e.acao === "exclusao" ? "exclusao" : e.acao === "criacao" ? "criacao" : e.campo === "temperatura" ? "temperatura" : e.campo === "corretorId" ? "responsavel" : e.campo === "status" ? "etapa" : "edicao",
+        tipo:
+          e.acao === "exclusao"
+            ? "exclusao"
+            : e.acao === "criacao"
+              ? "criacao"
+              : e.campo === "temperatura"
+                ? "temperatura"
+                : e.campo === "corretorId"
+                  ? "responsavel"
+                  : e.campo === "status"
+                    ? "etapa"
+                    : "edicao",
         descricao: `${e.campo}: "${e.valorAnterior}" → "${e.valorNovo}"`,
       })
     }
   }
 
-  // ---------- Notificações (persistidas, segmentadas por papel) ----------
-  const notify: Store["notify"] = useCallback((texto, opts) => {
-    void supabase.from("notificacoes").insert({
-      mensagem: texto,
-      tipo: opts?.tipo ?? "geral",
-      modulo: opts?.modulo ?? "vendas",
-      usuario_id: userId ?? null,
-      para_role: opts?.paraRole ?? null,
-      para_usuario_id: opts?.paraUsuarioId ?? null,
-      lead_id: opts?.leadId ?? null,
-    }).then(() => loadNotifications())
-  }, [loadNotifications, userId])
+  // ---------- Notificações ----------
+  const notify: Store["notify"] = useCallback(
+    (texto, opts) => {
+      enviarNotificacaoGeral({ texto, opts, userId, onInserted: loadNotifications })
+    },
+    [loadNotifications, userId]
+  )
 
   const sendAdminNotification: Store["sendAdminNotification"] = async (input) => {
-    if (!isGestorNivel(userRole) || !userId) return { ok: false, error: "Acesso restrito a gestores." }
-    try {
-      const response = await fetch("/api/admin/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...input, senderId: userId }),
-      })
-      const result = await response.json()
-      if (!response.ok || !result.ok) return { ok: false, error: result.details ? `${result.error} (${result.details})` : result.error }
-      await Promise.all([loadNotifications(), loadAdminNotifications()])
-      await supabase.channel("crm-realtime").send({ type: "broadcast", event: "refresh", payload: {} })
-      return { ok: true }
-    } catch {
-      return { ok: false, error: "Falha de conexão ao processar a notificação." }
-    }
+    return enviarNotificacaoAdmin({
+      input,
+      userId,
+      userRole,
+      onSuccess: async () => {
+        await Promise.all([loadNotifications(), loadAdminNotifications()])
+      },
+    })
   }
 
   const markNotificationsRead = useCallback(() => {
@@ -459,40 +283,10 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     const unread = notifications.filter((n) => !n.read)
     if (!unread.length) return
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-
-    // Atualiza lida_por das notificações em lote (evita loop N+1 de queries)
-    void (async () => {
-      try {
-        const unreadIds = unread.map((n) => n.id)
-        const { data } = await supabase
-          .from("notificacoes")
-          .select("id, lida_por")
-          .in("id", unreadIds)
-
-        const updates = (data ?? [])
-          .map((row: any) => {
-            const arr: string[] = Array.isArray(row.lida_por) ? row.lida_por : []
-            if (!arr.includes(userId)) {
-              return supabase
-                .from("notificacoes")
-                .update({ lida_por: [...arr, userId], lida: true })
-                .eq("id", row.id)
-            }
-            return null
-          })
-          .filter(Boolean)
-
-        if (updates.length) {
-          await Promise.all(updates)
-        }
-      } catch (err) {
-        logger.warn("[notificacoes] falha ao marcar lidas", { error: err })
-      }
-    })()
+    void persistirNotificacoesLidas({ unreadIds: unread.map((n) => n.id), userId })
   }, [notifications, userId])
 
   // ---------- Ações de LEAD ----------
-  // Verifica telefone duplicado em toda a base carregada (todos os corretores/gestores).
   const checkPhoneDuplicate: Store["checkPhoneDuplicate"] = (phone, excludeId) => {
     const alvo = normalizePhone(phone)
     if (!alvo) return null
@@ -500,115 +294,33 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     return found ? { nome: found.nome, corretorId: found.corretorId, status: found.status } : null
   }
 
-  // Erro de índice único do banco (telefone duplicado)
-  const isPhoneUniqueViolation = (error: any) =>
-    error && (error.code === "23505" || /telefone_normalizado/i.test(error.message ?? ""))
-
   const addLead: Store["addLead"] = async (l) => {
     if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
-    if (isTelefoneBloqueado(l.telefone)) {
-      return { ok: false, error: "Telefone interno da empresa não pode ser cadastrado como lead." }
-    }
-    const autor = user?.nome ?? "Sistema"
-    const { data, error } = await supabase.from("leads").insert({
-      nome: l.nome,
-      telefone: l.telefone,
-      email: l.email,
-      referencia_imovel: l.imovelRef,
-      referencias: l.referencias ?? [],
-      temperatura: l.temperatura ?? "morno",
-      origem: l.origem,
-      observacoes: l.observacoes,
-      status: l.status,
-      valor_proposta: l.valorNegociacao ?? null,
-      corretor_id: l.corretorId || null,
-    }).select("id").maybeSingle()
-    if (error) {
-      return { ok: false, error: "Não foi possível cadastrar o lead. Tente novamente." }
-    }
-    const leadId = data?.id ?? null
-    logAudit({ leadId, leadNome: l.nome, usuarioNome: autor, tipo: "criacao", descricao: `Lead cadastrado (origem: ${l.origem}, temperatura: ${l.temperatura})`, referencias: (l.referencias ?? []).map((r) => r.ref).join(", ") || l.imovelRef })
-    notify(`Novo lead cadastrado: ${l.nome} (${autor})`, { tipo: "lead_novo", paraRole: "gestor", leadId })
-    if (l.corretorId && l.corretorId !== userId) {
-      notify(`Novo lead atribuído a você: ${l.nome}`, { tipo: "lead_novo", paraUsuarioId: l.corretorId, leadId })
-    }
-    await loadLeads()
-    return { ok: true }
+    return executarAddLead({
+      l,
+      userNome: user?.nome ?? "Sistema",
+      userId,
+      logAudit,
+      notify,
+      loadLeads,
+    })
   }
 
   const updateLead: Store["updateLead"] = async (id, patch) => {
     if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
-    const agora = new Date().toISOString()
-    const row = leadPatchToRow(patch)
-    // Marca a data de fechamento / de negociação quando o lead ENTRAR nessas etapas
-    if (patch.status === "fechado" && patch.fechadoEm === undefined) row.fechado_em = agora
-    if (patch.status === "negociando" && patch.negociandoEm === undefined) row.negociando_em = agora
-    row.atualizado_em = agora
-    let { error } = await supabase.from("leads").update(row).eq("id", id)
-    // Colunas fechado_em/negociando_em/valor_comissao/utm/fbc ainda não criadas (script 011/012/013 pendente): tenta sem elas
-    if (error && String(error.message).includes("does not exist")) {
-      delete row.fechado_em
-      delete row.negociando_em
-      delete row.valor_comissao
-      delete row.utm_campaign
-      delete row.utm_adset
-      delete row.utm_ad
-      delete row.fbc
-      delete row.fbp
-      delete row.tipo_imovel_vendido
-      delete row.data_reaparecimento
-      delete row.motivo_arquivamento
-      delete row.observacao_arquivamento
-      delete row.status_anterior
-      delete row.reativado_em
-      delete row.arquivado_por
-      delete row.reativacoes_count
-      delete row.consentimento_contato
-      delete row.sem_interesse_permanente
-      ;({ error } = await supabase.from("leads").update(row).eq("id", id))
-    }
-    if (error) {
-      return { ok: false, error: "Não foi possível salvar as alterações. Tente novamente." }
-    }
-    await loadLeads()
-    return { ok: true }
+    return executarUpdateLead({ id, patch, loadLeads })
   }
 
   const updateLeadsBulk: Store["updateLeadsBulk"] = async (ids, patch) => {
     if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
-    if (ids.length === 0) return { ok: true, updated: 0 }
-    const agora = new Date().toISOString()
-    const row = leadPatchToRow(patch)
-    row.atualizado_em = agora
-    let { data, error } = await supabase.from("leads").update(row).in("id", ids).select("id")
-    if (error && String(error.message).includes("does not exist")) {
-      delete row.fechado_em
-      delete row.negociando_em
-      delete row.valor_comissao
-      delete row.utm_campaign
-      delete row.utm_adset
-      delete row.utm_ad
-      delete row.fbc
-      delete row.fbp
-      delete row.tipo_imovel_vendido
-      delete row.data_reaparecimento
-      delete row.motivo_arquivamento
-      delete row.observacao_arquivamento
-      delete row.status_anterior
-      delete row.reativado_em
-      delete row.arquivado_por
-      delete row.reativacoes_count
-      delete row.consentimento_contato
-      delete row.sem_interesse_permanente
-      ;({ data, error } = await supabase.from("leads").update(row).in("id", ids).select("id"))
-    }
-    if (error) return { ok: false, error: error.message }
-    await loadLeads()
-    return { ok: true, updated: data?.length ?? 0 }
+    return executarUpdateLeadsBulk({ ids, patch, loadLeads })
   }
 
   const assumirLead: Store["assumirLead"] = async (leadId) => {
-    const { error } = await supabase.from("leads").update({ gestor_responsavel: user?.id || null }).eq("id", leadId)
+    const { error } = await supabase
+      .from("leads")
+      .update({ gestor_responsavel: user?.id || null })
+      .eq("id", leadId)
     if (error) return { ok: false, error: error.message }
     await loadLeads()
     return { ok: true }
@@ -616,282 +328,158 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   const deleteLead: Store["deleteLead"] = async (id, motivo, motivoDetalhe) => {
     if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
-    // Somente gestores podem excluir leads
-    if (!isGestorNivel(user?.role ?? "corretor")) return { ok: false, error: "Apenas gestores podem excluir leads." }
-    const motivoTrim = (motivo ?? "").trim()
-    const detalheTrim = (motivoDetalhe ?? "").trim()
-    if (!motivoTrim) return { ok: false, error: "Selecione o motivo da exclusão." }
-    if (!detalheTrim) return { ok: false, error: "Descreva o motivo da exclusão." }
-
-    const lead = leads.find((l) => l.id === id)
-    const autor = user?.nome ?? "Sistema"
-
-    // Registra a auditoria ANTES de excluir, garantindo o rastro mesmo que a exclusão siga
-    const { error: auditErr } = await supabase.from("auditoria").insert({
-      lead_id: id,
-      lead_nome: lead?.nome ?? null,
-      usuario_nome: autor,
-      tipo: "exclusao",
-      descricao: `Lead excluído por ${autor}`,
-      motivo: motivoTrim,
-      motivo_detalhe: detalheTrim,
+    return executarDeleteLead({
+      id,
+      motivo,
+      motivoDetalhe,
+      leads,
+      userRole: user?.role,
+      userNome: user?.nome,
+      loadLeads,
+      loadAudit,
+      notify,
     })
-    if (auditErr) return { ok: false, error: "Não foi possível registrar a auditoria da exclusão." }
-
-    const { error: delErr } = await supabase.from("leads").delete().eq("id", id)
-    if (delErr) return { ok: false, error: "Não foi possível excluir o lead." }
-
-    if (lead) {
-      notify(`Lead excluído: ${lead.nome} (por ${autor}) — motivo: ${motivoTrim}`, { tipo: "exclusao", paraRole: "gestor", leadId: id })
-    }
-    await Promise.all([loadLeads(), loadAudit()])
-    return { ok: true }
   }
 
   const addInteraction: Store["addInteraction"] = (leadId, i) => {
     setLeads((prev) =>
       prev.map((l) =>
         l.id === leadId
-          ? { ...l, atualizadoEm: new Date().toISOString(), interacoes: [...l.interacoes, { ...i, id: `i${Date.now()}`, timestamp: new Date().toISOString() }] }
-          : l,
-      ),
+          ? {
+              ...l,
+              atualizadoEm: new Date().toISOString(),
+              interacoes: [
+                ...l.interacoes,
+                { ...i, id: `i${Date.now()}`, timestamp: new Date().toISOString() },
+              ],
+            }
+          : l
+      )
     )
   }
+
   const getLead = (id: string) => leads.find((l) => l.id === id)
 
   // ---------- Visitas ----------
   const addVisit: Store["addVisit"] = async (v) => {
     if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
-    await supabase.from("visitas").insert({
-      lead_id: v.leadId,
-      data: v.data,
-      horario: v.hora,
-      corretor_id: v.corretorId || null,
-      referencias: v.referencias ?? v.imovelRef ?? "",
-      observacoes: v.observacoes,
+    return executarAddVisit({
+      v,
+      leads,
+      userName,
+      userNome: user?.nome ?? userName(v.corretorId),
+      loadVisits,
+      logAudit,
+      notify,
     })
-    const lead = leads.find((l) => l.id === v.leadId)
-    const corretorNome = userName(v.corretorId)
-    const refs = v.referencias || v.imovelRef || "—"
-    const dataFmt = v.data.split("-").reverse().join("/")
-    logAudit({ leadId: v.leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? corretorNome, tipo: "visita", descricao: `Visita agendada para ${dataFmt} às ${v.hora} (corretor: ${corretorNome})`, referencias: refs })
-    // Notificação automática para gestores (Seção 7)
-    notify(`Visita agendada: ${corretorNome} · ${lead?.nome ?? "lead"} · Ref: ${refs} · ${dataFmt} às ${v.hora}`, { tipo: "visita", paraRole: "gestor", leadId: v.leadId })
-    await loadVisits()
   }
 
   const updateVisit: Store["updateVisit"] = async (id, patch) => {
-    const visita = visits.find((v) => v.id === id)
-    const row: Record<string, unknown> = {}
-    if (patch.data !== undefined) row.data = patch.data
-    if (patch.hora !== undefined) row.horario = patch.hora
-    if (patch.referencias !== undefined) row.referencias = patch.referencias
-    if (patch.observacoes !== undefined) row.observacoes = patch.observacoes
-    const { error } = await supabase.from("visitas").update(row).eq("id", id)
-    if (error) return { ok: false, error: error.message }
-    if (visita) {
-      const lead = leads.find((l) => l.id === visita.leadId)
-      const dataFmt = (patch.data ?? visita.data).split("-").reverse().join("/")
-      logAudit({ leadId: visita.leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? userName(visita.corretorId), tipo: "visita", descricao: `Visita reagendada para ${dataFmt} às ${patch.hora ?? visita.hora}`, referencias: patch.referencias ?? visita.referencias })
-    }
-    await loadVisits()
-    return { ok: true }
+    return executarUpdateVisit({
+      id,
+      patch,
+      visits,
+      leads,
+      userName,
+      userNome: user?.nome ?? "",
+      loadVisits,
+      logAudit,
+    })
   }
 
   const removeVisit: Store["removeVisit"] = async (id) => {
-    const visita = visits.find((v) => v.id === id)
-    const { error } = await supabase.from("visitas").delete().eq("id", id)
-    if (error) return { ok: false, error: error.message }
-    if (visita) {
-      const lead = leads.find((l) => l.id === visita.leadId)
-      const dataFmt = visita.data.split("-").reverse().join("/")
-      logAudit({ leadId: visita.leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? userName(visita.corretorId), tipo: "visita", descricao: `Visita de ${dataFmt} às ${visita.hora} cancelada; lead retornou para em atendimento`, referencias: visita.referencias })
-      await updateLead(visita.leadId, { status: "em_atendimento" })
-    }
-    await loadVisits()
-    return { ok: true }
+    return executarRemoveVisit({
+      id,
+      visits,
+      leads,
+      userName,
+      userNome: user?.nome ?? "",
+      loadVisits,
+      updateLead,
+      logAudit,
+    })
   }
 
   const addJustification: Store["addJustification"] = async (leadId, motivo, observacao) => {
-    const lead = leads.find((item) => item.id === leadId)
-    if (!lead || !user || (!isGestorNivel(user.role) && lead.corretorId !== user.id)) return { ok: false, error: "Você não tem permissão para justificar este lead." }
-    const cleanReason = motivo.trim()
-    const cleanNote = observacao?.trim() ?? ""
-    if (!cleanReason || (cleanReason === "Outro" && !cleanNote)) return { ok: false, error: "Informe o motivo e detalhe a opção Outro." }
-    const now = new Date().toISOString()
-    const { data, error } = await supabase.from("justificativas_operacionais").insert({
-      lead_id: leadId,
-      motivo: cleanReason,
-      observacao: cleanNote || null,
-      etapa: lead.status,
-      autor_id: user.id,
-      autor_nome: user.nome,
-    }).select("*").single()
-    if (error || !data) return { ok: false, error: error?.message ?? "Não foi possível confirmar a justificativa." }
-    const { error: updateError } = await supabase.from("leads").update({ atualizado_em: now }).eq("id", leadId)
-    if (updateError) return { ok: false, error: updateError.message }
-    logAudit({ leadId, leadNome: lead.nome, usuarioNome: user.nome, tipo: "justificativa", descricao: `Lead parado: ${cleanReason}${cleanNote ? ` — ${cleanNote}` : ""}` })
-    setJustifications((current) => [rowToJustification(data), ...current.filter((item) => item.id !== data.id)])
-    await loadLeads()
-    return { ok: true }
+    if (!user) return { ok: false, error: "Sessão inválida." }
+    return executarAddJustification({
+      leadId,
+      motivo,
+      observacao,
+      leads,
+      userId: user.id,
+      userRole: user.role,
+      userNome: user.nome,
+      loadLeads,
+      logAudit,
+      setJustifications,
+    })
   }
 
   // ---------- Observações internas de qualidade (somente gestores) ----------
   const addQualityNote: Store["addQualityNote"] = (leadId, texto) => {
     if (!isGestorNivel(userRole) || !texto.trim()) return
     const lead = leads.find((l) => l.id === leadId)
-    void supabase.from("observacoes_qualidade").insert({
-      lead_id: leadId,
-      autor_id: userId || null,
-      autor_nome: user?.nome ?? "Gestor",
-      texto: texto.trim(),
-    }).then(() => loadQuality())
-    logAudit({ leadId, leadNome: lead?.nome, usuarioNome: user?.nome ?? "Gestor", tipo: "qualidade", descricao: "Observação interna de qualidade registrada" })
+    void supabase
+      .from("observacoes_qualidade")
+      .insert({
+        lead_id: leadId,
+        autor_id: userId || null,
+        autor_nome: user?.nome ?? "Gestor",
+        texto: texto.trim(),
+      })
+      .then(() => loadQuality())
+    logAudit({
+      leadId,
+      leadNome: lead?.nome,
+      usuarioNome: user?.nome ?? "Gestor",
+      tipo: "qualidade",
+      descricao: "Observação interna de qualidade registrada",
+    })
   }
 
   // ---------- Usuários ----------
   const addUser: Store["addUser"] = async (u) => {
-    if (u.role === "gestor_master" && !isMaster(userRole)) return { ok: false, error: "Apenas o Gestor Master pode criar outros Gestores Master." }
-    const email = u.email.trim().toLowerCase()
-    if (users.some((x) => x.email.toLowerCase() === email)) return { ok: false, error: "E-mail já cadastrado." }
-    const senhaHash = await bcrypt.hash(u.senha, 10)
-    const { error } = await supabase.from("usuarios").insert({
-      nome: u.nome, email, senha_hash: senhaHash, role: u.role, status: u.ativo ? "ativo" : "inativo",
-    })
-    if (error) return { ok: false, error: `Não foi possível salvar: ${error.message}` }
-    await loadUsers()
-    return { ok: true }
-  }
-  const updateUser: Store["updateUser"] = async (id, patch) => {
-    if (patch.role === "gestor_master" && !isMaster(userRole)) return { ok: false, error: "Apenas o Gestor Master pode atribuir o perfil Gestor Master." }
-    const email = patch.email ? patch.email.trim().toLowerCase() : undefined
-    if (email && users.some((x) => x.id !== id && x.email.toLowerCase() === email)) return { ok: false, error: "E-mail já cadastrado." }
-    const row: Record<string, any> = {}
-    if (patch.nome !== undefined) row.nome = patch.nome
-    if (email !== undefined) row.email = email
-    // Campo em branco = manter a senha atual (nunca prefiltrada, pois é hash).
-    if (patch.senha) row.senha_hash = await bcrypt.hash(patch.senha, 10)
-    if (patch.role !== undefined) row.role = patch.role
-    if (patch.avatar !== undefined) row.avatar = patch.avatar
-    if (patch.ativo !== undefined) row.status = patch.ativo ? "ativo" : "inativo"
-    const { error } = await supabase.from("usuarios").update(row).eq("id", id)
-    if (error) return { ok: false, error: `Não foi possível salvar: ${error.message}` }
-    await loadUsers()
-    return { ok: true }
+    return executarAddUser({ u, userRole, users, loadUsers })
   }
 
-  // Perfil do usuário logado (só foto — senha tem fluxo próprio em /api/auth/change-password)
+  const updateUser: Store["updateUser"] = async (id, patch) => {
+    return executarUpdateUser({ id, patch, userRole, users, loadUsers })
+  }
+
   const updateProfile: Store["updateProfile"] = async (patch) => {
-    if (!userId) return { ok: false, error: "Sessão inválida." }
-    const row: Record<string, any> = {}
-    if (patch.avatar !== undefined) row.avatar = patch.avatar
-    const { error } = await supabase.from("usuarios").update(row).eq("id", userId)
-    if (error) return { ok: false, error: "Não foi possível salvar. Tente novamente." }
-    await loadUsers()
-    return { ok: true }
+    return executarUpdateProfile({ userId, patch, loadUsers })
   }
 
   // Arquivar lead com data de reaparecimento (hibernação programada)
   const arquivarLeadComData: Store["arquivarLeadComData"] = async (id, params) => {
     if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
     const lead = leads.find((l) => l.id === id)
-    if (!lead) return { ok: false, error: "Lead não encontrado." }
-
-    const agora = new Date().toISOString()
-    const usuarioNome = user?.nome ?? "Usuário"
-    const statusAnterior = lead.status
-
-    const reapareceFormatado = new Date(params.dataReaparecimento + "T12:00:00").toLocaleDateString("pt-BR")
-    const metaNote = `\n\n[Hibernação: data=${params.dataReaparecimento}; motivo=${params.motivo}; status_anterior=${statusAnterior}; arquivado_por=${userId}; data_ext=${reapareceFormatado}]`
-    const obsComMeta = `${lead.observacoes || ""}${metaNote}`.trim()
-
-    const patch: Partial<Lead> = {
-      arquivadoEm: agora,
-      dataReaparecimento: params.dataReaparecimento,
-      motivoArquivamento: params.motivo,
-      observacaoArquivamento: params.observacao || null,
-      statusAnterior: statusAnterior,
-      arquivadoPor: userId,
-      observacoes: obsComMeta,
-    }
-
-    const res = await updateLead(id, patch)
-    if (!res.ok) return res
-
-    logAudit({
-      leadId: lead.id,
-      leadNome: lead.nome,
-      usuarioNome,
-      tipo: "edicao",
-      descricao: `Lead arquivado com previsão de reaparecimento para ${reapareceFormatado}. Motivo: ${params.motivo}`,
-      motivo: params.motivo,
-      motivoDetalhe: params.observacao,
+    return executarArquivarLeadComData({
+      id,
+      params,
+      lead,
+      userId,
+      userNome: user?.nome ?? "Usuário",
+      updateLead,
+      logAudit,
+      notify,
     })
-
-    notify(`Lead ${lead.nome} arquivado até ${reapareceFormatado} por ${usuarioNome}`, {
-      tipo: "arquivamento",
-      paraRole: "gestor",
-      leadId: lead.id,
-    })
-
-    if (lead.corretorId && lead.corretorId !== userId) {
-      notify(`Seu lead ${lead.nome} foi arquivado até ${reapareceFormatado}`, {
-        tipo: "arquivamento",
-        paraUsuarioId: lead.corretorId,
-        leadId: lead.id,
-      })
-    }
-
-    return { ok: true }
   }
 
   // Desarquivar lead manualmente
   const desarquivarLead: Store["desarquivarLead"] = async (id) => {
     if (isSomenteLeitura(userRole)) return { ok: false, error: "Modo apresentação: somente leitura." }
     const lead = leads.find((l) => l.id === id)
-    if (!lead) return { ok: false, error: "Lead não encontrado." }
-
-    const usuarioNome = user?.nome ?? "Usuário"
-    const statusDestino = (lead.statusAnterior as LeadStatus) || "novo"
-    const agoraIso = new Date().toISOString()
-    const novoCiclo = (lead.reativacoesCount || 0) + 1
-
-    const patch: Partial<Lead> = {
-      arquivadoEm: null,
-      dataReaparecimento: null,
-      motivoArquivamento: null,
-      observacaoArquivamento: null,
-      status: "novo", // Volta como Novo Lead para prioridade de atendimento
-      reativadoEm: agoraIso, // Ativa a cor âmbar e badge de reativação
-      reativacoesCount: novoCiclo,
-    }
-
-    const res = await updateLead(id, patch)
-    if (!res.ok) return res
-
-    logAudit({
-      leadId: lead.id,
-      leadNome: lead.nome,
-      usuarioNome,
-      tipo: "reativacao",
-      descricao: `Lead reativado/desarquivado por ${usuarioNome} (retornou como "Novo Lead" com bloco destacado)`,
+    return executarDesarquivarLead({
+      id,
+      lead,
+      userId,
+      userNome: user?.nome ?? "Usuário",
+      updateLead,
+      logAudit,
+      notify,
     })
-
-    notify(`🔔 Lead ${lead.nome} reativado e retornou para o funil como Novo Lead.`, {
-      tipo: "pipeline",
-      paraRole: "gestor",
-      leadId: lead.id,
-    })
-
-    if (lead.corretorId && lead.corretorId !== userId) {
-      notify(`🔔 Seu lead ${lead.nome} reapareceu no funil como Novo Lead! Tarefa: Retomar contato.`, {
-        tipo: "pipeline",
-        paraUsuarioId: lead.corretorId,
-        leadId: lead.id,
-      })
-    }
-
-    return { ok: true }
   }
 
   const corretores = users.filter((u) => isCorretorDe(u.role, "vendas"))
@@ -899,10 +487,42 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
   return (
     <Ctx.Provider
       value={{
-        leads, visits, notifications, sentNotifications, scheduledNotifications, users, changeLogs, qualityNotes, justifications, audit, ready, corretores, userName,
-        checkPhoneDuplicate, addLead, updateLead, updateLeadsBulk, deleteLead, addInteraction, getLead, assumirLead,
-        addVisit, updateVisit, removeVisit, notify, sendAdminNotification, markNotificationsRead, logChange, logAudit, addQualityNote, addJustification, addUser, updateUser, updateProfile,
-        arquivarLeadComData, desarquivarLead,
+        leads,
+        visits,
+        notifications,
+        sentNotifications,
+        scheduledNotifications,
+        users,
+        changeLogs,
+        qualityNotes,
+        justifications,
+        audit,
+        ready,
+        corretores,
+        userName,
+        checkPhoneDuplicate,
+        addLead,
+        updateLead,
+        updateLeadsBulk,
+        deleteLead,
+        addInteraction,
+        getLead,
+        assumirLead,
+        addVisit,
+        updateVisit,
+        removeVisit,
+        notify,
+        sendAdminNotification,
+        markNotificationsRead,
+        logChange,
+        logAudit,
+        addQualityNote,
+        addJustification,
+        addUser,
+        updateUser,
+        updateProfile,
+        arquivarLeadComData,
+        desarquivarLead,
       }}
     >
       {children}
