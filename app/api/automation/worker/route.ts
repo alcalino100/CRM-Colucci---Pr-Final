@@ -115,7 +115,7 @@ export async function runWorker() {
 
     // FASE 1-B: Criar jobs de follow-up (D+1, D+2, D+3)
     for (const automation of automacoesFollowup) {
-      await criarJobsFollowup(automation, results, skipIA)
+      await criarJobsFollowup(automation, results, skipIA, tagsFollowUp)
     }
 
     await createLog({
