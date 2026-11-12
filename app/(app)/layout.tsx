@@ -82,6 +82,7 @@ const NAV_IA: { href: string; label: string; icon: any; roles: Role[] }[] = [
 
 const NAV2: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/admin", label: "Administração", icon: Shield, roles: ["gestor"] },
+  { href: "/admin/relatorios", label: "Relatórios WhatsApp", icon: MessageCircle, roles: ["gestor"] },
   { href: "/admin/notificacoes", label: "Disparador de Notificações", icon: BellRing, roles: ["gestor"] },
   { href: "/admin/logs", label: "Logs", icon: ScrollText, roles: ["gestor"] },
 ]

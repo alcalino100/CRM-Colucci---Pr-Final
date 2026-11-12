@@ -4,6 +4,7 @@
 // Leads no banco, Visitas presenciais, Propostas, Vendas/Locações Fechadas, VGV e Comissões.
 
 import type { Lead, Visit } from "@/lib/mock-data"
+import { ehTrafegoPago } from "@/lib/relatorios/trafego-helper"
 
 export interface CampaignReconciliation {
   campaignId: string
@@ -169,7 +170,7 @@ export function calcularReconciliacao(
   const leadsTrafegoTodos: Lead[] = []
 
   for (const l of leadsPeriodo) {
-    const ehTrafego = l.origem === "Tráfego Pago" || !!l.metaCampaignId || !!l.utmCampaign
+    const ehTrafego = ehTrafegoPago(l)
 
     if (ehTrafego) {
       leadsTrafegoTodos.push(l)

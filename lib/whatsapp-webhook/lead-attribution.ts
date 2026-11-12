@@ -285,6 +285,18 @@ export async function reengajarOuCriarLeadTráfego(params: {
     })
 
     try {
+      await wsupabase.from("automation_logs").insert({
+        lead_id: existenteDoCorretor.id,
+        event_type: "reengajamento_anuncio",
+        event_title: `Reengajamento via anúncio: ${nome}`,
+        event_description: `Lead reengajou via anúncio de Tráfego Pago no WhatsApp de ${corretorNome}.${referenciaExtraida ? ` Ref. ${referenciaExtraida}.` : ""}`,
+        actor_type: "system",
+      })
+    } catch {
+      /* log é best-effort */
+    }
+
+    try {
       await Promise.race([
         enviarLeadCapi({
           lead_id: existenteDoCorretor.id,
