@@ -5,6 +5,7 @@ import { useInboxStore } from "@/lib/inbox-store"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/primitives"
 import { safeSetInterval } from "@/hooks/use-safe-interval"
+import { logger } from "@/lib/logger"
 
 function fmtHora(iso: string){
   return new Date(iso).toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
@@ -69,7 +70,9 @@ export function ConversaView(){
         if(mapped.length !== atual.length || ultimaNova !== ultimaAtual){
           store.setMensagens({ ...store.mensagens, [chave]: mapped })
         }
-      }catch{}
+      }catch(err){
+        logger.warn("Falha ao sincronizar mensagens da conversa do WhatsApp", { chatId: selectedId, error: err instanceof Error ? err.message : String(err) })
+      }
       finally{ if(!silencioso) setCarregandoReal(false) }
     }
     void carregarThread(false)

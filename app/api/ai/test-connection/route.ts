@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
+import { logger } from "@/lib/logger"
 
 function providerFrom(model?: string, token?: string, endpoint?: string){
   const m=(model||"").toLowerCase()
@@ -26,7 +27,9 @@ export async function POST(req: NextRequest){
         const lr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${token}`)
         const lj:any = await lr.json()
         if(lr.ok && Array.isArray(lj.models)) available = lj.models.filter((m:any)=> (m.supportedGenerationMethods||[]).includes("generateContent")).map((m:any)=> m.name.replace("models/",""))
-      }catch{}
+      }catch(err){
+        logger.warn("Falha ao consultar catálogo de modelos Gemini para teste de conexão", { error: err instanceof Error ? err.message : String(err) })
+      }
       const preferred = [model, "gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro"]
       const tryModels = Array.from(new Set([...preferred.filter(m=> available.length===0 || available.includes(m)), ...available])).slice(0,6)
       let lastErr=""

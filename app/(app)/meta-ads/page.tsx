@@ -37,10 +37,22 @@ import {
   periodoAnterior,
   agrega,
 } from "@/lib/meta-ads-utils"
+import dynamic from "next/dynamic"
 import { OrcamentoPanel } from "@/components/meta-ads/OrcamentoPanel"
 import { MetaAdsFilterBar } from "@/components/meta-ads/MetaAdsFilterBar"
-import { MetaAdsGeralTab } from "@/components/meta-ads/MetaAdsGeralTab"
 import { Aviso } from "@/components/meta-ads/MetaAdsUiAtoms"
+
+const MetaAdsGeralTab = dynamic(
+  () => import("@/components/meta-ads/MetaAdsGeralTab").then((m) => m.MetaAdsGeralTab),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-96 w-full items-center justify-center rounded-xl border border-border/50 bg-card p-6 animate-pulse">
+        <div className="h-64 w-full rounded-lg bg-muted/40" />
+      </div>
+    ),
+  }
+)
 
 export default function MetaAdsPage() {
   const { user } = useAuth()

@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase/client"
 import { isTelefoneBloqueado } from "@/lib/telefones-bloqueados"
 import { Select } from "@/components/ui/primitives"
 import { safeSetInterval } from "@/hooks/use-safe-interval"
+import { logger } from "@/lib/logger"
 import type { InboxConversation } from "@/lib/inbox-mock"
 
 function InstanceSelector(){
@@ -17,7 +18,12 @@ function InstanceSelector(){
   const setInstancia = useInboxStore(s=>s.setInstancia)
   const [lista, setLista] = useState<{instance_name:string; corretorNome:string; status:string}[]>([])
   useEffect(()=>{
-    try{ const saved = localStorage.getItem("inbox-instancia"); if(saved && saved!==instancia) setInstancia(saved)}catch{}
+    try{
+      const saved = localStorage.getItem("inbox-instancia")
+      if(saved && saved!==instancia) setInstancia(saved)
+    }catch{
+      // localStorage inacessível em modo privado ou iframe
+    }
     fetch("/api/whatsapp/instancias").then(r=>r.json()).then(j=>{
       const data = (j.data || []).filter((x:any)=> x.status==="conectado")
       setLista(data)
@@ -29,8 +35,12 @@ function InstanceSelector(){
         if (data.length && !data.some((x:any)=> x.instance_name===atual)) {
           setInstancia(data[0].instance_name)
         }
-      } catch {}
-    }).catch(()=>{})
+      } catch {
+        // localStorage inacessível em modo privado
+      }
+    }).catch((err)=>{
+      logger.warn("Falha ao consultar instâncias ativas do WhatsApp no Inbox", { error: err instanceof Error ? err.message : String(err) })
+    })
   },[])
   if(lista.length===0) return <span className="text-slate-500">{instancia}</span>
   return (
@@ -151,7 +161,9 @@ export function InboxClient(){
             setModoReal(true)
           }
         }
-      }catch{}
+      }catch(err){
+        logger.warn("Falha ao atualizar conversas do Inbox", { error: err instanceof Error ? err.message : String(err) })
+      }
     }
     loadReal()
     // Atualização ao vivo: polling a cada 15s (pausa com aba oculta) + ao voltar o foco.
@@ -179,19 +191,19 @@ export function InboxClient(){
       {isGestorVendas && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={filtroTrafego} onChange={e=>{ const v=e.target.checked; setFiltroTrafego(v); try{ localStorage.setItem("inbox-filtro-trafego", v ? "on" : "off") }catch{} }} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
+            <input type="checkbox" checked={filtroTrafego} onChange={e=>{ const v=e.target.checked; setFiltroTrafego(v); try{ localStorage.setItem("inbox-filtro-trafego", v ? "on" : "off") }catch{ /* localStorage mode */ } }} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
             <span className="font-medium text-slate-700 dark:text-slate-300">Somente Tráfego Pago</span>
           </label>
           <span className="hidden sm:inline text-slate-500">{filtroTrafego ? "filtrando base para IA" : "toda a base"}</span>
           <label className="flex items-center gap-1.5 cursor-pointer">
-            <input type="checkbox" checked={mostrarBloqueados} onChange={e=>{ const v=e.target.checked; setMostrarBloqueados(v); try{ localStorage.setItem("inbox-mostrar-bloqueados", v ? "on" : "off") }catch{} }} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
+            <input type="checkbox" checked={mostrarBloqueados} onChange={e=>{ const v=e.target.checked; setMostrarBloqueados(v); try{ localStorage.setItem("inbox-mostrar-bloqueados", v ? "on" : "off") }catch{ /* localStorage mode */ } }} className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500" />
             <span className="font-medium text-slate-700 dark:text-slate-300">Bloqueados{ocultasBloq>0 ? ` (${ocultasBloq})` : ""}</span>
           </label>
           {(() => {
             const mostrarTodas = () => {
               setFiltroTrafego(false)
               setMostrarBloqueados(true)
-              try{ localStorage.setItem("inbox-filtro-trafego","off"); localStorage.setItem("inbox-mostrar-bloqueados","on") }catch{}
+              try{ localStorage.setItem("inbox-filtro-trafego","off"); localStorage.setItem("inbox-mostrar-bloqueados","on") }catch{ /* localStorage mode */ }
             }
             return ocultas>0 ? (
               <button onClick={mostrarTodas} className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 hover:bg-amber-500/20 dark:text-amber-400">

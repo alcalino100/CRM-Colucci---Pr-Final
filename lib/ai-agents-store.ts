@@ -1,6 +1,7 @@
 "use client"
 import { create } from "zustand"
 import { mockAgents, type AIAgent } from "./ai-agents-mock"
+import { logger } from "@/lib/logger"
 
 type Store = {
   agents: AIAgent[]
@@ -24,7 +25,9 @@ async function persist(id:string, patch:Partial<AIAgent>){
       return
     }
     await fetch(`/api/ai/${id}`, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(patch)})
-  }catch{}
+  }catch(err){
+    logger.error("Falha ao persistir alterações do agente de IA", { agentId: id, error: err instanceof Error ? err.message : String(err) })
+  }
 }
 
 export const useAIAgentsStore = create<Store>((set, get)=>({
@@ -34,7 +37,11 @@ export const useAIAgentsStore = create<Store>((set, get)=>({
   setSelected: (id)=> set({selectedId:id}),
   createAgent: async (a)=> {
     set(s=>({ agents:[...s.agents, a]}))
-    try{ await fetch("/api/ai", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(a)}) }catch{}
+    try{
+      await fetch("/api/ai", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(a)})
+    }catch(err){
+      logger.error("Falha ao registrar novo agente de IA", { agentId: a.id, error: err instanceof Error ? err.message : String(err) })
+    }
   },
   updateAgent: (id,patch)=> {
     set(s=>({ agents: s.agents.map(a=> a.id===id ? {...a, ...patch}:a)}))
@@ -43,7 +50,9 @@ export const useAIAgentsStore = create<Store>((set, get)=>({
   },
   deleteAgent: (id)=> {
     set(s=>({ agents: s.agents.filter(a=>a.id!==id)}))
-    fetch(`/api/ai/${id}`, { method:"DELETE"}).catch(()=>{})
+    fetch(`/api/ai/${id}`, { method:"DELETE"}).catch((err)=>{
+      logger.error("Falha ao excluir agente de IA", { agentId: id, error: err instanceof Error ? err.message : String(err) })
+    })
   },
   loadAgents: async ()=>{
     if(get().loaded) return
@@ -60,7 +69,9 @@ export const useAIAgentsStore = create<Store>((set, get)=>({
           try{
             const kbRes = await fetch(`/api/ai/${row.id}/knowledge-base`).then(x=>x.json())
             if(kbRes?.id) kb = { id: kbRes.id, name: kbRes.name, documents: kbRes.documents || [] }
-          }catch{}
+          }catch(err){
+            logger.warn("Falha ao carregar base de conhecimento do agente de IA", { agentId: row.id, error: err instanceof Error ? err.message : String(err) })
+          }
           return {
             id: row.id,
             name: row.name,

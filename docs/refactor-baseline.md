@@ -300,4 +300,30 @@ Todos os **11 arquivos grandes** (>600 linhas) foram decompostos com testes de c
 
 ---
 
-## 8. Próximo Passo: FASE 5 — Error Handling, Loading States e Resiliência
+### FASE 5 — Error Handling, Loading States e Resiliência (Concluída em PR #33)
+- [x] **Páginas Especiais do Next.js:**
+  - `app/not-found.tsx`: Página 404 estilizada com identidade visual Colucci, glow sutil, ícone e links diretos para o Kanban, Cadastros e Página Inicial.
+  - `app/error.tsx`: ErrorBoundary global profissional capturando exceções não tratadas, exibindo código do incidente (`digest`), botão "Tentar novamente" (`reset()`) e integração com `logger.error`.
+  - `app/(app)/loading.tsx`: Esqueleto de carregamento animado com `animate-pulse` simulando a barra de filtros e as 5 colunas do funil Kanban com cards responsivos.
+  - `app/loading.tsx`: Esqueleto de carregamento em nível raiz para transições completas de rota com sidebar e topbar placeholder.
+- [x] **Dynamic Imports (`next/dynamic` com `ssr: false`) para Componentes Pesados:**
+  - `@xyflow/react`: Editor visual de fluxos isolado em `components/automation/DynamicFlowEditor.tsx` e carregado dinamicamente com fallback `<EditorSkeleton />`.
+  - `recharts`: Isolamento de todos os gráficos pesados em componentes clientes dedicados com carregamento preguiçoso (`ssr: false`):
+    - `components/dashboard/DashboardFunilCharts.tsx` e `DashboardTendenciaChart.tsx` em `/dashboard-gestao`.
+    - `components/locacao/LocacaoDashboardCharts.tsx` e `LocacaoLeadsChart.tsx` em `/locacao/dashboard` e `/locacao/leads`.
+    - `components/fechamento/FechamentoMesChart.tsx` em `/fechamento` e `/locacao/contratos`.
+    - `components/meta-ads/MetaAdsGeralTab.tsx` em `/meta-ads`.
+    - `components/cadastros/CadastrosChart.tsx` em `/cadastros`.
+    - `components/ai-agents/Analytics.tsx` em `/ai-agents/[id]`.
+- [x] **Eliminação de Catches Vazios:**
+  - Tratamento de todos os catches silenciosos restantes em `app/api/ai/test-connection/route.ts`, `components/inbox/ConversaView.tsx`, `components/inbox/InboxClient.tsx`, `components/inbox/InstanceSelector.tsx`, `lib/ai-agents-store.ts` e `lib/inbox-store.ts` com logging apropriado (`logger.warn`/`logger.error`) ou justificativa documentada para fallback de `localStorage`.
+- [x] **Acessibilidade e Reduced Motion:**
+  - Modais (`Dialog` em `components/ui/primitives.tsx`): Focus trap automático, retenção de foco com tecla Tab, fechamento com ESC e restauração do foco anterior no elemento disparador.
+  - CSS global (`app/globals.css`): Regra universal `@media (prefers-reduced-motion: reduce)` suprimindo animações e transições instantâneas para usuários com sensibilidade a movimento.
+- [x] **Testes Automatizados de Resiliência:**
+  - 4 novas suítes de testes em `__tests__/resilience/` (`not-found.test.tsx`, `error-boundary.test.tsx`, `loading-states.test.tsx`, `dialog-accessibility.test.tsx`).
+  - Total geral: 33 arquivos de teste e 243 testes unitários passando 100% verde em ~1,9s.
+
+---
+
+## 8. Próximo Passo: FASE 6 — Fundação de Design Responsivo

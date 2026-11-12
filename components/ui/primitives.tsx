@@ -79,20 +79,79 @@ export function Skeleton({ className, ...p }: React.ComponentProps<"div">) {
   return <div className={cn("animate-pulse rounded-md bg-muted", className)} {...p} />
 }
 
-/* Dialog (modal) */
+/* Dialog (modal com focus trap, ESC e restauração de foco acessível) */
 export function Dialog({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: React.ReactNode; title: string }) {
+  const dialogRef = React.useRef<HTMLDivElement>(null)
+  const prevFocusRef = React.useRef<HTMLElement | null>(null)
+
   React.useEffect(() => {
-    function esc(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
-    if (open) document.addEventListener("keydown", esc)
-    return () => document.removeEventListener("keydown", esc)
+    if (!open) return
+    if (typeof document !== "undefined") {
+      prevFocusRef.current = (document.activeElement as HTMLElement) || null
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation()
+        onClose()
+        return
+      }
+      if (e.key === "Tab" && dialogRef.current) {
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    const timer = setTimeout(() => {
+      dialogRef.current?.focus()
+    }, 20)
+
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener("keydown", handleKeyDown)
+      if (prevFocusRef.current && typeof prevFocusRef.current.focus === "function") {
+        try {
+          prevFocusRef.current.focus()
+        } catch {
+          // ignore
+        }
+      }
+    }
   }, [open, onClose])
+
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/40 p-4 sm:items-center" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-xl outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-lg font-semibold">{title}</h2>
-          <button onClick={onClose} aria-label="Fechar" className="rounded-md p-1 text-muted-foreground hover:bg-muted"><X className="size-5" /></button>
+          <button
+            onClick={onClose}
+            aria-label="Fechar"
+            className="rounded-md p-1 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <X className="size-5" />
+          </button>
         </div>
         {children}
       </div>
