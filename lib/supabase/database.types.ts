@@ -2067,6 +2067,138 @@ export interface Database {
         }
         Relationships: []
       }
+      relatorio_config: {
+        Row: {
+          id: string
+          ativo: boolean
+          hora_envio: string
+          dias_semana: number[]
+          instance_name: string | null
+          secoes: Json
+          incluir_gestores_no_tempo: boolean
+          listar_nomes_leads: boolean
+          resumo_ia: boolean
+          limite_tentativa: string
+          updated_by: string | null
+          updated_at: string
+          created_at: string
+          [key: string]: any
+        }
+        Insert: {
+          id?: string
+          ativo?: boolean
+          hora_envio?: string
+          dias_semana?: number[]
+          instance_name?: string | null
+          secoes?: Json
+          incluir_gestores_no_tempo?: boolean
+          listar_nomes_leads?: boolean
+          resumo_ia?: boolean
+          limite_tentativa?: string
+          updated_by?: string | null
+          updated_at?: string
+          created_at?: string
+          [key: string]: any
+        }
+        Update: {
+          id?: string
+          ativo?: boolean
+          hora_envio?: string
+          dias_semana?: number[]
+          instance_name?: string | null
+          secoes?: Json
+          incluir_gestores_no_tempo?: boolean
+          listar_nomes_leads?: boolean
+          resumo_ia?: boolean
+          limite_tentativa?: string
+          updated_by?: string | null
+          updated_at?: string
+          created_at?: string
+          [key: string]: any
+        }
+        Relationships: []
+      }
+      relatorio_destinatarios: {
+        Row: {
+          id: string
+          nome: string
+          tipo: "numero" | "grupo"
+          destino: string
+          ativo: boolean
+          secoes: Json | null
+          created_at: string
+          updated_at: string
+          [key: string]: any
+        }
+        Insert: {
+          id?: string
+          nome: string
+          tipo: "numero" | "grupo"
+          destino: string
+          ativo?: boolean
+          secoes?: Json | null
+          created_at?: string
+          updated_at?: string
+          [key: string]: any
+        }
+        Update: {
+          id?: string
+          nome?: string
+          tipo?: "numero" | "grupo"
+          destino?: string
+          ativo?: boolean
+          secoes?: Json | null
+          created_at?: string
+          updated_at?: string
+          [key: string]: any
+        }
+        Relationships: []
+      }
+      relatorio_envios: {
+        Row: {
+          id: string
+          data_referencia: string
+          destinatario_id: string | null
+          instance_name: string
+          origem: "automatico" | "teste" | "reenvio"
+          status: "enviado" | "falhou" | "pulado"
+          erro: string | null
+          texto: string
+          secoes_enviadas: string[]
+          metricas: Json
+          enviado_em: string
+          [key: string]: any
+        }
+        Insert: {
+          id?: string
+          data_referencia: string
+          destinatario_id?: string | null
+          instance_name: string
+          origem: "automatico" | "teste" | "reenvio"
+          status: "enviado" | "falhou" | "pulado"
+          erro?: string | null
+          texto: string
+          secoes_enviadas?: string[]
+          metricas?: Json
+          enviado_em?: string
+          [key: string]: any
+        }
+        Update: {
+          id?: string
+          data_referencia?: string
+          destinatario_id?: string | null
+          instance_name?: string
+          origem?: "automatico" | "teste" | "reenvio"
+          status?: "enviado" | "falhou" | "pulado"
+          erro?: string | null
+          texto?: string
+          secoes_enviadas?: string[]
+          metricas?: Json
+          enviado_em?: string
+          [key: string]: any
+        }
+        Relationships: []
+      }
       workspace_settings: {
         Row: {
           id: string

@@ -78,4 +78,6 @@ Caso seja necessário recriar o banco do zero em um ambiente de desenvolvimento 
 35. `supabase/migrations/20250908_ai_conversational.sql`
 36. `supabase/migrations/20250910_tags.sql`
 37. `supabase/migrations/20250911_escalation_improvements.sql`
-38. *(Novas migrações a partir daqui em `supabase/migrations/`)*
+38. `supabase/migrations/20261112120000_fase4_performance_indexes.sql`
+39. `supabase/migrations/20261112150000_relatorios_whatsapp.sql`
+40. *(Novas migrações a partir daqui em `supabase/migrations/`)*
