@@ -2,6 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import { supabase } from "./supabase/client"
+import {
+  AUTOMATIONS_COLUMNS,
+  AUTOMATION_TEMPLATES_COLUMNS,
+  AUTOMATION_GLOBAL_SETTINGS_COLUMNS,
+  AUTOMATION_JOBS_COLUMNS,
+  AUTOMATION_LOGS_COLUMNS,
+  LEAD_AUTOMATION_SETTINGS_COLUMNS,
+} from "@/lib/supabase/projections"
 import type {
   Automation,
   AutomationGlobalSettings,
@@ -125,7 +133,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
   const loadAutomations = useCallback(async () => {
     const { data } = await supabase
       .from("automations")
-      .select("*")
+      .select(AUTOMATIONS_COLUMNS)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
     if (data) setAutomations(data.map(rowToAutomation))
@@ -134,7 +142,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
   const loadTemplates = useCallback(async () => {
     const { data } = await supabase
       .from("automation_message_templates")
-      .select("*")
+      .select(AUTOMATION_TEMPLATES_COLUMNS)
       .order("created_at", { ascending: false })
     if (data) setTemplates(data as unknown as AutomationMessageTemplate[])
   }, [])
@@ -142,14 +150,14 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
   const loadGlobalSettings = useCallback(async () => {
     const { data } = await supabase
       .from("automation_global_settings")
-      .select("*")
+      .select(AUTOMATION_GLOBAL_SETTINGS_COLUMNS)
       .limit(1)
       .maybeSingle()
     if (data) setGlobalSettings(data)
   }, [])
 
   const loadJobs = useCallback(async (filters?: JobFilters) => {
-    let q = supabase.from("automation_jobs").select("*").order("scheduled_at", { ascending: false })
+    let q = supabase.from("automation_jobs").select(AUTOMATION_JOBS_COLUMNS).order("scheduled_at", { ascending: false })
     if (filters?.status) q = q.eq("status", filters.status)
     if (filters?.automation_id) q = q.eq("automation_id", filters.automation_id)
     if (filters?.lead_id) q = q.eq("lead_id", filters.lead_id)
@@ -160,7 +168,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
   }, [])
 
   const loadLogs = useCallback(async (filters?: LogFilters) => {
-    let q = supabase.from("automation_logs").select("*").order("created_at", { ascending: false })
+    let q = supabase.from("automation_logs").select(AUTOMATION_LOGS_COLUMNS).order("created_at", { ascending: false })
     if (filters?.event_type) q = q.eq("event_type", filters.event_type)
     if (filters?.automation_id) q = q.eq("automation_id", filters.automation_id)
     if (filters?.lead_id) q = q.eq("lead_id", filters.lead_id)
@@ -173,7 +181,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
   const loadLeadSettings = useCallback(async (leadId: string) => {
     const { data } = await supabase
       .from("lead_automation_settings")
-      .select("*")
+      .select(LEAD_AUTOMATION_SETTINGS_COLUMNS)
       .eq("lead_id", leadId)
       .maybeSingle()
     if (data) setLeadSettings((prev) => ({ ...prev, [leadId]: data }))

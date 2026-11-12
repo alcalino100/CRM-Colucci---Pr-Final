@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useInboxStore } from "@/lib/inbox-store"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/primitives"
+import { safeSetInterval } from "@/hooks/use-safe-interval"
 
 function fmtHora(iso: string){
   return new Date(iso).toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
@@ -72,8 +73,11 @@ export function ConversaView(){
       finally{ if(!silencioso) setCarregandoReal(false) }
     }
     void carregarThread(false)
-    const iv = setInterval(()=>{ if(!document.hidden) void carregarThread(true) }, 15000)
-    return ()=>{ cancelled = true; clearInterval(iv) }
+    const stopInterval = safeSetInterval(() => void carregarThread(true), 15000)
+    return () => {
+      cancelled = true
+      stopInterval()
+    }
   }, [selectedId, modoReal, conv])
 
   if(!conv){

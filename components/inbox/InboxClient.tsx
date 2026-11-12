@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase/client"
 import { isTelefoneBloqueado } from "@/lib/telefones-bloqueados"
 import { Select } from "@/components/ui/primitives"
+import { safeSetInterval } from "@/hooks/use-safe-interval"
 import type { InboxConversation } from "@/lib/inbox-mock"
 
 function InstanceSelector(){
@@ -155,10 +156,14 @@ export function InboxClient(){
     loadReal()
     // Atualização ao vivo: polling a cada 15s (pausa com aba oculta) + ao voltar o foco.
     // Sem isso, mensagens novas só apareciam recarregando a página.
-    const iv = setInterval(()=>{ if(!document.hidden) void loadReal() }, 15000)
+    const stopInterval = safeSetInterval(loadReal, 15000)
     const aoFocar = () => { void loadReal() }
     window.addEventListener("focus", aoFocar)
-    return()=>{ cancelled=true; clearInterval(iv); window.removeEventListener("focus", aoFocar) }
+    return () => {
+      cancelled = true
+      stopInterval()
+      window.removeEventListener("focus", aoFocar)
+    }
   }, [isGestorVendas, user, filtroTrafego, mostrarBloqueados, instanciaSelecionada, setConversas, setModoReal])
   if(loading){
     return (

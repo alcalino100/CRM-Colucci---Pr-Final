@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { instanceNameFor, wsupabase } from "@/lib/whatsapp/server"
 import { logger } from "@/lib/logger"
+import { WHATSAPP_INSTANCIAS_COLUMNS } from "@/lib/supabase/projections"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic"
 export async function GET() {
   const { data: instancias, error } = await wsupabase
     .from("whatsapp_instancias")
-    .select("*")
+    .select(WHATSAPP_INSTANCIAS_COLUMNS)
     .order("criado_em", { ascending: true })
   if (error) return NextResponse.json({ error: "Não foi possível carregar as instâncias." }, { status: 500 })
 
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
 
   const { data: existente } = await wsupabase
     .from("whatsapp_instancias")
-    .select("*")
+    .select(WHATSAPP_INSTANCIAS_COLUMNS)
     .eq("corretor_id", body.corretorId)
     .maybeSingle()
   if (existente) return NextResponse.json({ data: existente })
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
   const { data, error } = await wsupabase
     .from("whatsapp_instancias")
     .upsert({ corretor_id: body.corretorId, instance_name: instanceName }, { onConflict: "corretor_id" })
-    .select("*")
+    .select(WHATSAPP_INSTANCIAS_COLUMNS)
     .single()
   if (error) {
     logger.error("Erro no upsert da instância WhatsApp", { code: error.code, error: error.message })

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client"
+import { PIPELINE_STAGES_COLUMNS } from "@/lib/supabase/projections"
 import { LEAD_STATUSES, STATUS_ACCENT, STATUS_LABEL, STATUS_VARIANT } from "@/lib/labels"
 import type { LeadStatus } from "@/lib/mock-data"
 import { getActiveWorkspaceSlug, MAIN_WORKSPACE } from "@/lib/tenant"
@@ -58,7 +59,7 @@ function isLeadStatus(k: string): k is LeadStatus {
 export async function loadStagesOverride(): Promise<boolean> {
   try {
     const ws = getActiveWorkspaceSlug()
-    const { data, error } = await supabase.from("pipeline_stages").select("*").eq("workspace_id", ws)
+    const { data, error } = await supabase.from("pipeline_stages").select(PIPELINE_STAGES_COLUMNS).eq("workspace_id", ws)
     if (error || !data) return false
     const rows = (data ?? []) as StageRow[]
     if (!rows.length) return false
@@ -96,7 +97,7 @@ async function seedWorkspace(ws: string): Promise<void> {
   try {
     const { data: tem } = await supabase.from("pipeline_stages").select("key").eq("workspace_id", ws).limit(1)
     if ((tem ?? []).length) return
-    const { data: base } = await supabase.from("pipeline_stages").select("*").eq("workspace_id", MAIN_WORKSPACE)
+    const { data: base } = await supabase.from("pipeline_stages").select(PIPELINE_STAGES_COLUMNS).eq("workspace_id", MAIN_WORKSPACE)
     const linhas = (((base ?? []) as StageRow[]).filter((r) => isLeadStatus(r.key))).map((r) => ({
       key: r.key,
       label: r.label,
@@ -115,7 +116,7 @@ export async function listStages(ws?: string): Promise<{ ok: boolean; rows: Stag
   try {
     const conta = ws ?? getActiveWorkspaceSlug()
     if (conta !== MAIN_WORKSPACE) await seedWorkspace(conta)
-    const { data, error } = await supabase.from("pipeline_stages").select("*").eq("workspace_id", conta).order("ordem")
+    const { data, error } = await supabase.from("pipeline_stages").select(PIPELINE_STAGES_COLUMNS).eq("workspace_id", conta).order("ordem")
     if (error) {
       const faltaTabela = String(error.message || "").toLowerCase().includes("does not exist")
         || String((error as { code?: string }).code || "") === "42P01"

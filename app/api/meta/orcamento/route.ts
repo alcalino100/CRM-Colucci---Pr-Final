@@ -62,7 +62,11 @@ async function metaGetAll(url: string): Promise<any[]> {
 
 async function loadConfig(): Promise<typeof DEFAULTS> {
   try {
-    const { data } = await db().from("meta_orcamento").select("*").eq("id", 1).maybeSingle()
+    const { data } = await db()
+      .from("meta_orcamento")
+      .select("id, teto_mensal, custo_inicial, veiculacao_inicio, veiculacao_fim, contas")
+      .eq("id", 1)
+      .maybeSingle()
     if (!data) return DEFAULTS
     return {
       tetoMensal: Number(data.teto_mensal ?? DEFAULTS.tetoMensal),

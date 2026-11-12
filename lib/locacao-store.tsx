@@ -9,6 +9,11 @@ import { useAuth } from "./auth-context"
 import { normalizePhone } from "./labels"
 import { normalizeLocacaoStatus } from "./locacao-labels"
 import { logger } from "@/lib/logger"
+import {
+  LOCACAO_LEADS_COLUMNS,
+  LOCACAO_VISITAS_COLUMNS,
+  NOTIFICACOES_COLUMNS,
+} from "@/lib/supabase/projections"
 
 interface NotifyOpts {
   tipo?: string
@@ -181,11 +186,11 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
 
   // ---------- Carregamento inicial + Realtime ----------
   const loadLeads = useCallback(async () => {
-    const { data } = await supabase.from("locacao_leads").select("*").order("criado_em", { ascending: false })
+    const { data } = await supabase.from("locacao_leads").select(LOCACAO_LEADS_COLUMNS).order("criado_em", { ascending: false })
     if (data) setLeads(data.map(rowToLead))
   }, [])
   const loadVisits = useCallback(async () => {
-    const { data } = await supabase.from("locacao_visitas").select("*")
+    const { data } = await supabase.from("locacao_visitas").select(LOCACAO_VISITAS_COLUMNS)
     if (data) setVisits(data.map(rowToVisit))
   }, [])
   const loadUsers = useCallback(async () => {
@@ -195,7 +200,7 @@ export function LocacaoProvider({ children }: { children: React.ReactNode }) {
   }, [])
   const loadNotifications = useCallback(async () => {
     if (!userId) return
-    let q = supabase.from("notificacoes").select("*").order("timestamp", { ascending: false }).limit(100)
+    let q = supabase.from("notificacoes").select(NOTIFICACOES_COLUMNS).order("timestamp", { ascending: false }).limit(100)
     if (isGestorNivel(userRole)) {
       q = q.or(`para_role.eq.gestor,para_role.is.null,para_usuario_id.eq.${userId}`)
     } else {

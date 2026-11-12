@@ -59,6 +59,13 @@ import {
   enviarNotificacaoAdmin,
   persistirNotificacoesLidas,
 } from "./leads-store/notifications"
+import {
+  LEAD_COLUMNS,
+  VISITAS_COLUMNS,
+  JUSTIFICATIVAS_COLUMNS,
+  OBSERVACOES_QUALIDADE_COLUMNS,
+  AUDITORIA_COLUMNS,
+} from "@/lib/supabase/projections"
 
 export type { Store, NotifyOpts, AuditInput }
 export {
@@ -95,12 +102,12 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
 
   // ---------- Carregamento inicial + Realtime ----------
   const loadLeads = useCallback(async () => {
-    const { data } = await supabase.from("leads").select("*").order("criado_em", { ascending: false })
+    const { data } = await supabase.from("leads").select(LEAD_COLUMNS).order("criado_em", { ascending: false })
     if (data) setLeads(data.map(rowToLead))
   }, [])
 
   const loadVisits = useCallback(async () => {
-    const { data } = await supabase.from("visitas").select("*")
+    const { data } = await supabase.from("visitas").select(VISITAS_COLUMNS)
     if (data) setVisits(data.map(rowToVisit))
   }, [])
 
@@ -127,7 +134,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (!userId) return
     const { data } = await supabase
       .from("justificativas_operacionais")
-      .select("*")
+      .select(JUSTIFICATIVAS_COLUMNS)
       .order("criado_em", { ascending: false })
     if (data) setJustifications(data.map(rowToJustification))
   }, [userId])
@@ -136,7 +143,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (!isGestorNivel(userRole)) return setQualityNotes([])
     const { data } = await supabase
       .from("observacoes_qualidade")
-      .select("*")
+      .select(OBSERVACOES_QUALIDADE_COLUMNS)
       .order("criado_em", { ascending: false })
     if (data) setQualityNotes(data.map(rowToQuality))
   }, [userRole])
@@ -145,7 +152,7 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
     if (!isGestorNivel(userRole)) return setAudit([])
     const { data } = await supabase
       .from("auditoria")
-      .select("*")
+      .select(AUDITORIA_COLUMNS)
       .order("criado_em", { ascending: false })
       .limit(1000)
     if (data) setAudit(data.map(rowToAudit))

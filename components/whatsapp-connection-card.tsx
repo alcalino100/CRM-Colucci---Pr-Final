@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { CheckCircle2, Loader2, MessageCircle, QrCode, RefreshCw, XCircle } from "lucide-react"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Dialog, Skeleton, useToast } from "@/components/ui/primitives"
 import { Button } from "@/components/ui/button"
+import { safeSetInterval } from "@/hooks/use-safe-interval"
 
 type Estado = "idle" | "gerando_qr" | "aguardando_leitura" | "conectado" | "erro"
 
@@ -30,13 +31,13 @@ export function WhatsappConnectionCard({
   const [desconectando, setDesconectando] = useState(false)
   const [confirmar, setConfirmar] = useState(false)
   const [stale, setStale] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollCleanupRef = useRef<(() => void) | null>(null)
   const toast = useToast()
 
   const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
+    if (pollCleanupRef.current) {
+      pollCleanupRef.current()
+      pollCleanupRef.current = null
     }
   }, [])
 
@@ -85,7 +86,7 @@ export function WhatsappConnectionCard({
     (name: string) => {
       stopPolling()
       const inicio = Date.now()
-      pollRef.current = setInterval(async () => {
+      pollCleanupRef.current = safeSetInterval(async () => {
         if (Date.now() - inicio > 120_000) {
           stopPolling()
           return

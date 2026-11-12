@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { ESCALATION_TRIGGERS_COLUMNS } from "@/lib/supabase/projections"
 import { TriggerSchema, zodMessage } from "@/lib/ai/types"
 
 export const runtime = "nodejs"
@@ -17,7 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     if (!id) return NextResponse.json({ error: "id é obrigatório" }, { status: 400 })
     const { data, error } = await db()
       .from("escalation_triggers")
-      .select("*")
+      .select(ESCALATION_TRIGGERS_COLUMNS)
       .eq("ai_id", id)
       .order("created_at", { ascending: false })
     if (error) throw error
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       action: v.action,
       notification_channels: v.notification_channels ?? [],
     }
-    const { data, error } = await db().from("escalation_triggers").insert(row).select("*").single()
+    const { data, error } = await db().from("escalation_triggers").insert(row).select(ESCALATION_TRIGGERS_COLUMNS).single()
     if (error) throw error
     try {
       await db().from("automation_logs").insert({

@@ -3,6 +3,7 @@
 // Protegido por CRON_SECRET.
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { META_INSIGHTS_CAMPAIGN_COLUMNS, META_INSIGHTS_AD_COLUMNS } from "@/lib/supabase/projections"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
 
     // Insights por campanha no período
     const { data: insightsCamp } = campIds.length
-      ? await wsupabase.from("meta_insights_campaign_daily").select("*").in("campanha_id", campIds).gte("data", since).lte("data", until)
+      ? await wsupabase.from("meta_insights_campaign_daily").select(META_INSIGHTS_CAMPAIGN_COLUMNS).in("campanha_id", campIds).gte("data", since).lte("data", until)
       : { data: [] }
 
     // Ads dessas campanhas + insights por anúncio
@@ -63,7 +64,7 @@ export async function GET(req: Request) {
       : { data: [] }
     const adIds = (ads ?? []).map((a) => a.id)
     const { data: insightsAd } = adIds.length
-      ? await wsupabase.from("meta_insights_ad_daily").select("*").in("ad_id", adIds).gte("data", since).lte("data", until)
+      ? await wsupabase.from("meta_insights_ad_daily").select(META_INSIGHTS_AD_COLUMNS).in("ad_id", adIds).gte("data", since).lte("data", until)
       : { data: [] }
 
     // Leads do CRM do corretor no período

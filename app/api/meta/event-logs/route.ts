@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { META_EVENT_LOGS_COLUMNS } from "@/lib/supabase/projections"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
   const limite = Math.min(Math.max(Number(url.searchParams.get("limite") ?? 100), 1), 500)
   const { data, error } = await supabase
     .from("meta_event_logs")
-    .select("*")
+    .select(META_EVENT_LOGS_COLUMNS)
     .order("criado_em", { ascending: false })
     .limit(limite)
 

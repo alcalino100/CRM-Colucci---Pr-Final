@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { decryptToken } from "@/lib/encryption"
+import { AI_AGENTS_COLUMNS } from "@/lib/supabase/projections"
 import OpenAI from "openai"
 
 let _aiDb: any = null
@@ -34,7 +35,7 @@ export function providerFromModel(model?: string){
 }
 
 export async function generateAIResponse({ aiId, userMessage, conversationHistory, regrasSuplementares, tools, onToolUse }: Input){
-  const { data: ai } = await db().from("ai_agents").select("*").eq("id", aiId).single()
+  const { data: ai } = await db().from("ai_agents").select(AI_AGENTS_COLUMNS).eq("id", aiId).single()
   if(!ai) throw new Error("AI not found")
 
   let context = ""

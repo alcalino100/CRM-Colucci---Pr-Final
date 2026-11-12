@@ -1,6 +1,7 @@
 import { supabase } from "../supabase/client"
 import { isTelefoneBloqueado } from "../telefones-bloqueados"
 import { isGestorNivel } from "../roles"
+import { JUSTIFICATIVAS_COLUMNS } from "@/lib/supabase/projections"
 import type { Lead, OperationalJustification, Role } from "../mock-data"
 import type { AuditInput, NotifyOpts } from "./types"
 import { leadPatchToRow, rowToJustification } from "./mappers"
@@ -244,7 +245,7 @@ export async function executarAddJustification({
       autor_id: userId,
       autor_nome: userNome,
     })
-    .select("*")
+    .select(JUSTIFICATIVAS_COLUMNS)
     .single()
   if (error || !data) {
     return { ok: false, error: error?.message ?? "Não foi possível confirmar a justificativa." }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { GOALS_COLUMNS } from "@/lib/supabase/projections"
 import { GoalSchema, zodMessage } from "@/lib/ai/types"
 
 export const runtime = "nodejs"
@@ -30,7 +31,7 @@ function mapRow(g: Record<string, unknown>) {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const { data, error } = await db().from("goals").select("*").eq("ai_id", id).order("created_at", { ascending: true })
+    const { data, error } = await db().from("goals").select(GOALS_COLUMNS).eq("ai_id", id).order("created_at", { ascending: true })
     if (error) throw error
     return NextResponse.json({ ok: true, goals: (data ?? []).map(mapRow) })
   } catch (e: unknown) {
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       is_active: true,
       config: { success_criteria: v.success_criteria ?? null, next_step: v.next_step ?? null, fallback: v.fallback ?? null },
     }
-    const { data, error } = await db().from("goals").insert(row).select("*").single()
+    const { data, error } = await db().from("goals").insert(row).select(GOALS_COLUMNS).single()
     if (error) throw error
     return NextResponse.json({ ok: true, goal: mapRow(data as Record<string, unknown>) })
   } catch (e: unknown) {
