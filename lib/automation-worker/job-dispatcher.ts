@@ -25,6 +25,7 @@ import {
   type WorkerResults,
 } from "./constants"
 import { escolherConexaoAutomacao } from "./reativacao-creator"
+import { ehFalhaTransitoria } from "./retry-policy"
 import { tagsDoLead } from "./ia-coordination"
 import {
   filtrarJobsComInstanciasConectadas,
@@ -388,7 +389,11 @@ export async function despacharJobsAgendados(
         const attempts = (job.attempts ?? 0) + 1
         const maxAttempts = job.max_attempts ?? 3
 
-        if (attempts < maxAttempts) {
+        // Só retenta erro transitório (ex.: "Connection Closed"); número inexistente ou
+        // telefone inválido falham de vez para não gastar cota de envio à toa.
+        const transitoria = ehFalhaTransitoria(result.error_code, result.error_message)
+
+        if (transitoria && attempts < maxAttempts) {
           const retryInterval =
             automation.limits_config.min_interval_between_messages_minutes ?? 30
           const nextRetry = new Date(Date.now() + retryInterval * 60000).toISOString()

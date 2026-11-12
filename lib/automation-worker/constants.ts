@@ -32,3 +32,17 @@ export interface WorkerResults {
   cancelled: number
   blocked_hour: number
 }
+
+// --- Régua de follow-up: controle de fila e retentativa ---
+// Máximo de jobs abertos (agendados/retentando/bloqueados) da régua de follow-up. Só cria
+// novos jobs enquanto houver folga: a fila acompanha a capacidade de envio (30/linha/dia)
+// e os leads são reavaliados no momento do envio, sem acumular dezenas de dias de backlog.
+export const MAX_FILA_FOLLOWUP = 60
+
+// Varredura paginada dos candidatos (nunca olha só os "N mais antigos": os já tratados
+// ficariam sempre no começo da lista e bloqueariam os leads novos).
+export const TAM_PAGINA_FOLLOWUP = 100
+export const LIMITE_VARREDURA_FOLLOWUP = 1500
+
+// Tentativas por job de follow-up quando o erro é transitório (ex.: "Connection Closed").
+export const MAX_TENTATIVAS_FOLLOWUP = 3
