@@ -52,6 +52,8 @@ function todas(valor: boolean): SecoesAtivasConfig {
 
 /** Atalho do modal: só Locação (todas as outras explicitamente desligadas). */
 export const SECOES_SOMENTE_LOCACAO: SecoesAtivasConfig = { ...todas(false), locacao: true }
+/** Atalho do modal: Locação + tempo da equipe de Locação. */
+export const SECOES_LOCACAO_E_TEMPO: SecoesAtivasConfig = { ...todas(false), locacao: true, tempo: true }
 /** Atalho do modal: todos os blocos. */
 export const SECOES_TODAS: SecoesAtivasConfig = todas(true)
 
@@ -86,7 +88,19 @@ export function resumoSecoesDestinatario(secoes: Partial<SecoesAtivasConfig> | n
   if (!secoes || Object.keys(secoes).length === 0) return "Padrão da configuração"
   const ligadas = CHAVES_SECOES.filter((k) => secoes[k] === true)
   if (ligadas.length === 1 && ligadas[0] === "locacao") return "Somente Locação"
+  if (ligadas.length === 2 && secoes.locacao === true && secoes.tempo === true) return "Locação + Tempo da equipe"
   if (ligadas.length === CHAVES_SECOES.length) return "Todos os blocos"
   if (ligadas.length === 0) return "Nenhum bloco"
   return ligadas.length === 1 ? "1 bloco" : `${ligadas.length} blocos`
+}
+
+/** Papéis da equipe de Locação (estrito: "corretor" e "gestor" atendem Vendas + Locação e ficam de fora). */
+export const ROLES_EQUIPE_LOCACAO: readonly string[] = ["corretor_locacao", "gestor_locacao"]
+
+/**
+ * "Perfil Locação": recebe Locação e nenhum bloco de vendas (tráfego, automação, IA, arquivados).
+ * Para esse destinatário o relatório é só de Locação: título próprio e o bloco Tempo lista apenas a equipe de Locação.
+ */
+export function ehPerfilLocacao(secoes: SecoesAtivasConfig): boolean {
+  return secoes.locacao && !secoes.trafego && !secoes.automacao && !secoes.ia && !secoes.arquivados
 }

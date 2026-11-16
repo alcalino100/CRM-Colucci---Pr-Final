@@ -2,9 +2,12 @@ import { describe, it, expect } from "vitest"
 import {
   CATALOGO_SECOES,
   CHAVES_SECOES,
+  ROLES_EQUIPE_LOCACAO,
+  SECOES_LOCACAO_E_TEMPO,
   SECOES_PADRAO,
   SECOES_SOMENTE_LOCACAO,
   SECOES_TODAS,
+  ehPerfilLocacao,
   resumoSecoesDestinatario,
   secoesEfetivas,
   secoesNecessarias,
@@ -61,7 +64,22 @@ describe("quem recebe o quê", () => {
     expect(resumoSecoesDestinatario(null)).toBe("Padrão da configuração")
     expect(resumoSecoesDestinatario(SECOES_SOMENTE_LOCACAO)).toBe("Somente Locação")
     expect(resumoSecoesDestinatario(SECOES_TODAS)).toBe("Todos os blocos")
-    expect(resumoSecoesDestinatario({ ...SECOES_SOMENTE_LOCACAO, tempo: true })).toBe("2 blocos")
+    expect(resumoSecoesDestinatario(SECOES_LOCACAO_E_TEMPO)).toBe("Locação + Tempo da equipe")
+    expect(resumoSecoesDestinatario({ ...SECOES_SOMENTE_LOCACAO, ia: true })).toBe("2 blocos")
     expect(resumoSecoesDestinatario({ ...SECOES_SOMENTE_LOCACAO, locacao: false })).toBe("Nenhum bloco")
+  })
+})
+
+describe("perfil Locação", () => {
+  it("é Locação sem nenhum bloco de vendas; o Tempo pode ou não estar junto", () => {
+    expect(ehPerfilLocacao(SECOES_SOMENTE_LOCACAO)).toBe(true)
+    expect(ehPerfilLocacao(SECOES_LOCACAO_E_TEMPO)).toBe(true)
+    expect(ehPerfilLocacao({ ...SECOES_LOCACAO_E_TEMPO, trafego: true })).toBe(false)
+    expect(ehPerfilLocacao({ ...SECOES_PADRAO, locacao: true })).toBe(false)
+    expect(ehPerfilLocacao(SECOES_PADRAO)).toBe(false)
+  })
+
+  it("a equipe de Locação é estrita: só os papéis de Somente Locação", () => {
+    expect([...ROLES_EQUIPE_LOCACAO]).toEqual(["corretor_locacao", "gestor_locacao"])
   })
 })
