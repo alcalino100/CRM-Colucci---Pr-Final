@@ -21,6 +21,13 @@ import { isGestorNivel } from "@/lib/roles"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Dialog } from "@/components/ui/primitives"
 import { ResponsiveTable, type ResponsiveColumn } from "@/components/ui/responsive-table"
 import { cn } from "@/lib/utils"
+import {
+  extrairInstancias,
+  horaParaCampo,
+  instanciaConectada,
+  rotuloInstancia,
+  type InstanciaOpcao,
+} from "@/lib/relatorios/instancias-ui"
 
 interface RelatorioConfig {
   id: string
@@ -89,7 +96,7 @@ export default function RelatoriosWhatsappAdminPage() {
   const [feedbackConfig, setFeedbackConfig] = useState<string | null>(null)
 
   // Estado das Instâncias Conectadas
-  const [instancias, setInstancias] = useState<Array<{ instance_name: string; status: string; numero?: string }>>([])
+  const [instancias, setInstancias] = useState<InstanciaOpcao[]>([])
 
   // Estado dos Destinatários
   const [destinatarios, setDestinatarios] = useState<Destinatario[]>([])
@@ -133,7 +140,12 @@ export default function RelatoriosWhatsappAdminPage() {
       const res = await fetch("/api/relatorios/config")
       const json = await res.json()
       if (json.ok && json.config) {
-        setConfig(json.config)
+        // O banco devolve a hora como "08:00:00"; o campo de hora e a validação usam "08:00"
+        setConfig({
+          ...json.config,
+          hora_envio: horaParaCampo(json.config.hora_envio, "08:00"),
+          limite_tentativa: horaParaCampo(json.config.limite_tentativa, "12:00"),
+        })
       }
     } catch {
       /* silent */
@@ -144,9 +156,7 @@ export default function RelatoriosWhatsappAdminPage() {
     try {
       const res = await fetch("/api/whatsapp/instancias")
       const json = await res.json()
-      if (json.ok && Array.isArray(json.instancias)) {
-        setInstancias(json.instancias)
-      }
+      setInstancias(extrairInstancias(json))
     } catch {
       /* silent */
     }
@@ -592,8 +602,12 @@ export default function RelatoriosWhatsappAdminPage() {
                   >
                     <option value="">Automático (primeira conectada)</option>
                     {instancias.map((inst) => (
-                      <option key={inst.instance_name} value={inst.instance_name}>
-                        {inst.instance_name} ({inst.status})
+                      <option
+                        key={inst.instance_name}
+                        value={inst.instance_name}
+                        disabled={!instanciaConectada(inst.status) && inst.instance_name !== config.instance_name}
+                      >
+                        {rotuloInstancia(inst)}
                       </option>
                     ))}
                   </select>

@@ -9,6 +9,7 @@ import { logger } from "@/lib/logger"
 import { limitesDiaAnteriorBRT, limitesDiaBRT } from "@/lib/relatorios/periodo"
 import { consolidarRelatorioDia, type SecoesAtivasConfig } from "@/lib/relatorios/montar"
 import { enviarRelatorioParaDestinatario } from "@/lib/relatorios/enviar"
+import { resolverInstanciaEnvio } from "@/lib/relatorios/agendador"
 import { onlyDigits } from "@/lib/whatsapp/server"
 
 export const runtime = "nodejs"
@@ -43,18 +44,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     // Resolver instância
-    let instanceName = instParam || config?.instance_name
-    if (!instanceName) {
-      const { data: insts } = await admin
-        .from("whatsapp_instancias")
-        .select("instance_name, status")
-        .or("status.eq.open,status.eq.connected")
-        .limit(1)
-
-      if (insts && insts.length > 0) {
-        instanceName = insts[0].instance_name
-      }
-    }
+    const instanceName = await resolverInstanciaEnvio(admin, instParam || config?.instance_name)
 
     if (!instanceName) {
       return fail("Nenhuma instância conectada para envio de teste", 400)
