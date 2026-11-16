@@ -7,6 +7,7 @@ import { parseBody } from "@/lib/api/validate"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { onlyDigits } from "@/lib/whatsapp/server"
+import { secoesSchema } from "@/lib/relatorios/secoes"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -16,13 +17,7 @@ const destinatarioPatchSchema = z.object({
   tipo: z.enum(["numero", "grupo"]).optional(),
   destino: z.string().trim().min(5, "Destino inválido").optional(),
   ativo: z.boolean().optional(),
-  secoes: z.object({
-    trafego: z.boolean().optional(),
-    automacao: z.boolean().optional(),
-    ia: z.boolean().optional(),
-    arquivados: z.boolean().optional(),
-    tempo: z.boolean().optional(),
-  }).nullable().optional(),
+  secoes: secoesSchema.nullable().optional(),
 })
 
 export async function PATCH(

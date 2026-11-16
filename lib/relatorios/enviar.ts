@@ -5,7 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/supabase/database.types"
 import { sendWhatsAppText } from "@/lib/whatsapp/server"
 import { logger } from "@/lib/logger"
-import { consolidarRelatorioDia, type RelatorioDiaDados, type SecoesAtivasConfig } from "./montar"
+import { consolidarRelatorioDia, type RelatorioDiaDados } from "./montar"
+import { secoesEfetivas, type SecoesAtivasConfig } from "./secoes"
 import { formatarRelatorioWhatsApp } from "./formatar-whatsapp"
 import type { PeriodoDiaBRT } from "./periodo"
 
@@ -39,6 +40,12 @@ export async function enviarRelatorioParaDestinatario(
     dadosConsolidados?: RelatorioDiaDados
     periodo?: PeriodoDiaBRT
     configSecoes?: SecoesAtivasConfig
+    /**
+     * Blocos da configuração geral. Quando informado, os blocos do destinatário são SEMPRE
+     * "configuração geral + ajustes dele", mesmo que os dados tenham sido coletados para a união
+     * dos blocos de todos (senão quem segue o padrão receberia também o que outro destinatário pediu).
+     */
+    secoesGerais?: Partial<SecoesAtivasConfig> | null
     incluirGestoresNoTempo?: boolean
     listarNomesLeads?: boolean
   }
@@ -53,8 +60,10 @@ export async function enviarRelatorioParaDestinatario(
       incluirGestoresNoTempo: params.incluirGestoresNoTempo,
       listarNomesLeads: params.listarNomesLeads,
     })
+  } else if (params.secoesGerais !== undefined) {
+    dados = { ...dados, secoesAtivas: secoesEfetivas(params.secoesGerais, destinatario.secoes) }
   } else if (destinatario.secoes) {
-    // Se o destinatário possui overrides de seções, reconfigurar para ele
+    // Sem a configuração geral à mão: aplica só os ajustes do destinatário
     dados = {
       ...dados,
       secoesAtivas: {
@@ -124,6 +133,13 @@ export async function enviarRelatorioParaDestinatario(
     tempo: {
       totalCorretores: dados.tempo.corretores.length,
       ativosNoCrm: dados.tempo.corretores.filter((c) => c.acessou).length,
+    },
+    locacao: {
+      novosLeads: dados.locacao.novosLeads,
+      negociacoesIniciadas: dados.locacao.negociacoesIniciadas,
+      locadosNoDia: dados.locacao.locadosNoDia,
+      visitasAgendadas: dados.locacao.visitasAgendadasTotal,
+      emAberto: dados.locacao.totalEmAberto,
     },
   }
 

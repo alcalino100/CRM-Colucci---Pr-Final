@@ -2,17 +2,27 @@
 // Formatação determinística e escaneável para envio via WhatsApp
 
 import type { RelatorioDiaDados } from "./montar"
+import { formatarDataBr } from "./periodo"
+import { hojeYmdBRT } from "./metricas/locacao"
 
 /**
  * Converte o objeto consolidado de métricas em texto puro para WhatsApp.
  * Respeita as seções ativas, zeros explícitos e diretrizes de privacidade LGPD.
  */
 export function formatarRelatorioWhatsApp(dados: RelatorioDiaDados): string {
-  const { periodo, secoesAtivas, trafego, automacao, ia, arquivados, tempo } = dados
+  const { periodo, secoesAtivas, trafego, automacao, ia, arquivados, tempo, locacao } = dados
   const blocos: string[] = []
 
+  // Quem recebe só Locação vê um relatório de Locação (sem numeração de blocos que não recebe)
+  const somenteLocacao =
+    secoesAtivas.locacao && !secoesAtivas.trafego && !secoesAtivas.automacao && !secoesAtivas.ia && !secoesAtivas.arquivados && !secoesAtivas.tempo
+
   // Cabeçalho Principal
-  blocos.push(`📊 *Relatório Diário do CRM — ${periodo.dataFormatada}*`)
+  blocos.push(
+    somenteLocacao
+      ? `📊 *Relatório de Locação — ${periodo.dataFormatada}*`
+      : `📊 *Relatório Diário do CRM — ${periodo.dataFormatada}*`
+  )
 
   // -------------------------------------------------------------
   // Bloco 1: Tráfego Pago por Corretor
@@ -137,6 +147,47 @@ export function formatarRelatorioWhatsApp(dados: RelatorioDiaDados): string {
     } else {
       linhas.push(`• Nenhum usuário ativo registrado`)
     }
+
+    blocos.push(linhas.join("\n"))
+  }
+
+  // -------------------------------------------------------------
+  // Bloco 6: Locação
+  // -------------------------------------------------------------
+  if (secoesAtivas.locacao && locacao) {
+    const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+    const linhas: string[] = [somenteLocacao ? `🏠 *LOCAÇÃO*` : `🏠 *6. LOCAÇÃO*`]
+
+    linhas.push(`• Novos leads de locação: ${locacao.novosLeads}`)
+    for (const c of locacao.novosPorCorretor) {
+      linhas.push(`  - ${c.corretorNome}: ${c.total}`)
+    }
+    linhas.push(`• Entraram em negociação: ${locacao.negociacoesIniciadas}`)
+    linhas.push(
+      `• Locados no dia: ${locacao.locadosNoDia}${locacao.locadosNoDia > 0 && locacao.comissaoLocadosNoDia > 0 ? ` (comissão ${brl(locacao.comissaoLocadosNoDia)})` : ""}`
+    )
+    linhas.push(
+      `• Contratos assinados: ${locacao.contratosAssinados}${locacao.contratosAssinados > 0 && locacao.valorAluguelContratos > 0 ? ` (aluguéis somam ${brl(locacao.valorAluguelContratos)})` : ""}`
+    )
+    linhas.push(`• Visitas registradas no dia: ${locacao.visitasRegistradasNoDia}`)
+
+    const quando = locacao.diaVisitas && locacao.diaVisitas !== hojeYmdBRT() ? formatarDataBr(locacao.diaVisitas) : "hoje"
+    linhas.push(`• Visitas agendadas para ${quando}: ${locacao.visitasAgendadasTotal}`)
+    for (const v of locacao.visitasAgendadas) {
+      linhas.push(`  - ${v.horario} — ${v.corretorNome}${v.leadNome ? ` com ${v.leadNome}` : ""}`)
+    }
+    if (locacao.visitasAgendadasTotal > locacao.visitasAgendadas.length) {
+      linhas.push(`  - … e mais ${locacao.visitasAgendadasTotal - locacao.visitasAgendadas.length}`)
+    }
+
+    const f = locacao.funil
+    linhas.push(
+      `• Funil em aberto (${locacao.totalEmAberto}): Novo ${f.novo} | Em atendimento ${f.emAtendimento} | Procurando imóvel ${f.procurandoImovel} | Visita agendada ${f.visitaAgendada} | Negociando ${f.negociando}`
+    )
+    linhas.push(
+      `• Temperatura (em aberto): 🔥 ${locacao.temperatura.quente} quentes | ${locacao.temperatura.morno} mornos | ${locacao.temperatura.frio} frios`
+    )
+    linhas.push(`• Acumulado: ${f.locado} locados | ${f.perdido} perdidos`)
 
     blocos.push(linhas.join("\n"))
   }

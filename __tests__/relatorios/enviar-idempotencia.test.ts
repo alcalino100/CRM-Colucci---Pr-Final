@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { enviarRelatorioParaDestinatario, type DestinatarioRelatorio } from "@/lib/relatorios/enviar"
 import type { RelatorioDiaDados } from "@/lib/relatorios/montar"
+import { METRICAS_LOCACAO_VAZIAS } from "@/lib/relatorios/metricas/locacao"
 import * as whatsappServer from "@/lib/whatsapp/server"
 
 // Mock do logger para evitar poluição no console
@@ -31,6 +32,7 @@ const mockDadosConsolidados: RelatorioDiaDados = {
     ia: true,
     arquivados: true,
     tempo: true,
+    locacao: false,
   },
   opcoes: {
     incluirGestoresNoTempo: false,
@@ -113,6 +115,7 @@ const mockDadosConsolidados: RelatorioDiaDados = {
       },
     ],
   },
+  locacao: METRICAS_LOCACAO_VAZIAS,
   geradoEmIso: "2026-11-12T11:00:00.000Z",
 }
 

@@ -7,8 +7,9 @@ import { parseBody } from "@/lib/api/validate"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { limitesDiaAnteriorBRT, limitesDiaBRT } from "@/lib/relatorios/periodo"
-import { consolidarRelatorioDia, type SecoesAtivasConfig } from "@/lib/relatorios/montar"
-import { enviarRelatorioParaDestinatario } from "@/lib/relatorios/enviar"
+import { consolidarRelatorioDia } from "@/lib/relatorios/montar"
+import { secoesNecessarias, type SecoesAtivasConfig } from "@/lib/relatorios/secoes"
+import { enviarRelatorioParaDestinatario, type DestinatarioRelatorio } from "@/lib/relatorios/enviar"
 import { resolverInstanciaEnvio } from "@/lib/relatorios/agendador"
 import { onlyDigits } from "@/lib/whatsapp/server"
 
@@ -50,9 +51,16 @@ export async function POST(request: Request) {
       return fail("Nenhuma instância conectada para envio de teste", 400)
     }
 
+    // Destinatários ativos (para coletar os blocos que algum deles recebe)
+    const { data: destinatariosAtivos } = destino
+      ? { data: [] as DestinatarioRelatorio[] }
+      : ((await admin.from("relatorio_destinatarios").select("*").eq("ativo", true)) as {
+          data: DestinatarioRelatorio[] | null
+        })
+
     // Consolidar dados do período
     const dadosConsolidados = await consolidarRelatorioDia(admin, periodo, {
-      secoes: (config?.secoes as Partial<SecoesAtivasConfig>) ?? undefined,
+      secoes: secoesNecessarias(config?.secoes as Partial<SecoesAtivasConfig> | null, destinatariosAtivos ?? []),
       incluirGestoresNoTempo: Boolean(config?.incluir_gestores_no_tempo),
       listarNomesLeads: Boolean(config?.listar_nomes_leads),
     })
@@ -73,6 +81,7 @@ export async function POST(request: Request) {
         instanceName,
         origem: "teste",
         dadosConsolidados,
+        secoesGerais: config?.secoes as Partial<SecoesAtivasConfig> | null,
       })
 
       if (!resultado.ok) {
@@ -87,10 +96,7 @@ export async function POST(request: Request) {
     }
 
     // Se nenhum destino específico foi passado, envia para todos os destinatários ativos
-    const { data: destinatarios } = await admin
-      .from("relatorio_destinatarios")
-      .select("*")
-      .eq("ativo", true)
+    const destinatarios = destinatariosAtivos
 
     if (!destinatarios || destinatarios.length === 0) {
       return fail("Nenhum destinatário ativo configurado. Adicione um destinatário ou informe um destino.", 400)
@@ -103,6 +109,7 @@ export async function POST(request: Request) {
           instanceName: instanceName!,
           origem: "teste",
           dadosConsolidados,
+          secoesGerais: config?.secoes as Partial<SecoesAtivasConfig> | null,
         })
       )
     )

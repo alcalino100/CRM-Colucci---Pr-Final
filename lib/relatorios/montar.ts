@@ -9,22 +9,10 @@ import { coletarMetricasAutomacao, type MetricasAutomacao } from "./metricas/aut
 import { coletarMetricasIA, type MetricasIA } from "./metricas/ia"
 import { coletarMetricasArquivados, type MetricasArquivados } from "./metricas/arquivados"
 import { coletarMetricasTempo, type MetricasTempoCRM } from "./metricas/tempo"
+import { coletarMetricasLocacao, METRICAS_LOCACAO_VAZIAS, type MetricasLocacao } from "./metricas/locacao"
+import { SECOES_PADRAO, type SecoesAtivasConfig } from "./secoes"
 
-export interface SecoesAtivasConfig {
-  trafego: boolean
-  automacao: boolean
-  ia: boolean
-  arquivados: boolean
-  tempo: boolean
-}
-
-export const SECOES_PADRAO: SecoesAtivasConfig = {
-  trafego: true,
-  automacao: true,
-  ia: true,
-  arquivados: true,
-  tempo: true,
-}
+export { SECOES_PADRAO, type SecoesAtivasConfig } from "./secoes"
 
 export interface RelatorioDiaDados {
   periodo: PeriodoDiaBRT
@@ -38,6 +26,7 @@ export interface RelatorioDiaDados {
   ia: MetricasIA
   arquivados: MetricasArquivados
   tempo: MetricasTempoCRM
+  locacao: MetricasLocacao
   geradoEmIso: string
 }
 
@@ -70,7 +59,7 @@ export async function consolidarRelatorioDia(
   }
 
   // Coleta paralela de todos os blocos com tolerância a falhas
-  const [trafego, automacao, ia, arquivados, tempo] = await Promise.all([
+  const [trafego, automacao, ia, arquivados, tempo, locacao] = await Promise.all([
     secoesAtivas.trafego
       ? coletarMetricasTrafego(supabase, periodo)
       : Promise.resolve({
@@ -120,6 +109,9 @@ export async function consolidarRelatorioDia(
           corretores: [],
           incluiuGestores: opcoes.incluirGestoresNoTempo,
         }),
+    secoesAtivas.locacao
+      ? coletarMetricasLocacao(supabase, periodo, { listarNomesLeads: opcoes.listarNomesLeads })
+      : Promise.resolve(METRICAS_LOCACAO_VAZIAS),
   ])
 
   return {
@@ -131,6 +123,7 @@ export async function consolidarRelatorioDia(
     ia,
     arquivados,
     tempo,
+    locacao,
     geradoEmIso: new Date().toISOString(),
   }
 }

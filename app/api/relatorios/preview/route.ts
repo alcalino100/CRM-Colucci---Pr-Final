@@ -5,7 +5,8 @@ import { ok, fail } from "@/lib/api/response"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { limitesDiaAnteriorBRT, limitesDiaBRT } from "@/lib/relatorios/periodo"
-import { consolidarRelatorioDia, type SecoesAtivasConfig } from "@/lib/relatorios/montar"
+import { consolidarRelatorioDia } from "@/lib/relatorios/montar"
+import { secoesEfetivas, secoesNecessarias, type SecoesAtivasConfig } from "@/lib/relatorios/secoes"
 import { formatarRelatorioWhatsApp } from "@/lib/relatorios/formatar-whatsapp"
 
 export const runtime = "nodejs"
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const dataParam = url.searchParams.get("data") // YYYY-MM-DD
+  const destinatarioId = url.searchParams.get("destinatario") // opcional: ver o relatório como esse destinatário recebe
 
   try {
     const admin = getSupabaseAdmin()
@@ -30,7 +32,20 @@ export async function GET(request: Request) {
       .eq("id", "main")
       .maybeSingle()
 
-    const secoes = (config?.secoes as Partial<SecoesAtivasConfig>) ?? undefined
+    const secoesGerais = config?.secoes as Partial<SecoesAtivasConfig> | null
+    let secoes: SecoesAtivasConfig
+    if (destinatarioId) {
+      const { data: dest } = await admin
+        .from("relatorio_destinatarios")
+        .select("id, secoes")
+        .eq("id", destinatarioId)
+        .maybeSingle()
+      if (!dest) return fail("Destinatário não encontrado", 404)
+      secoes = secoesEfetivas(secoesGerais, dest.secoes as Partial<SecoesAtivasConfig> | null)
+    } else {
+      // Visão geral: configuração geral
+      secoes = secoesNecessarias(secoesGerais, [])
+    }
     const incluirGestores = Boolean(config?.incluir_gestores_no_tempo)
     const listarNomesLeads = Boolean(config?.listar_nomes_leads)
 
