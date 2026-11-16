@@ -5,7 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/supabase/database.types"
 import { logger } from "@/lib/logger"
 import { type PeriodoDiaBRT, limitesDiaAnteriorBRT, TIMEZONE_BRT } from "./periodo"
-import { consolidarRelatorioDia, type SecoesAtivasConfig } from "./montar"
+import { consolidarRelatorioDia } from "./montar"
+import { secoesNecessarias, type SecoesAtivasConfig } from "./secoes"
 import { enviarRelatorioParaDestinatario, type DestinatarioRelatorio, type EnvioResultado } from "./enviar"
 
 export interface ResultadoDisparoRelatorios {
@@ -154,7 +155,11 @@ export async function executarDisparoAutomaticoRelatorios(
 
   // 5. Consolidar os dados do período
   const dadosConsolidados = await consolidarRelatorioDia(supabase, periodo, {
-    secoes: (config.secoes as Partial<SecoesAtivasConfig>) ?? undefined,
+    // Coleta os blocos que ALGUM destinatário recebe (não só os da configuração geral)
+    secoes: secoesNecessarias(
+      config.secoes as Partial<SecoesAtivasConfig> | null,
+      destinatarios as Array<{ secoes?: Partial<SecoesAtivasConfig> | null }>
+    ),
     incluirGestoresNoTempo: Boolean(config.incluir_gestores_no_tempo),
     listarNomesLeads: Boolean(config.listar_nomes_leads),
   })
@@ -171,6 +176,7 @@ export async function executarDisparoAutomaticoRelatorios(
       instanceName,
       origem: forcar ? "teste" : "automatico",
       dadosConsolidados,
+      secoesGerais: config.secoes as Partial<SecoesAtivasConfig> | null,
     })
 
     detalhes.push(res)

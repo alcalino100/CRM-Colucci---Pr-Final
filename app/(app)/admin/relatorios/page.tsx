@@ -22,6 +22,15 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, Dialog } from "@/compo
 import { ResponsiveTable, type ResponsiveColumn } from "@/components/ui/responsive-table"
 import { cn } from "@/lib/utils"
 import {
+  CATALOGO_SECOES,
+  SECOES_PADRAO,
+  SECOES_SOMENTE_LOCACAO,
+  SECOES_TODAS,
+  resumoSecoesDestinatario,
+  secoesEfetivas,
+  type SecoesAtivasConfig,
+} from "@/lib/relatorios/secoes"
+import {
   extrairInstancias,
   horaParaCampo,
   instanciaConectada,
@@ -35,13 +44,7 @@ interface RelatorioConfig {
   hora_envio: string
   dias_semana: number[]
   instance_name: string | null
-  secoes: {
-    trafego: boolean
-    automacao: boolean
-    ia: boolean
-    arquivados: boolean
-    tempo: boolean
-  }
+  secoes: SecoesAtivasConfig
   incluir_gestores_no_tempo: boolean
   listar_nomes_leads: boolean
   resumo_ia: boolean
@@ -54,7 +57,7 @@ interface Destinatario {
   tipo: "numero" | "grupo"
   destino: string
   ativo: boolean
-  secoes: Record<string, boolean> | null
+  secoes: Partial<SecoesAtivasConfig> | null
   created_at: string
 }
 
@@ -106,11 +109,15 @@ export default function RelatoriosWhatsappAdminPage() {
   const [destTipo, setDestTipo] = useState<"numero" | "grupo">("numero")
   const [destDestino, setDestDestino] = useState("")
   const [destAtivo, setDestAtivo] = useState(true)
+  // "padrao" segue a configuração geral; "personalizado" usa os blocos marcados abaixo
+  const [destModoSecoes, setDestModoSecoes] = useState<"padrao" | "personalizado">("padrao")
+  const [destSecoes, setDestSecoes] = useState<SecoesAtivasConfig>({ ...SECOES_PADRAO })
   const [salvandoDestinatario, setSalvandoDestinatario] = useState(false)
   const [erroDestinatario, setErroDestinatario] = useState<string | null>(null)
 
   // Estado do Preview e Teste
   const [previewDataParam, setPreviewDataParam] = useState("")
+  const [previewDestId, setPreviewDestId] = useState("") // vazio = visão geral
   const [previewTexto, setPreviewTexto] = useState("")
   const [carregandoPreview, setCarregandoPreview] = useState(false)
   const [testeDestino, setTesteDestino] = useState("")
@@ -145,6 +152,7 @@ export default function RelatoriosWhatsappAdminPage() {
           ...json.config,
           hora_envio: horaParaCampo(json.config.hora_envio, "08:00"),
           limite_tentativa: horaParaCampo(json.config.limite_tentativa, "12:00"),
+          secoes: { ...SECOES_PADRAO, ...(json.config.secoes ?? {}) },
         })
       }
     } catch {
@@ -174,12 +182,14 @@ export default function RelatoriosWhatsappAdminPage() {
     }
   }
 
-  async function carregarPreview(dataCustom?: string) {
+  async function carregarPreview(dataCustom?: string, destId: string = previewDestId) {
     setCarregandoPreview(true)
     try {
-      const url = dataCustom
-        ? `/api/relatorios/preview?data=${encodeURIComponent(dataCustom)}`
-        : "/api/relatorios/preview"
+      const params = new URLSearchParams()
+      if (dataCustom) params.set("data", dataCustom)
+      if (destId) params.set("destinatario", destId)
+      const consulta = params.toString()
+      const url = consulta ? `/api/relatorios/preview?${consulta}` : "/api/relatorios/preview"
       const res = await fetch(url)
       const json = await res.json()
       if (json.ok && json.texto) {
@@ -239,12 +249,17 @@ export default function RelatoriosWhatsappAdminPage() {
       setDestTipo(dest.tipo)
       setDestDestino(dest.destino)
       setDestAtivo(dest.ativo)
+      const personalizado = Boolean(dest.secoes && Object.keys(dest.secoes).length > 0)
+      setDestModoSecoes(personalizado ? "personalizado" : "padrao")
+      setDestSecoes(secoesEfetivas(config?.secoes, dest.secoes))
     } else {
       setDestinatarioEdicao(null)
       setDestNome("")
       setDestTipo("numero")
       setDestDestino("")
       setDestAtivo(true)
+      setDestModoSecoes("padrao")
+      setDestSecoes(secoesEfetivas(config?.secoes, null))
     }
     setErroDestinatario(null)
     setModalDestinatarioAberto(true)
@@ -252,8 +267,13 @@ export default function RelatoriosWhatsappAdminPage() {
 
   async function salvarDestinatario(e: React.FormEvent) {
     e.preventDefault()
-    setSalvandoDestinatario(true)
     setErroDestinatario(null)
+
+    if (destModoSecoes === "personalizado" && !Object.values(destSecoes).some(Boolean)) {
+      setErroDestinatario("Marque pelo menos um bloco para este destinatário (ou volte para o padrão da configuração).")
+      return
+    }
+    setSalvandoDestinatario(true)
 
     try {
       const payload = {
@@ -261,6 +281,8 @@ export default function RelatoriosWhatsappAdminPage() {
         tipo: destTipo,
         destino: destDestino,
         ativo: destAtivo,
+        // null = segue a configuração geral; senão grava todas as chaves, marcadas ou não
+        secoes: destModoSecoes === "padrao" ? null : destSecoes,
       }
 
       const url = destinatarioEdicao
@@ -362,6 +384,11 @@ export default function RelatoriosWhatsappAdminPage() {
           {dest.tipo === "grupo" ? "Grupo WhatsApp" : "Número Individual"}
         </Badge>
       ),
+    },
+    {
+      key: "blocos",
+      header: "Blocos que recebe",
+      render: (dest) => <Badge variant="gray">{resumoSecoesDestinatario(dest.secoes)}</Badge>,
     },
     {
       key: "status",
@@ -666,16 +693,10 @@ export default function RelatoriosWhatsappAdminPage() {
 
               {/* Seleção dos 5 Blocos */}
               <div className="flex flex-col gap-3">
-                <h4 className="text-sm font-bold text-foreground">Blocos Incluídos no Relatório</h4>
+                <h4 className="text-sm font-bold text-foreground">Blocos Incluídos no Relatório (padrão para todos os destinatários)</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {[
-                    { key: "trafego", label: "1. Tráfego Pago por Corretor", desc: "Leads do tráfego pago, contatos únicos e corretores sem leads." },
-                    { key: "automacao", label: "2. Automação e Follow-up", desc: "Disparos, respostas recebidas, taxa e fila atual." },
-                    { key: "ia", label: "3. Respostas e Atendimento IA", desc: "IA assumiu, handoffs para humanos e visitas agendadas." },
-                    { key: "arquivados", label: "4. Arquivados e Reaparecidos", desc: "Eventos de auditoria, motivos e retorno de hibernação." },
-                    { key: "tempo", label: "5. Tempo da Equipe no CRM", desc: "União de intervalos recortados e sessões por corretor." },
-                  ].map((bloco) => {
-                    const ativo = config.secoes[bloco.key as keyof typeof config.secoes]
+                  {CATALOGO_SECOES.map((bloco) => {
+                    const ativo = Boolean(config.secoes[bloco.key])
                     return (
                       <label
                         key={bloco.key}
@@ -808,6 +829,26 @@ export default function RelatoriosWhatsappAdminPage() {
                 <CardTitle className="text-base">Disparo de Teste</CardTitle>
               </CardHeader>
               <CardContent className="pt-4 flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Ver o relatório como</label>
+                  <select
+                    value={previewDestId}
+                    onChange={(e) => {
+                      setPreviewDestId(e.target.value)
+                      carregarPreview(previewDataParam, e.target.value)
+                    }}
+                    className="rounded-xl border border-border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary btn-touch-target"
+                  >
+                    <option value="">Configuração geral</option>
+                    {destinatarios.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.nome} ({resumoSecoesDestinatario(d.secoes)})
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-muted-foreground">Mostra exatamente o que cada destinatário recebe.</span>
+                </div>
+
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Data do Relatório (opcional)</label>
                   <input
@@ -971,6 +1012,75 @@ export default function RelatoriosWhatsappAdminPage() {
               />
               <span className="text-xs font-semibold">Ativo para envio automático</span>
             </label>
+
+            {/* Blocos que este destinatário recebe */}
+            <div className="flex flex-col gap-2 rounded-xl border border-border p-3" data-testid="destinatario-blocos">
+              <span className="text-xs font-bold text-foreground">Blocos que este destinatário recebe</span>
+
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: "padrao", label: "Igual à configuração geral" },
+                  { id: "personalizado", label: "Personalizar" },
+                ].map((op) => (
+                  <button
+                    key={op.id}
+                    type="button"
+                    onClick={() => setDestModoSecoes(op.id as "padrao" | "personalizado")}
+                    className={cn(
+                      "rounded-xl border px-3 py-1.5 text-xs font-bold transition btn-touch-target",
+                      destModoSecoes === op.id
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    {op.label}
+                  </button>
+                ))}
+              </div>
+
+              {destModoSecoes === "padrao" ? (
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Recebe os blocos marcados em Configurações. Para mandar algo diferente (ex.: só Locação), escolha Personalizar.
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">Atalhos:</span>
+                    <button
+                      type="button"
+                      onClick={() => setDestSecoes({ ...SECOES_SOMENTE_LOCACAO })}
+                      className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted"
+                    >
+                      Somente Locação
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDestSecoes({ ...SECOES_TODAS })}
+                      className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted"
+                    >
+                      Todos os blocos
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    {CATALOGO_SECOES.map((bloco) => (
+                      <label key={bloco.key} className="flex items-start gap-2.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={destSecoes[bloco.key]}
+                          onChange={(e) => setDestSecoes({ ...destSecoes, [bloco.key]: e.target.checked })}
+                          className="size-4 shrink-0 mt-0.5 accent-primary"
+                        />
+                        <span className="flex flex-col">
+                          <span className="text-xs font-semibold text-foreground">{bloco.label}</span>
+                          <span className="text-[11px] text-muted-foreground leading-snug">{bloco.desc}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
 
             {erroDestinatario && (
               <p className="text-xs font-medium text-destructive">{erroDestinatario}</p>

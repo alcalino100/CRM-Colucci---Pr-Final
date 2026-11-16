@@ -2,6 +2,7 @@
 // Validação da configuração do relatório diário (usada pela API de config).
 
 import { z } from "zod"
+import { secoesSchema } from "./secoes"
 
 /**
  * Hora "HH:mm". Aceita também "HH:mm:ss": a coluna do banco é do tipo `time` e devolve "08:00:00",
@@ -18,15 +19,7 @@ export const configUpdateSchema = z.object({
   hora_envio: horaSchema.optional(),
   dias_semana: z.array(z.number().int().min(0).max(6)).min(1, "Selecione ao menos um dia da semana").optional(),
   instance_name: z.string().nullable().optional(),
-  secoes: z
-    .object({
-      trafego: z.boolean().optional(),
-      automacao: z.boolean().optional(),
-      ia: z.boolean().optional(),
-      arquivados: z.boolean().optional(),
-      tempo: z.boolean().optional(),
-    })
-    .optional(),
+  secoes: secoesSchema.optional(),
   incluir_gestores_no_tempo: z.boolean().optional(),
   listar_nomes_leads: z.boolean().optional(),
   resumo_ia: z.boolean().optional(),

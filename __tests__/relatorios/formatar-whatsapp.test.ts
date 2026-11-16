@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { formatarRelatorioWhatsApp } from "@/lib/relatorios/formatar-whatsapp"
 import type { RelatorioDiaDados } from "@/lib/relatorios/montar"
+import { METRICAS_LOCACAO_VAZIAS } from "@/lib/relatorios/metricas/locacao"
 
 const mockDados: RelatorioDiaDados = {
   periodo: {
@@ -15,6 +16,7 @@ const mockDados: RelatorioDiaDados = {
     ia: true,
     arquivados: true,
     tempo: true,
+    locacao: false,
   },
   opcoes: {
     incluirGestoresNoTempo: false,
@@ -96,6 +98,7 @@ const mockDados: RelatorioDiaDados = {
       },
     ],
   },
+  locacao: METRICAS_LOCACAO_VAZIAS,
   geradoEmIso: "2026-11-12T11:00:00.000Z",
 }
 
