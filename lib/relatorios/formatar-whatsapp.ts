@@ -3,6 +3,7 @@
 
 import type { RelatorioDiaDados } from "./montar"
 import { formatarDataBr } from "./periodo"
+import { ROLES_EQUIPE_LOCACAO, ehPerfilLocacao } from "./secoes"
 import { hojeYmdBRT } from "./metricas/locacao"
 
 /**
@@ -14,8 +15,9 @@ export function formatarRelatorioWhatsApp(dados: RelatorioDiaDados): string {
   const blocos: string[] = []
 
   // Quem recebe só Locação vê um relatório de Locação (sem numeração de blocos que não recebe)
-  const somenteLocacao =
-    secoesAtivas.locacao && !secoesAtivas.trafego && !secoesAtivas.automacao && !secoesAtivas.ia && !secoesAtivas.arquivados && !secoesAtivas.tempo
+  const somenteLocacao = ehPerfilLocacao(secoesAtivas)
+  let blocoTempo: string | null = null
+  let blocoLocacao: string | null = null
 
   // Cabeçalho Principal
   blocos.push(
@@ -131,11 +133,18 @@ export function formatarRelatorioWhatsApp(dados: RelatorioDiaDados): string {
   // Bloco 5: Tempo dos Corretores no CRM
   // -------------------------------------------------------------
   if (secoesAtivas.tempo) {
-    const titulo = tempo.incluiuGestores ? `⏱️ *5. TEMPO DA EQUIPE NO CRM*` : `⏱️ *5. TEMPO DOS CORRETORES NO CRM*`
+    const titulo = somenteLocacao
+      ? `⏱️ *TEMPO DA EQUIPE DE LOCAÇÃO NO CRM*`
+      : tempo.incluiuGestores
+        ? `⏱️ *5. TEMPO DA EQUIPE NO CRM*`
+        : `⏱️ *5. TEMPO DOS CORRETORES NO CRM*`
     const linhas: string[] = [titulo]
 
-    if (tempo.corretores.length > 0) {
-      for (const c of tempo.corretores) {
+    // Relatório de Locação: só a equipe de Locação (nada de corretores de vendas)
+    const equipe = somenteLocacao ? tempo.corretores.filter((c) => ROLES_EQUIPE_LOCACAO.includes(c.role)) : tempo.corretores
+
+    if (equipe.length > 0) {
+      for (const c of equipe) {
         if (c.acessou && c.duracaoSegundos > 0) {
           const sessoesTxt = c.numeroSessoes === 1 ? "1 sessão" : `${c.numeroSessoes} sessões`
           const janelaTxt = c.primeiroAcesso !== "--:--" ? ` (${c.primeiroAcesso} às ${c.ultimaAtividade})` : ""
@@ -145,10 +154,10 @@ export function formatarRelatorioWhatsApp(dados: RelatorioDiaDados): string {
         }
       }
     } else {
-      linhas.push(`• Nenhum usuário ativo registrado`)
+      linhas.push(somenteLocacao ? `• Nenhum usuário da equipe de Locação registrado` : `• Nenhum usuário ativo registrado`)
     }
 
-    blocos.push(linhas.join("\n"))
+    blocoTempo = linhas.join("\n")
   }
 
   // -------------------------------------------------------------
@@ -189,8 +198,12 @@ export function formatarRelatorioWhatsApp(dados: RelatorioDiaDados): string {
     )
     linhas.push(`• Acumulado: ${f.locado} locados | ${f.perdido} perdidos`)
 
-    blocos.push(linhas.join("\n"))
+    blocoLocacao = linhas.join("\n")
   }
+
+  // Relatório de Locação mostra a Locação primeiro; no relatório completo, a ordem é 5 (Tempo) e 6 (Locação)
+  const finais = somenteLocacao ? [blocoLocacao, blocoTempo] : [blocoTempo, blocoLocacao]
+  for (const b of finais) if (b) blocos.push(b)
 
   // Rodapé
   blocos.push(`_CRM Colucci • Relatório Automático_`)

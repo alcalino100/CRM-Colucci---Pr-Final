@@ -23,6 +23,7 @@ import { ResponsiveTable, type ResponsiveColumn } from "@/components/ui/responsi
 import { cn } from "@/lib/utils"
 import {
   CATALOGO_SECOES,
+  SECOES_LOCACAO_E_TEMPO,
   SECOES_PADRAO,
   SECOES_SOMENTE_LOCACAO,
   SECOES_TODAS,
@@ -1055,12 +1056,24 @@ export default function RelatoriosWhatsappAdminPage() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setDestSecoes({ ...SECOES_LOCACAO_E_TEMPO })}
+                      className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted"
+                    >
+                      Locação + Tempo da equipe
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setDestSecoes({ ...SECOES_TODAS })}
                       className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted"
                     >
                       Todos os blocos
                     </button>
                   </div>
+
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    Quem recebe Locação sem nenhum bloco de vendas (1 a 4) recebe um <strong>Relatório de Locação</strong>:
+                    o bloco 5 (Tempo) mostra só a equipe de Locação.
+                  </p>
 
                   <div className="flex flex-col gap-1.5">
                     {CATALOGO_SECOES.map((bloco) => (

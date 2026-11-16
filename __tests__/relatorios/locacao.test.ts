@@ -8,7 +8,7 @@ import {
 } from "@/lib/relatorios/metricas/locacao"
 import { formatarRelatorioWhatsApp } from "@/lib/relatorios/formatar-whatsapp"
 import { enviarRelatorioParaDestinatario, type DestinatarioRelatorio } from "@/lib/relatorios/enviar"
-import { SECOES_PADRAO, SECOES_SOMENTE_LOCACAO } from "@/lib/relatorios/secoes"
+import { SECOES_LOCACAO_E_TEMPO, SECOES_PADRAO, SECOES_SOMENTE_LOCACAO } from "@/lib/relatorios/secoes"
 import { limitesDiaBRT } from "@/lib/relatorios/periodo"
 import * as whatsappServer from "@/lib/whatsapp/server"
 import type { RelatorioDiaDados } from "@/lib/relatorios/montar"
@@ -143,7 +143,15 @@ const dadosBase = (secoesAtivas: RelatorioDiaDados["secoesAtivas"]): RelatorioDi
     totalArquivados: 0, arquivadosManual: 0, arquivadosAutomatico: 0, porMotivo: [], totalReaparecidos: 0,
     reaparecidosRedistribuidos: 0, conflitosDuplicidade: 0, porCorretor: [], vaoReaparecerHoje: 0,
   },
-  tempo: { incluiuGestores: false, corretores: [] },
+  tempo: {
+    incluiuGestores: false,
+    corretores: [
+      { usuarioId: "v1", nome: "Daline", role: "corretor_vendas", acessou: true, tempoTotalFormatado: "24m", duracaoSegundos: 1440, somaBrutaSegundos: 1440, numeroSessoes: 9, primeiroAcesso: "09:01", ultimaAtividade: "16:07" },
+      { usuarioId: "v2", nome: "Abraão", role: "corretor_vendas", acessou: false, tempoTotalFormatado: "não acessou o CRM", duracaoSegundos: 0, somaBrutaSegundos: 0, numeroSessoes: 0, primeiroAcesso: "--:--", ultimaAtividade: "--:--" },
+      { usuarioId: "l1", nome: "Felipe Braga", role: "corretor_locacao", acessou: true, tempoTotalFormatado: "2m", duracaoSegundos: 120, somaBrutaSegundos: 120, numeroSessoes: 15, primeiroAcesso: "14:30", ultimaAtividade: "17:49" },
+      { usuarioId: "l2", nome: "Otávio", role: "corretor_locacao", acessou: false, tempoTotalFormatado: "não acessou o CRM", duracaoSegundos: 0, somaBrutaSegundos: 0, numeroSessoes: 0, primeiroAcesso: "--:--", ultimaAtividade: "--:--" },
+    ],
+  },
   locacao: {
     ...METRICAS_LOCACAO_VAZIAS,
     novosLeads: 3,
@@ -189,6 +197,34 @@ describe("texto do bloco de Locação", () => {
   it("sem Locação ativa, o relatório não muda", () => {
     const texto = formatarRelatorioWhatsApp(dadosBase(SECOES_PADRAO))
     expect(texto).not.toContain("LOCAÇÃO")
+  })
+})
+
+describe("relatório de Locação traz só a equipe de Locação", () => {
+  it("com Locação + Tempo: título de Locação, Locação primeiro e Tempo só com a equipe de Locação", () => {
+    const texto = formatarRelatorioWhatsApp(dadosBase(SECOES_LOCACAO_E_TEMPO))
+    expect(texto).toContain("Relatório de Locação — 15/11/2026")
+    expect(texto).not.toContain("Relatório Diário do CRM")
+    expect(texto).toContain("⏱️ *TEMPO DA EQUIPE DE LOCAÇÃO NO CRM*")
+    expect(texto).toContain("• Felipe Braga: 2m")
+    expect(texto).toContain("• Otávio: não acessou o CRM")
+    expect(texto).not.toContain("Daline")
+    expect(texto).not.toContain("Abraão")
+    expect(texto).not.toContain("5. TEMPO")
+    expect(texto.indexOf("🏠 *LOCAÇÃO*")).toBeLessThan(texto.indexOf("TEMPO DA EQUIPE DE LOCAÇÃO"))
+  })
+
+  it("no relatório completo (com blocos de vendas), o Tempo continua listando todos", () => {
+    const texto = formatarRelatorioWhatsApp(dadosBase({ ...SECOES_PADRAO, locacao: true }))
+    expect(texto).toContain("5. TEMPO DOS CORRETORES NO CRM")
+    expect(texto).toContain("• Daline: 24m")
+    expect(texto).toContain("• Felipe Braga: 2m")
+  })
+
+  it("equipe de Locação vazia não quebra o bloco", () => {
+    const dados = dadosBase(SECOES_LOCACAO_E_TEMPO)
+    dados.tempo.corretores = dados.tempo.corretores.filter((c) => c.role !== "corretor_locacao")
+    expect(formatarRelatorioWhatsApp(dados)).toContain("Nenhum usuário da equipe de Locação registrado")
   })
 })
 
