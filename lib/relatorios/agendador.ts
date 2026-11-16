@@ -53,6 +53,29 @@ export function getHoraMinutoBRT(now = new Date()): string {
   }).format(now)
 }
 
+// O CRM grava o status da instância como "conectado"; "open"/"connected" são os nomes da Evolution API.
+export const STATUS_INSTANCIA_CONECTADA = ["conectado", "open", "connected"] as const
+
+/**
+ * Instância usada no envio: a escolhida na configuração; sem escolha, a primeira conectada.
+ * (Antes o plano B só aceitava "open"/"connected", nunca achava nenhuma e o relatório não saía.)
+ */
+export async function resolverInstanciaEnvio(
+  supabase: SupabaseClient<Database>,
+  instanciaConfigurada: string | null | undefined
+): Promise<string | null> {
+  if (instanciaConfigurada) return instanciaConfigurada
+
+  const { data: insts } = await supabase
+    .from("whatsapp_instancias")
+    .select("instance_name, status")
+    .in("status", [...STATUS_INSTANCIA_CONECTADA])
+    .order("criado_em", { ascending: true })
+    .limit(1)
+
+  return insts && insts.length > 0 ? insts[0].instance_name : null
+}
+
 /**
  * Executa o fluxo de disparo diário de relatórios no WhatsApp.
  */
@@ -105,19 +128,7 @@ export async function executarDisparoAutomaticoRelatorios(
   }
 
   // 3. Resolver instância de envio
-  let instanceName = config.instance_name
-  if (!instanceName) {
-    // Buscar primeira instância conectada
-    const { data: insts } = await supabase
-      .from("whatsapp_instancias")
-      .select("instance_name, status")
-      .or("status.eq.open,status.eq.connected")
-      .limit(1)
-
-    if (insts && insts.length > 0) {
-      instanceName = insts[0].instance_name
-    }
-  }
+  const instanceName = await resolverInstanciaEnvio(supabase, config.instance_name)
 
   if (!instanceName) {
     const msg = "Nenhuma instância WhatsApp conectada para disparo do relatório diário"
