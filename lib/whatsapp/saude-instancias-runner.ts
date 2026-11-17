@@ -1,5 +1,11 @@
 import { notifyGestorWhatsApp, wsupabase } from "@/lib/whatsapp/server"
 import {
+  JANELA_DESCONECTADA_DIAS,
+  montarResumoAlertas,
+  type LinhaCaida,
+  type LinhaProblema,
+} from "@/lib/whatsapp/resumo-alertas"
+import {
   COOLDOWN_HORAS,
   JANELA_MEDIA_DIAS,
   avaliarInstancias,
@@ -116,13 +122,64 @@ export async function verificarSaudeInstancias(opts: { agora?: Date; simulacao?:
     }
     await wsupabase.from("notificacoes").insert(notifs)
 
-    const linhas = novos.map(({ problema, nome }) => `• ${nome} (${problema.instanceName}): ${problema.detalhe}`)
-    const horario = agora.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
-    await notifyGestorWhatsApp(
-      ["⚠️ ALERTA: WHATSAPP SEM RECEBER MENSAGENS ⚠️", "", ...linhas, "", `🕒 ${horario}`, "Leads de anúncio dessas linhas podem estar se perdendo. Reconecte o quanto antes."].join("\n"),
-      "todos",
-    ).catch(() => undefined)
+    // O WhatsApp do gestor não recebe mais aviso na hora: ele sai agrupado no resumo das 08h/12h/18h
+    // (enviarResumoAlertasWhatsApp). Aqui só o painel do CRM é avisado.
   }
 
   return { verificadas: instancias.length, problemas, alertados, emCooldown, simulacao }
+}
+
+async function nomeDoCorretor(corretorId: string | null, fallback: string): Promise<string> {
+  if (!corretorId) return fallback
+  const { data: u } = await wsupabase.from("usuarios").select("nome").eq("id", corretorId).maybeSingle()
+  return (u?.nome as string | undefined)?.trim() || fallback
+}
+
+export interface ResultadoResumoAlertas {
+  caidas: number
+  problemas: number
+  enviado: boolean
+  simulacao: boolean
+  texto: string | null
+  erro?: string
+}
+
+// Envia ao gestor UM resumo com tudo que está com problema agora (chamado 3x/dia pelo cron).
+export async function enviarResumoAlertasWhatsApp(opts: { agora?: Date; simulacao?: boolean } = {}): Promise<ResultadoResumoAlertas> {
+  const agora = opts.agora ?? new Date()
+  const simulacao = opts.simulacao ?? false
+  const ignoradas = instanciasIgnoradas()
+
+  const corte = new Date(agora.getTime() - JANELA_DESCONECTADA_DIAS * 86400_000).toISOString()
+  const { data: desconectadas } = await wsupabase
+    .from("whatsapp_instancias")
+    .select("instance_name, corretor_id, atualizado_em")
+    .eq("status", "desconectado")
+    .gte("atualizado_em", corte)
+  const caidas: LinhaCaida[] = []
+  for (const i of desconectadas ?? []) {
+    if (ignoradas.has(String(i.instance_name).toLowerCase())) continue
+    caidas.push({
+      nome: await nomeDoCorretor((i.corretor_id as string | null) ?? null, i.instance_name as string),
+      instanceName: i.instance_name as string,
+      desdeIso: (i.atualizado_em as string | null) ?? null,
+    })
+  }
+
+  const instancias = await carregarInstancias(agora)
+  const problemas: LinhaProblema[] = []
+  for (const p of avaliarInstancias(instancias, agora)) {
+    problemas.push({
+      nome: await nomeDoCorretor(p.corretorId, p.instanceName),
+      instanceName: p.instanceName,
+      detalhe: p.detalhe,
+    })
+  }
+
+  const texto = montarResumoAlertas({ caidas, problemas }, agora)
+  if (!texto || simulacao) {
+    return { caidas: caidas.length, problemas: problemas.length, enviado: false, simulacao, texto }
+  }
+  const res = await notifyGestorWhatsApp(texto, "todos")
+  return { caidas: caidas.length, problemas: problemas.length, enviado: res.ok, simulacao, texto, erro: res.erro }
 }

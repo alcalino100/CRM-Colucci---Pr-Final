@@ -263,9 +263,8 @@ export async function notifyGestorWhatsApp(text: string, destino: "numero" | "gr
   return { ok: erros.length === 0, erro: erros.length ? erros.join("; ") : undefined }
 }
 
-// Avisa o gestor que uma instância (de um corretor) caiu + registra no CRM.
-// Alerta em DOIS lugares: (1) painel do CRM (notificacoes — aparece para
-// o dono da instância e para gestores), (2) WhatsApp do gestor.
+// Registra no painel do CRM que uma instância (de um corretor) caiu (notificacoes — aparece para
+// o dono da instância e para gestores). O WhatsApp do gestor recebe só o resumo agrupado (3x/dia).
 export async function notifyDisconnection(instanceName: string): Promise<void> {
   try {
     const { data: inst } = await wsupabase
@@ -279,17 +278,8 @@ export async function notifyDisconnection(instanceName: string): Promise<void> {
       const { data: corretor } = await wsupabase.from("usuarios").select("nome").eq("id", corretorId).maybeSingle()
       if (corretor?.nome) nome = corretor.nome
     }
-    const horario = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
-    const texto = [
-      "🚨🔴 ALERTA: WHATSAPP DESCONECTADO 🔴🚨",
-      "",
-      `📵 Corretor: ${nome}`,
-      `📱 Instância: ${instanceName}`,
-      `🕒 ${horario}`,
-      "",
-      "⚠️ Providencie a reconexão o quanto antes!",
-    ].join("\n")
-    await notifyGestorWhatsApp(texto, "todos")
+    // O aviso por WhatsApp ao gestor não sai mais na hora: vai agrupado no resumo das 08h/12h/18h
+    // (lib/whatsapp/resumo-alertas + cron /api/whatsapp/resumo-alertas).
     // Alerta no painel: para o DONO da instância (corretor) e para todos os gestores.
     const notifs: Record<string, unknown>[] = []
     if (corretorId) {
