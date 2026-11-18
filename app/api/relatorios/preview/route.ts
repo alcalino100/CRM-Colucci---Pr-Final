@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger"
 import { limitesDiaAnteriorBRT, limitesDiaBRT } from "@/lib/relatorios/periodo"
 import { consolidarRelatorioDia } from "@/lib/relatorios/montar"
 import { secoesEfetivas, secoesNecessarias, type SecoesAtivasConfig } from "@/lib/relatorios/secoes"
+import { aplicarFiltroEquipe, type EquipeFiltro, type UsuarioEquipe } from "@/lib/relatorios/equipe-filtro"
 import { formatarRelatorioWhatsApp } from "@/lib/relatorios/formatar-whatsapp"
 
 export const runtime = "nodejs"
@@ -34,14 +35,16 @@ export async function GET(request: Request) {
 
     const secoesGerais = config?.secoes as Partial<SecoesAtivasConfig> | null
     let secoes: SecoesAtivasConfig
+    let equipeFiltro: EquipeFiltro | null = null
     if (destinatarioId) {
       const { data: dest } = await admin
         .from("relatorio_destinatarios")
-        .select("id, secoes")
+        .select("*")
         .eq("id", destinatarioId)
         .maybeSingle()
       if (!dest) return fail("Destinatário não encontrado", 404)
       secoes = secoesEfetivas(secoesGerais, dest.secoes as Partial<SecoesAtivasConfig> | null)
+      equipeFiltro = ((dest as { equipe_filtro?: EquipeFiltro | null }).equipe_filtro ?? null)
     } else {
       // Visão geral: configuração geral
       secoes = secoesNecessarias(secoesGerais, [])
@@ -49,11 +52,16 @@ export async function GET(request: Request) {
     const incluirGestores = Boolean(config?.incluir_gestores_no_tempo)
     const listarNomesLeads = Boolean(config?.listar_nomes_leads)
 
-    const dados = await consolidarRelatorioDia(admin, periodo, {
+    let dados = await consolidarRelatorioDia(admin, periodo, {
       secoes,
       incluirGestoresNoTempo: incluirGestores,
       listarNomesLeads,
     })
+
+    if (equipeFiltro) {
+      const { data: usuariosData } = await admin.from("usuarios").select("id, nome, role").eq("status", "ativo")
+      dados = aplicarFiltroEquipe(dados, equipeFiltro, (usuariosData ?? []) as UsuarioEquipe[])
+    }
 
     const texto = formatarRelatorioWhatsApp(dados)
 

@@ -19,7 +19,7 @@ export interface MetricasTrafegoPago {
   totalTelefonesUnicos: number
   porCorretor: CorretorTrafegoResumo[]
   corretoresSemLeads: string[] // Nomes dos corretores ativos que não receberam leads no dia
-  reengajadosAnuncioAntigos: number // Contagem de leads antigos reengajados via anúncio
+  reengajadosAnuncioAntigos: number | null // Contagem de leads antigos reengajados via anúncio
 }
 
 /**

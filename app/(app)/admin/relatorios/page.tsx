@@ -31,6 +31,7 @@ import {
   secoesEfetivas,
   type SecoesAtivasConfig,
 } from "@/lib/relatorios/secoes"
+import { resumoEquipeFiltro, type EquipeFiltro, type ModoEquipe } from "@/lib/relatorios/equipe-filtro"
 import {
   extrairInstancias,
   horaParaCampo,
@@ -59,6 +60,7 @@ interface Destinatario {
   destino: string
   ativo: boolean
   secoes: Partial<SecoesAtivasConfig> | null
+  equipe_filtro?: EquipeFiltro | null
   created_at: string
 }
 
@@ -113,6 +115,9 @@ export default function RelatoriosWhatsappAdminPage() {
   // "padrao" segue a configuração geral; "personalizado" usa os blocos marcados abaixo
   const [destModoSecoes, setDestModoSecoes] = useState<"padrao" | "personalizado">("padrao")
   const [destSecoes, setDestSecoes] = useState<SecoesAtivasConfig>({ ...SECOES_PADRAO })
+  const [destEquipeModo, setDestEquipeModo] = useState<ModoEquipe>("todos")
+  const [destEquipeIds, setDestEquipeIds] = useState<string[]>([])
+  const [corretoresLista, setCorretoresLista] = useState<Array<{ id: string; nome: string; role: string }>>([])
   const [salvandoDestinatario, setSalvandoDestinatario] = useState(false)
   const [erroDestinatario, setErroDestinatario] = useState<string | null>(null)
 
@@ -253,6 +258,8 @@ export default function RelatoriosWhatsappAdminPage() {
       const personalizado = Boolean(dest.secoes && Object.keys(dest.secoes).length > 0)
       setDestModoSecoes(personalizado ? "personalizado" : "padrao")
       setDestSecoes(secoesEfetivas(config?.secoes, dest.secoes))
+      setDestEquipeModo(dest.equipe_filtro?.modo ?? "todos")
+      setDestEquipeIds(dest.equipe_filtro?.ids ?? [])
     } else {
       setDestinatarioEdicao(null)
       setDestNome("")
@@ -261,6 +268,14 @@ export default function RelatoriosWhatsappAdminPage() {
       setDestAtivo(true)
       setDestModoSecoes("padrao")
       setDestSecoes(secoesEfetivas(config?.secoes, null))
+      setDestEquipeModo("todos")
+      setDestEquipeIds([])
+    }
+    if (corretoresLista.length === 0) {
+      fetch("/api/relatorios/corretores")
+        .then((r) => r.json())
+        .then((j) => j.ok && setCorretoresLista(j.corretores ?? []))
+        .catch(() => {})
     }
     setErroDestinatario(null)
     setModalDestinatarioAberto(true)
@@ -284,6 +299,10 @@ export default function RelatoriosWhatsappAdminPage() {
         ativo: destAtivo,
         // null = segue a configuração geral; senão grava todas as chaves, marcadas ou não
         secoes: destModoSecoes === "padrao" ? null : destSecoes,
+        equipe_filtro:
+          destEquipeModo === "todos"
+            ? null
+            : { modo: destEquipeModo, ids: destEquipeModo === "selecionados" ? destEquipeIds : [] },
       }
 
       const url = destinatarioEdicao
@@ -389,7 +408,12 @@ export default function RelatoriosWhatsappAdminPage() {
     {
       key: "blocos",
       header: "Blocos que recebe",
-      render: (dest) => <Badge variant="gray">{resumoSecoesDestinatario(dest.secoes)}</Badge>,
+      render: (dest) => (
+        <Badge variant="gray">
+          {resumoSecoesDestinatario(dest.secoes)}
+          {dest.equipe_filtro && dest.equipe_filtro.modo !== "todos" ? ` · ${resumoEquipeFiltro(dest.equipe_filtro)}` : ""}
+        </Badge>
+      ),
     },
     {
       key: "status",
@@ -1092,6 +1116,56 @@ export default function RelatoriosWhatsappAdminPage() {
                     ))}
                   </div>
                 </>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-xl border border-border p-3" data-testid="dest-equipe">
+              <span className="text-xs font-bold text-foreground">Corretores que aparecem no relatório</span>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { id: "todos", label: "Todos" },
+                  { id: "vendas", label: "Só Vendas" },
+                  { id: "locacao", label: "Só Locação" },
+                  { id: "selecionados", label: "Escolher corretores" },
+                ] as const).map((op) => (
+                  <button
+                    key={op.id}
+                    type="button"
+                    onClick={() => setDestEquipeModo(op.id)}
+                    className={cn(
+                      "rounded-xl border px-3 py-1.5 text-xs font-bold transition btn-touch-target",
+                      destEquipeModo === op.id
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    {op.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                {destEquipeModo === "todos" && "Mostra toda a equipe (comportamento atual)."}
+                {destEquipeModo === "vendas" && "Tráfego e tempo só da equipe de Vendas (corretores e gestores de Vendas, incluindo corretor genérico)."}
+                {destEquipeModo === "locacao" && "Tráfego e tempo só da equipe de Locação."}
+                {destEquipeModo === "selecionados" && "Marque quem deve aparecer."}
+                {destEquipeModo !== "todos" && " Blocos de totais gerais (automação, IA, arquivados) continuam da imobiliária toda; use com Tráfego e Tempo."}
+              </p>
+              {destEquipeModo === "selecionados" && (
+                <div className="grid max-h-48 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+                  {corretoresLista.map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={destEquipeIds.includes(c.id)}
+                        onChange={(e) =>
+                          setDestEquipeIds((prev) => (e.target.checked ? [...prev, c.id] : prev.filter((x) => x !== c.id)))
+                        }
+                      />
+                      <span>{c.nome}</span>
+                    </label>
+                  ))}
+                </div>
               )}
             </div>
 

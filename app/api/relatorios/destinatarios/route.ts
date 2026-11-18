@@ -8,6 +8,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { onlyDigits } from "@/lib/whatsapp/server"
 import { secoesSchema } from "@/lib/relatorios/secoes"
+import { equipeFiltroSchema } from "@/lib/relatorios/equipe-filtro"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,6 +19,7 @@ const destinatarioCreateSchema = z.object({
   destino: z.string().trim().min(5, "Destino inválido"),
   ativo: z.boolean().optional().default(true),
   secoes: secoesSchema.nullable().optional(),
+  equipe_filtro: equipeFiltroSchema.nullable().optional(),
 }).refine((data) => {
   if (data.tipo === "numero") {
     const dig = onlyDigits(data.destino)
@@ -64,7 +66,7 @@ export async function POST(request: Request) {
 
   try {
     const admin = getSupabaseAdmin()
-    const { nome, tipo, destino, ativo, secoes } = parsed.data
+    const { nome, tipo, destino, ativo, secoes, equipe_filtro } = parsed.data
 
     // Sanitiza destino se for telefone
     const destinoSanitizado = tipo === "numero" ? onlyDigits(destino) : destino.trim()
@@ -77,6 +79,7 @@ export async function POST(request: Request) {
         destino: destinoSanitizado,
         ativo,
         secoes: secoes ?? null,
+        ...(equipe_filtro ? { equipe_filtro } : {}),
       })
       .select("*")
       .single()
