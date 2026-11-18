@@ -8,6 +8,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { onlyDigits } from "@/lib/whatsapp/server"
 import { secoesSchema } from "@/lib/relatorios/secoes"
+import { equipeFiltroSchema } from "@/lib/relatorios/equipe-filtro"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,6 +19,7 @@ const destinatarioPatchSchema = z.object({
   destino: z.string().trim().min(5, "Destino inválido").optional(),
   ativo: z.boolean().optional(),
   secoes: secoesSchema.nullable().optional(),
+  equipe_filtro: equipeFiltroSchema.nullable().optional(),
 })
 
 export async function PATCH(

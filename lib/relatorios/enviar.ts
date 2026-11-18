@@ -9,6 +9,7 @@ import { consolidarRelatorioDia, type RelatorioDiaDados } from "./montar"
 import { secoesEfetivas, type SecoesAtivasConfig } from "./secoes"
 import { formatarRelatorioWhatsApp } from "./formatar-whatsapp"
 import type { PeriodoDiaBRT } from "./periodo"
+import { aplicarFiltroEquipe, filtroAtivo, type EquipeFiltro, type UsuarioEquipe } from "./equipe-filtro"
 
 export interface DestinatarioRelatorio {
   id: string
@@ -17,6 +18,8 @@ export interface DestinatarioRelatorio {
   destino: string // Telefone com DDI 55 ou JID @g.us
   ativo: boolean
   secoes?: Partial<SecoesAtivasConfig> | null
+  /** Quais corretores aparecem no relatório (null = todos). */
+  equipe_filtro?: EquipeFiltro | null
 }
 
 export interface EnvioResultado {
@@ -71,6 +74,12 @@ export async function enviarRelatorioParaDestinatario(
         ...destinatario.secoes,
       },
     }
+  }
+
+  // 1.1 Filtro de corretores do destinatário (ex.: só Vendas ou só Locação)
+  if (filtroAtivo(destinatario.equipe_filtro)) {
+    const { data: usuariosData } = await supabase.from("usuarios").select("id, nome, role").eq("status", "ativo")
+    dados = aplicarFiltroEquipe(dados, destinatario.equipe_filtro, (usuariosData ?? []) as UsuarioEquipe[])
   }
 
   const dataReferencia = dados.periodo.ymd

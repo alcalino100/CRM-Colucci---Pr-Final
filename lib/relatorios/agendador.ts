@@ -140,7 +140,7 @@ export async function executarDisparoAutomaticoRelatorios(
   // 4. Buscar destinatários ativos
   const { data: destinatariosData, error: destError } = await supabase
     .from("relatorio_destinatarios")
-    .select("id, nome, tipo, destino, ativo, secoes")
+    .select("*")
     .eq("ativo", true)
 
   if (destError) {

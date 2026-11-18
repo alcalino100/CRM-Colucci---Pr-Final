@@ -49,7 +49,9 @@ export function formatarRelatorioWhatsApp(dados: RelatorioDiaDados): string {
       linhas.push(`• Sem leads no dia: todos os corretores ativos receberam leads`)
     }
 
-    linhas.push(`• Reengajados via anúncio (leads antigos): ${trafego.reengajadosAnuncioAntigos}`)
+    if (trafego.reengajadosAnuncioAntigos !== null) {
+      linhas.push(`• Reengajados via anúncio (leads antigos): ${trafego.reengajadosAnuncioAntigos}`)
+    }
     blocos.push(linhas.join("\n"))
   }
 
