@@ -1,4 +1,7 @@
 import { notifyGestorWhatsApp, wsupabase } from "@/lib/whatsapp/server"
+import { logger } from "@/lib/logger"
+import { recuperarInstancias, type ResultadoRecuperacao } from "@/lib/whatsapp/auto-recuperacao"
+import { reconciliarLeadsDeAnuncio, type ResultadoReconciliacao } from "@/lib/whatsapp/reconciliar-leads"
 import {
   JANELA_DESCONECTADA_DIAS,
   montarResumoAlertas,
@@ -22,6 +25,8 @@ export interface ResultadoSaude {
   alertados: string[]
   emCooldown: string[]
   simulacao: boolean
+  recuperacao?: ResultadoRecuperacao
+  reconciliacao?: ResultadoReconciliacao
 }
 
 function instanciasIgnoradas(): Set<string> {
@@ -126,7 +131,28 @@ export async function verificarSaudeInstancias(opts: { agora?: Date; simulacao?:
     // (enviarResumoAlertasWhatsApp). Aqui só o painel do CRM é avisado.
   }
 
-  return { verificadas: instancias.length, problemas, alertados, emCooldown, simulacao }
+  // Auto-recuperação (webhook, reinício de sessão muda, resgate de mensagens) e rede de segurança de leads.
+  // Cada etapa é isolada: uma falha aqui nunca derruba o alerta nem as demais etapas.
+  let recuperacao: ResultadoRecuperacao | undefined
+  let reconciliacao: ResultadoReconciliacao | undefined
+  if (!simulacao) {
+    try {
+      recuperacao = await recuperarInstancias({
+        conectadas: instancias.filter((i) => i.status === "conectado").map((i) => ({ instanceName: i.instanceName, ultimaRecebida: i.ultimaRecebida })),
+        problemas,
+        agora,
+      })
+    } catch (error) {
+      logger.error("Auto-recuperação WhatsApp falhou", { error: error instanceof Error ? error.message : String(error) })
+    }
+    try {
+      reconciliacao = await reconciliarLeadsDeAnuncio(agora)
+    } catch (error) {
+      logger.error("Reconciliação de leads de anúncio falhou", { error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  return { verificadas: instancias.length, problemas, alertados, emCooldown, simulacao, recuperacao, reconciliacao }
 }
 
 async function nomeDoCorretor(corretorId: string | null, fallback: string): Promise<string> {
