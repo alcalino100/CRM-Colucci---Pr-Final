@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { evolutionConfig, wsupabase } from "@/lib/whatsapp/server"
 import { logger } from "@/lib/logger"
+import { definirWebhook } from "@/lib/whatsapp/webhook-config"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -24,35 +25,10 @@ function extractQr(payload: any): string | null {
   return raw.startsWith("data:image") ? raw : `data:image/png;base64,${raw}`
 }
 
-// Configura o webhook da Evolution para a instância (mensagens + conexão).
-// Em caso de falha retorna o motivo para um aviso — não bloqueia a conexão.
-async function configureWebhook(cfg: { url: string; key: string }, instanceName: string, request: Request): Promise<string | null> {
-  try {
-    const origin = new URL(request.url).origin
-    const secret = process.env.WHATSAPP_WEBHOOK_SECRET
-    const webhookUrl = `${origin}/api/whatsapp/webhook${secret ? `?secret=${encodeURIComponent(secret)}` : ""}`
-    const res = await fetchWithTimeout(`${cfg.url}/webhook/set/${encodeURIComponent(instanceName)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: cfg.key },
-      body: JSON.stringify({
-        webhook: {
-          url: webhookUrl,
-          enabled: true,
-          events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
-          webhook_by_events: false,
-          webhook_base64: false,
-        },
-      }),
-    })
-    if (!res.ok) {
-      const txt = (await res.text().catch(() => "")).slice(0, 200)
-      return `webhook: ${res.status} ${txt}`
-    }
-    return null
-  } catch (err) {
-    const cause = (err as any)?.cause?.code || (err as any)?.name || "UNKNOWN"
-    return `webhook: ${cause}`
-  }
+// Configura o webhook da Evolution para a instância (mensagens + conexão) usando o endereço CANÔNICO
+// de produção (e não o domínio de onde o clique veio). Em caso de falha retorna o motivo para um aviso.
+async function configureWebhook(_cfg: { url: string; key: string }, instanceName: string, _request: Request): Promise<string | null> {
+  return definirWebhook(instanceName)
 }
 
 export async function POST(request: Request) {

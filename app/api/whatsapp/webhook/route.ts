@@ -28,7 +28,12 @@ export async function POST(request: Request) {
     if (secret) {
       const url = new URL(request.url)
       const provided = url.searchParams.get("secret") ?? request.headers.get("x-webhook-secret")
-      if (provided !== secret) return ok()
+      if (provided !== secret) {
+        // Antes: descartava em silêncio (200). Se o segredo mudar e a Evolution não for atualizada,
+        // TODAS as mensagens/leads somem sem rastro. Agora registra e responde 401.
+        logger.warn("Webhook WhatsApp recusado: segredo ausente ou incorreto (reconfigure o webhook da instância)")
+        return NextResponse.json({ received: false, erro: "não autorizado" }, { status: 401 })
+      }
     }
 
     const payload = await request.json().catch(() => null)
@@ -44,7 +49,16 @@ export async function POST(request: Request) {
       const itens = Array.isArray(payload?.data) ? payload.data : [payload?.data]
       for (const item of itens) {
         if (!item) continue
-        await handleMessageUpsert({ ...payload, data: item })
+        // Uma mensagem com problema não pode derrubar as demais do lote.
+        try {
+          await handleMessageUpsert({ ...payload, data: item })
+        } catch (erroItem) {
+          logger.error("Falha ao processar mensagem do webhook WhatsApp", {
+            instance: typeof payload?.instance === "string" ? payload.instance : undefined,
+            mensagemId: typeof item?.key?.id === "string" ? item.key.id : undefined,
+            error: erroItem instanceof Error ? erroItem.message : String(erroItem),
+          })
+        }
       }
     }
 

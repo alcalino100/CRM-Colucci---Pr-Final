@@ -9,7 +9,13 @@ import { camposMidia, preencherMidiaUrl, processarCorpoMidia } from "./media-hel
 import { encontrarLeadPorTelefone, transicaoRespostaAutomacao, reengajarOuCriarLeadTráfego } from "./lead-attribution"
 import { getInstanceName } from "./connection-handler"
 
-export async function handleMessageUpsert(payload: Record<string, unknown> | null | undefined): Promise<void> {
+export interface OpcoesMensagem {
+  /** Reprocessamento de mensagens antigas (resgate): registra e cria lead, mas NÃO aciona a IA nem saudações. */
+  semIA?: boolean
+}
+
+export async function handleMessageUpsert(payload: Record<string, unknown> | null | undefined, opcoes: OpcoesMensagem = {}): Promise<void> {
+  const semIA = opcoes.semIA === true
   const instanceName = getInstanceName(payload)
   if (!instanceName) return
   const msg = (Array.isArray(payload?.data) ? payload.data[0] : payload?.data) as Record<string, unknown> | undefined
@@ -19,11 +25,13 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
   if (!telefone) return
 
   // Descobre o corretor dono da instância logo no início (busca case-insensitive e sem espaços)
-  const { data: inst } = await wsupabase
+  // (limit(1) em vez de maybeSingle: se houver nomes duplicados o maybeSingle devolve erro e o lead se perdia)
+  const { data: insts } = await wsupabase
     .from("whatsapp_instancias")
     .select("corretor_id, instance_name")
     .ilike("instance_name", instanceName.trim())
-    .maybeSingle()
+    .limit(1)
+  const inst = insts?.[0]
   const corretorId = inst?.corretor_id ?? null
 
   const bloqueado = isBlocked(telefone) && !(await isNumeroTesteIA(telefone))
@@ -42,6 +50,7 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
 
   const midia = detectarMidia(msg?.message)
   const deveProcessarMidiaIA =
+    !semIA &&
     !!midia &&
     key?.fromMe !== true &&
     ((await agenteParaInstancia(instanceName)) !== null || (await isNumeroTesteIA(telefone)))
@@ -89,7 +98,7 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
       ...camposMidia(midia),
     })
     await preencherMidiaUrl(instanceName, mensagemId, midia)
-    await pausarIaMensagemManual({ telefone, instanceName, textoOutbound: corpo }).catch(() => {})
+    if (!semIA) await pausarIaMensagemManual({ telefone, instanceName, textoOutbound: corpo }).catch(() => {})
     return
   }
 
@@ -131,7 +140,7 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
     : { data: null }
 
   if (!corretorId) {
-    logger.warn("Instância sem corretor_id associado em whatsapp_instancias", { instanceName })
+    logger.warn("Instância sem corretor_id associado em whatsapp_instancias", { instanceName, mensagemId })
     return
   }
 
@@ -151,7 +160,7 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
       ...camposMidia(midia),
     })
     await preencherMidiaUrl(instanceName, mensagemId, midia)
-    if (!key?.fromMe) {
+    if (!key?.fromMe && !semIA) {
       await handlePatriciaInbound({
         telefone,
         texto: corpo,
@@ -201,7 +210,7 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
   })
   await preencherMidiaUrl(instanceName, mensagemId, midia)
 
-  if (!key?.fromMe) {
+  if (!key?.fromMe && !semIA) {
     if (!corpo.trim()) {
       await saudarLeadCTWA({ telefone, leadId: leadId || leadIdExistente || undefined, instanceName }).catch(() => {})
     } else {
