@@ -32,7 +32,7 @@ export type Evento =
   | { tipo: "identidade"; resultado: "confirmada" | "falhou" | "bloqueada" | "telefone_desconhecido" }
   | { tipo: "escalada"; departamento: Departamento; motivo: string; protocolo: string }
   | { tipo: "resolvido_automaticamente" }
-  | { tipo: "ia"; funcao: "classificador" | "humanizador"; ok: boolean; tokens?: number }
+  | { tipo: "ia"; funcao: "classificador" | "humanizador" | "agente"; ok: boolean; tokens?: number }
 
 export type Contexto = {
   provider: ImmobillisProvider

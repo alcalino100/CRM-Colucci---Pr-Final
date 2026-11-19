@@ -1,3 +1,4 @@
+import { atenderComAgente, type AgenteDeps } from "./agente"
 import { classificarComIa } from "./classificador-ia"
 import { humanizar } from "./humanizador"
 import type { ChamadaIa } from "./ia"
@@ -30,6 +31,9 @@ export async function atenderMensagem(p: {
   texto: string
   agora?: Date
   ia?: ChamadaIa | null
+  /** Modo agente (Claude conduz a conversa). Se falhar ou não passar na conferência, cai para o fluxo por regras. */
+  agente?: AgenteDeps | null
+  gerarProtocolo?: (agora: Date) => string
 }): Promise<ResultadoAtendimento> {
   const agora = p.agora ?? new Date()
   const { repo } = p
@@ -45,17 +49,27 @@ export async function atenderMensagem(p: {
   // Já encaminhado há pouco: não repete o aviso a cada mensagem.
   if (conv.estado.etapa === "transferido" && agora.getTime() - new Date(conv.ultimaMsgEm).getTime() < SILENCIO_APOS_TRANSFERENCIA_MIN * 60_000) return silencioso()
 
-  const saida = await processarMensagem(conv.estado, p.texto, {
+  // 1) MODO AGENTE: o Claude responde, com ferramentas e conferência de fatos.
+  let saidaAgente: Awaited<ReturnType<typeof atenderComAgente>> = null
+  if (p.agente && p.config.usarIa) {
+    const historico = await repo.historico(conv.id, 20).catch(() => [])
+    saidaAgente = await atenderComAgente({ agente: p.agente, provider: p.provider, estado: conv.estado, historico, texto: p.texto, telefone: p.telefone, agora, capacidades: p.config.capacidades, gerarProtocolo: p.gerarProtocolo })
+  }
+
+  // 2) Rede de segurança: fluxo por regras (determinístico). Também é o caminho quando não há IA.
+  const saida = saidaAgente ?? (await processarMensagem(conv.estado, p.texto, {
     provider: p.provider,
     telefone: p.telefone,
     agora,
     capacidades: p.config.capacidades,
+    gerarProtocolo: p.gerarProtocolo,
     classificadorReserva: p.ia ? (t) => classificarComIa(t, p.ia!) : undefined,
-  })
+  }))
 
   let respostas = saida.respostas
   const eventos = [...saida.eventos]
-  if (p.ia && p.config.usarIa) {
+  if (p.agente && p.config.usarIa && !saidaAgente) eventos.push({ tipo: "ia", funcao: "agente", ok: false })
+  if (!saidaAgente && p.ia && p.config.usarIa) {
     const h = await humanizar(respostas, p.ia)
     respostas = h.respostas
     if (h.usouIa) eventos.push({ tipo: "ia", funcao: "humanizador", ok: h.ok, tokens: h.tokens })

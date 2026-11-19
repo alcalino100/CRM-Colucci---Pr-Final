@@ -1,7 +1,7 @@
 import "server-only"
 import { logger } from "@/lib/logger"
 import { notifyGestorWhatsApp, sendPresence, sendWhatsAppText, wsupabase } from "@/lib/whatsapp/server"
-import { criarChamadaIa, resolverCredencialClaude } from "./ia-claude"
+import { criarAgenteDeps, criarChamadaIa, resolverClaude } from "./ia-claude"
 import { obterProvider } from "./provider-factory"
 import { repositorioSupabase } from "./repositorio-supabase"
 import { tratarMensagemHumana, tratarMensagemRecebida, type DepsHandler } from "./handler"
@@ -27,8 +27,12 @@ const deps = (): DepsHandler => ({
   repo: repoComCache,
   provider: obterProvider(),
   resolverIa: async (config) => {
-    const cred = await resolverCredencialClaude(config.aiAgentId)
-    return cred ? criarChamadaIa(cred) : null
+    const r = await resolverClaude(config.aiAgentId)
+    return r ? criarChamadaIa(r.cred) : null
+  },
+  resolverAgente: async (config) => {
+    const r = await resolverClaude(config.aiAgentId)
+    return r ? criarAgenteDeps(r) : null
   },
   enviarTexto: sendWhatsAppText,
   presenca: (i, t) => sendPresence(i, t),

@@ -31,14 +31,15 @@ function descreverEvento(e: Evento): string {
     case "identidade": return `Identidade: ${e.resultado.replace(/_/g, " ")}`
     case "escalada": return `Escalada → ${ROTULO_DEPARTAMENTO[e.departamento]} (${e.motivo.replace(/_/g, " ")})`
     case "resolvido_automaticamente": return "Resolvido pela IA"
-    case "ia": return `Claude (${e.funcao}) ${e.ok ? "✓" : "indisponível, usei o padrão"}`
+    case "ia": return e.funcao === "agente" ? (e.ok ? `Claude respondeu${e.tokens ? ` (${e.tokens} tokens)` : ""}` : "Claude não passou na conferência: usei o fluxo de regras") : `Claude (${e.funcao}) ${e.ok ? "✓" : "indisponível, usei o padrão"}`
   }
 }
 
 export function Simulador() {
   const [telefone, setTelefone] = useState(PERSONAS[0].telefone)
   const [indisponivel, setIndisponivel] = useState(false)
-  const [usarIa, setUsarIa] = useState(false)
+  const [usarIa, setUsarIa] = useState(true)
+  const [iaInfo, setIaInfo] = useState<{ ativa: boolean; origem?: string; agente?: string | null; modelo?: string | null } | null>(null)
   const [avisoIa, setAvisoIa] = useState(false)
   const [estado, setEstado] = useState<Estado>(estadoInicial())
   const [mensagens, setMensagens] = useState<Msg[]>([])
@@ -66,12 +67,13 @@ export function Simulador() {
       const res = await fetch("/api/assistente/simular", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto: msg, telefone, indisponivel, usarIa, estado }),
+        body: JSON.stringify({ texto: msg, telefone, indisponivel, usarIa, estado, historico: mensagens.slice(-30).map((m) => ({ papel: m.de, conteudo: m.texto })) }),
       })
       const json = await res.json()
       if (!json.ok) throw new Error(json.erro || "erro")
       setEstado(json.estado)
       setAvisoIa(!!json.iaPedidaSemChave)
+      setIaInfo(json.ia ?? null)
       setEventos((ev) => [...ev, ...json.eventos])
       setMensagens((m) => [...m, ...json.respostas.map((r: string) => ({ de: "assistente" as const, texto: r }))])
     } catch {
@@ -138,9 +140,10 @@ export function Simulador() {
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={usarIa} onChange={(e) => setUsarIa(e.target.checked)} className="size-4" />
-              <Sparkles className="size-4 text-muted-foreground" /> Usar IA (Claude)
+              <Sparkles className="size-4 text-muted-foreground" /> Claude conduz a conversa
             </label>
-            {avisoIa && <p className="text-xs text-amber-700">Nenhuma chave Claude encontrada no servidor: respondendo sem IA.</p>}
+            {avisoIa && <p className="text-xs text-amber-700">Nenhuma chave Claude encontrada: respondendo pelo fluxo de regras, sem IA.</p>}
+            {usarIa && iaInfo?.ativa && <p className="text-xs text-emerald-700">Claude conduzindo a conversa{iaInfo.agente ? ` · agente ${iaInfo.agente}` : ""}{iaInfo.modelo ? ` · ${iaInfo.modelo}` : ""}</p>}
           </CardContent>
         </Card>
 

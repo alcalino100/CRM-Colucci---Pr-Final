@@ -74,6 +74,8 @@ export interface RepositorioAssistente {
   buscarConversaRecente(telefone: string, instanceName: string, agora: Date): Promise<Conversa | null>
   criarConversa(telefone: string, instanceName: string, agora: Date): Promise<Conversa>
   salvarTurno(conversaId: string, turno: SalvarTurno, agora: Date): Promise<void>
+  /** Últimas mensagens da conversa (ordem cronológica), para dar memória ao agente. */
+  historico(conversaId: string, limite: number): Promise<{ papel: MensagemRegistro["papel"]; conteudo: string }[]>
   /** Últimas mensagens que o assistente enviou (para reconhecer o eco do próprio envio). */
   ultimasMensagensAssistente(conversaId: string, limite: number): Promise<string[]>
   /** Humano respondeu pelo WhatsApp: o assistente cala nessa conversa. */
@@ -121,6 +123,10 @@ export class RepositorioMemoria implements RepositorioAssistente {
     const iso = agora.toISOString()
     this.mensagens.set(id, [...(this.mensagens.get(id) ?? []), ...t.mensagens.map((m) => ({ ...m, criadoEm: iso }))])
     this.eventos.set(id, [...(this.eventos.get(id) ?? []), ...t.eventos.map((e) => ({ tipo: e.tipo, dados: e, criadoEm: iso }))])
+  }
+
+  async historico(id: string, limite: number) {
+    return (this.mensagens.get(id) ?? []).slice(-limite).map(({ papel, conteudo }) => ({ papel, conteudo }))
   }
 
   async ultimasMensagensAssistente(id: string, limite: number) {

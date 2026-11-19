@@ -12,3 +12,5 @@ export { calcularIndicadores, montarResumo, indicadoresVazios } from "./indicado
 export { humanizar, extrairFatos, preservaFatos, ehBlocoLiteral } from "./humanizador"
 export { classificarComIa } from "./classificador-ia"
 export type { ChamadaIa } from "./ia"
+export { atenderComAgente, fatosNaoRastreaveis, montarSystemPrompt, FERRAMENTAS_AGENTE } from "./agente"
+export type { AgenteDeps, LlmAgente, PersonaAgente, MensagemHistorico } from "./agente"

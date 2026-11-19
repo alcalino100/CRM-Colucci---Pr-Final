@@ -8,7 +8,7 @@ import { CAPACIDADES, MAX_NAO_ENTENDIDAS, MAX_TENTATIVAS_IDENTIDADE, type Config
 import { FonteBadge } from "./FonteBadge"
 import { useApi } from "./use-api"
 
-type Resp = { fonte: string; config: ConfigAssistente; provedor: string; iaDisponivel: boolean; iaOrigem: string | null; instancias: string[]; agentesClaude: { id: string; nome: string }[] }
+type Resp = { fonte: string; config: ConfigAssistente; provedor: string; iaDisponivel: boolean; iaOrigem: string | null; iaModelo?: string | null; iaAgente?: string | null; instancias: string[]; agentesClaude: { id: string; nome: string }[] }
 
 export function Configuracoes() {
   const { dados, erro, recarregar } = useApi<Resp>("/api/assistente/config")
@@ -97,19 +97,20 @@ export function Configuracoes() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2"><Sparkles className="size-4" /> Inteligência artificial (Claude)</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">As decisões (identidade, dados, encaminhamento) são sempre por regras. A IA só deixa o texto mais natural e entende frases que as regras não pegam. Valores, datas, links e protocolos são conferidos e, se algo mudar, vale o texto original.</p>
+              <p className="text-xs text-muted-foreground">Com a IA ligada, o Claude conduz a conversa (como na IA Conversacional), usando ferramentas de consulta. Identidade, protocolo e dados continuam sob regras do sistema, e toda resposta é conferida: valor, data, link ou protocolo que não vier do sistema bloqueia a resposta e o atendimento segue pelo fluxo de regras.</p>
               <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border p-3">
                 <span className="text-sm font-medium">Usar IA nas respostas</span>
                 <input type="checkbox" className="size-5" checked={cfg.usarIa} onChange={(e) => setCfg({ ...cfg, usarIa: e.target.checked })} />
               </label>
               <div>
-                <Label>Reaproveitar a chave de um agente da IA Conversacional</Label>
+                <Label>Agente de referência (chave, modelo, tom de voz e base de conhecimento)</Label>
                 <Select value={cfg.aiAgentId ?? ""} onChange={(e) => setCfg({ ...cfg, aiAgentId: e.target.value || undefined })}>
-                  <option value="">Usar a chave do servidor (CLAUDE_API_KEY)</option>
+                  <option value="">Automático (chave do servidor ou de um agente Claude ativo)</option>
                   {dados.agentesClaude.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
                 </Select>
               </div>
-              <p className="text-xs">{dados.iaDisponivel ? <Badge variant="green">chave Claude encontrada ({dados.iaOrigem === "agente" ? "do agente" : "do servidor"})</Badge> : <Badge variant="amber">nenhuma chave Claude encontrada: segue sem IA</Badge>}</p>
+              <p className="text-xs">{dados.iaDisponivel ? <Badge variant="green">chave Claude encontrada ({dados.iaOrigem === "agente" ? `agente ${dados.iaAgente ?? ""}` : dados.iaOrigem === "agente_auto" ? "de um agente ativo" : "do servidor"}){dados.iaModelo ? ` · ${dados.iaModelo}` : ""}</Badge> : <Badge variant="amber">nenhuma chave Claude encontrada: segue sem IA</Badge>}</p>
+              <p className="text-xs text-muted-foreground">Dica: crie na IA Conversacional um agente próprio para o assistente (prompt, tom de voz e base de conhecimento) e escolha-o aqui. Deixe-o pausado e sem instância vinculada, para não interferir nos leads.</p>
             </CardContent>
           </Card>
 

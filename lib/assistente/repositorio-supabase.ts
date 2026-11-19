@@ -106,6 +106,11 @@ export const repositorioSupabase: RepositorioAssistente = {
     }
   },
 
+  async historico(conversaId, limite) {
+    const { data } = await db().from("assistente_mensagens").select("papel,conteudo,criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(limite)
+    return [...(data ?? [])].reverse().map((m: { papel: "cliente" | "assistente" | "sistema"; conteudo: string }) => ({ papel: m.papel, conteudo: m.conteudo }))
+  },
+
   async ultimasMensagensAssistente(conversaId, limite) {
     const { data } = await db().from("assistente_mensagens").select("conteudo").eq("conversa_id", conversaId).eq("papel", "assistente").order("criado_em", { ascending: false }).limit(limite)
     return (data ?? []).map((m: { conteudo: string }) => m.conteudo)

@@ -3,7 +3,7 @@ import { fail, ok } from "@/lib/api/response"
 import { parseBody } from "@/lib/api/validate"
 import { CAPACIDADES, normalizarCapacidades } from "@/lib/assistente/capacidades"
 import { CONFIG_PADRAO } from "@/lib/assistente/repositorio"
-import { resolverCredencialClaude } from "@/lib/assistente/ia-claude"
+import { resolverClaude } from "@/lib/assistente/ia-claude"
 import { obterProvider } from "@/lib/assistente/provider-factory"
 import { repositorioSupabase, tabelaAusente } from "@/lib/assistente/repositorio-supabase"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
@@ -37,8 +37,8 @@ async function opcoes() {
 }
 
 async function estado(aiAgentId?: string) {
-  const cred = await resolverCredencialClaude(aiAgentId)
-  return { provedor: obterProvider().nome, iaDisponivel: !!cred, iaOrigem: cred?.origem ?? null, ...(await opcoes()) }
+  const res = await resolverClaude(aiAgentId)
+  return { provedor: obterProvider().nome, iaDisponivel: !!res, iaOrigem: res?.cred.origem ?? null, iaModelo: res?.cred.modeloAgente ?? null, iaAgente: res?.persona?.nome ?? null, ...(await opcoes()) }
 }
 
 export async function GET() {

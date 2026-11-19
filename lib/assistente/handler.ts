@@ -1,5 +1,6 @@
 import { normalizePhone } from "@/lib/labels"
 import { atenderMensagem, registrarMensagemHumana } from "./atendimento"
+import type { AgenteDeps } from "./agente"
 import type { ChamadaIa } from "./ia"
 import type { Evento } from "./orquestrador"
 import type { ImmobillisProvider } from "./provider"
@@ -10,6 +11,8 @@ export type DepsHandler = {
   repo: RepositorioAssistente
   provider: ImmobillisProvider
   resolverIa: (config: ConfigAssistente) => Promise<ChamadaIa | null>
+  /** Agente (Claude conduzindo a conversa). Opcional: sem ele, o assistente usa o fluxo por regras. */
+  resolverAgente?: (config: ConfigAssistente) => Promise<AgenteDeps | null>
   enviarTexto: (instanceName: string, telefone: string, texto: string) => Promise<{ ok: boolean; erro?: string; keyId?: string }>
   presenca?: (instanceName: string, telefone: string) => Promise<void>
   registrarNoInbox?: (p: { instanceName: string; telefone: string; texto: string; keyId?: string }) => Promise<void>
@@ -51,8 +54,9 @@ export async function tratarMensagemRecebida(p: { telefone: string; texto: strin
   const agora = d.agora ? d.agora() : new Date()
   try {
     const ia = await d.resolverIa(config).catch(() => null)
+    const agente = d.resolverAgente ? await d.resolverAgente(config).catch(() => null) : null
     if (d.presenca) await d.presenca(p.instanceName, p.telefone).catch(() => {})
-    const r = await atenderMensagem({ repo: d.repo, provider: d.provider, config, telefone: p.telefone, instanceName: p.instanceName, texto, agora, ia })
+    const r = await atenderMensagem({ repo: d.repo, provider: d.provider, config, telefone: p.telefone, instanceName: p.instanceName, texto, agora, ia, agente })
     for (let i = 0; i < r.respostas.length; i++) {
       if (i > 0) await dormir(700)
       const env = await d.enviarTexto(p.instanceName, p.telefone, r.respostas[i])
