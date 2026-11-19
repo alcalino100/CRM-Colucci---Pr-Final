@@ -5,10 +5,12 @@ import { registrarRespostaDeLead } from "@/lib/automation-services"
 import { agenteParaInstancia, handlePatriciaInbound, isNumeroTesteIA, pausarIaMensagemManual, saudarLeadCTWA } from "@/lib/ai/inboxHandler"
 
 // Assistente Virtual carregado sob demanda: não pesa no webhook e qualquer falha dele nunca afeta o fluxo de leads.
-async function handleAssistenteInbound(p: { telefone: string; texto: string; instanceName?: string }): Promise<boolean> {
+async function handleAssistenteInbound(p: { telefone: string; texto: string; instanceName?: string }, opcoes: { exigirTeste?: boolean } = {}): Promise<boolean> {
   try {
-    return await (await import("@/lib/assistente/whatsapp")).handleAssistenteInbound(p)
-  } catch {
+    return await (await import("@/lib/assistente/whatsapp")).handleAssistenteInbound(p, opcoes)
+  } catch (e) {
+    // Nunca derruba o webhook, mas deixa rastro: antes esse erro sumia em silêncio.
+    logger.error("assistente: falha ao carregar/executar", { error: e instanceof Error ? e.message : String(e) })
     return false
   }
 }
@@ -93,6 +95,9 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
       ...camposMidia(midia),
     })
     await preencherMidiaUrl(instanceName, mensagemId, midia)
+    // Número interno da empresa: nunca vira lead nem aciona a IA de leads. Exceção: se for número de TESTE
+    // do Assistente Virtual, ele atende (é assim que a equipe testa o assistente com o próprio celular).
+    if (!semIA) await handleAssistenteInbound({ telefone, texto: corpo, instanceName }, { exigirTeste: true })
     return
   }
 

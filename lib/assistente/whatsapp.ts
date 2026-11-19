@@ -47,8 +47,8 @@ const deps = (): DepsHandler => ({
 })
 
 /** Ponto de entrada do webhook do WhatsApp. true = o assistente assumiu (a IA de leads não deve responder). */
-export async function handleAssistenteInbound(p: { telefone: string; texto: string; instanceName?: string }): Promise<boolean> {
-  return tratarMensagemRecebida({ telefone: p.telefone, texto: p.texto, instanceName: p.instanceName ?? "" }, deps())
+export async function handleAssistenteInbound(p: { telefone: string; texto: string; instanceName?: string }, opcoes: { exigirTeste?: boolean } = {}): Promise<boolean> {
+  return tratarMensagemRecebida({ telefone: p.telefone, texto: p.texto, instanceName: p.instanceName ?? "" }, deps(), opcoes)
 }
 
 export async function handleAssistenteMensagemHumana(p: { telefone: string; texto: string; instanceName?: string }): Promise<void> {

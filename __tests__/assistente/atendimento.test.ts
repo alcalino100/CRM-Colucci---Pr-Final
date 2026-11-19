@@ -156,6 +156,16 @@ describe("tratarMensagemRecebida", () => {
     expect(registrar).toHaveBeenCalled()
   })
 
+  it("exigirTeste (número interno bloqueado): só número de teste passa, mesmo com instância liberada e provedor real", async () => {
+    const repo = new RepositorioMemoria()
+    await repo.salvarConfig({ ativo: true, instancias: ["inst"], numerosTeste: [T] })
+    const real = { ...provider, nome: "immobillis" }
+    const { d } = deps(repo, { provider: real as any })
+    expect(await tratarMensagemRecebida({ telefone: "5511977776666", texto: "oi", instanceName: "inst" }, d, { exigirTeste: true })).toBe(false)
+    expect(await tratarMensagemRecebida({ telefone: "5511977776666", texto: "oi", instanceName: "inst" }, d)).toBe(true) // sem a exigência, instância liberada atende
+    expect(await tratarMensagemRecebida({ telefone: T, texto: "oi", instanceName: "inst" }, d, { exigirTeste: true })).toBe(true)
+  })
+
   it("cliente real com provedor simulado: NÃO assume (devolve false, nada enviado)", async () => {
     const repo = new RepositorioMemoria()
     await repo.salvarConfig({ ativo: true, instancias: ["inst"], numerosTeste: [] })
