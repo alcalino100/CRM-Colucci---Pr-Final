@@ -262,6 +262,22 @@ export async function responderConversaIa({
       ...(usarAgenda ? { tools: AGENDA_TOOLS, onToolUse: onToolUseAgenda } : {}),
     })
 
+    // Nunca grava/envia resposta vazia (ex.: modelo só chamou ferramentas): evita "mensagem em branco" ao lead.
+    if (!String(aiResp ?? "").trim()) {
+      try {
+        await db().from("automation_logs").insert({
+          lead_id: leadIdEfetivo ?? null,
+          event_type: "ia_geracao_falhou",
+          event_title: "IA devolveu resposta vazia",
+          event_description: `Conversa ${convId} (${telefone}): modelo ${model ?? "?"} não gerou texto. Nada foi enviado.`,
+          actor_type: "ia",
+        })
+      } catch {
+        /* log é best-effort */
+      }
+      return { ok: false, erro: "A IA não gerou resposta." }
+    }
+
     await db().from("messages_ia").insert({
       id: `msg_${Date.now() + 1}`,
       conversation_id: convId,

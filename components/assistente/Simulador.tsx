@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Bot, RotateCcw, Send, ServerOff, ShieldCheck, User } from "lucide-react"
+import { Bot, RotateCcw, Send, ServerOff, ShieldCheck, Sparkles, User } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Select } from "@/components/ui/primitives"
 import { Button } from "@/components/ui/button"
 import { estadoInicial, ROTULO_DEPARTAMENTO, ROTULO_INTENCAO, type Estado, type Evento } from "@/lib/assistente"
@@ -31,12 +31,15 @@ function descreverEvento(e: Evento): string {
     case "identidade": return `Identidade: ${e.resultado.replace(/_/g, " ")}`
     case "escalada": return `Escalada → ${ROTULO_DEPARTAMENTO[e.departamento]} (${e.motivo.replace(/_/g, " ")})`
     case "resolvido_automaticamente": return "Resolvido pela IA"
+    case "ia": return `Claude (${e.funcao}) ${e.ok ? "✓" : "indisponível, usei o padrão"}`
   }
 }
 
 export function Simulador() {
   const [telefone, setTelefone] = useState(PERSONAS[0].telefone)
   const [indisponivel, setIndisponivel] = useState(false)
+  const [usarIa, setUsarIa] = useState(false)
+  const [avisoIa, setAvisoIa] = useState(false)
   const [estado, setEstado] = useState<Estado>(estadoInicial())
   const [mensagens, setMensagens] = useState<Msg[]>([])
   const [eventos, setEventos] = useState<Evento[]>([])
@@ -63,11 +66,12 @@ export function Simulador() {
       const res = await fetch("/api/assistente/simular", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto: msg, telefone, indisponivel, estado }),
+        body: JSON.stringify({ texto: msg, telefone, indisponivel, usarIa, estado }),
       })
       const json = await res.json()
       if (!json.ok) throw new Error(json.erro || "erro")
       setEstado(json.estado)
+      setAvisoIa(!!json.iaPedidaSemChave)
       setEventos((ev) => [...ev, ...json.eventos])
       setMensagens((m) => [...m, ...json.respostas.map((r: string) => ({ de: "assistente" as const, texto: r }))])
     } catch {
@@ -132,6 +136,11 @@ export function Simulador() {
               <input type="checkbox" checked={indisponivel} onChange={(e) => setIndisponivel(e.target.checked)} className="size-4" />
               <ServerOff className="size-4 text-muted-foreground" /> Simular Immobillis fora do ar
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={usarIa} onChange={(e) => setUsarIa(e.target.checked)} className="size-4" />
+              <Sparkles className="size-4 text-muted-foreground" /> Usar IA (Claude)
+            </label>
+            {avisoIa && <p className="text-xs text-amber-700">Nenhuma chave Claude encontrada no servidor: respondendo sem IA.</p>}
           </CardContent>
         </Card>
 

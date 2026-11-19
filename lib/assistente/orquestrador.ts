@@ -1,6 +1,7 @@
 import { buscarFaq } from "./faq"
 import { executarFerramenta } from "./ferramentas"
 import { brl, textoBoleto, textoContrato, textoInforme, textoReajuste } from "./formatadores"
+import { CAPACIDADE_POR_INTENCAO, type MapaCapacidades } from "./capacidades"
 import { classificarIntencao, DEPARTAMENTO_POR_INTENCAO, ROTULO_DEPARTAMENTO } from "./intencoes"
 import type { ImmobillisProvider } from "./provider"
 import type { Boleto, Cliente, Contrato, Departamento, InformeRendimentos, Intencao, Reajuste } from "./types"
@@ -31,12 +32,17 @@ export type Evento =
   | { tipo: "identidade"; resultado: "confirmada" | "falhou" | "bloqueada" | "telefone_desconhecido" }
   | { tipo: "escalada"; departamento: Departamento; motivo: string; protocolo: string }
   | { tipo: "resolvido_automaticamente" }
+  | { tipo: "ia"; funcao: "classificador" | "humanizador"; ok: boolean; tokens?: number }
 
 export type Contexto = {
   provider: ImmobillisProvider
   telefone: string
   agora?: Date
   gerarProtocolo?: (agora: Date) => string
+  /** O que o gestor deixou ligado. Intenção desligada vai para a equipe. Ausente = tudo ligado. */
+  capacidades?: Partial<MapaCapacidades>
+  /** Só é chamado quando as regras não entendem a mensagem. Deve devolver null se não tiver certeza. */
+  classificadorReserva?: (texto: string) => Promise<{ intencao: Intencao; tokens?: number } | null>
 }
 
 export type Saida = { estado: Estado; respostas: string[]; eventos: Evento[] }
@@ -101,8 +107,18 @@ export async function processarMensagem(estadoAtual: Estado, texto: string, ctxE
     }
   }
 
-  const intencao = classificarIntencao(texto)
-  const eventos: Evento[] = [{ tipo: "intencao", intencao }]
+  let intencao = classificarIntencao(texto)
+  const eventos: Evento[] = []
+  if (intencao === "desconhecida" && ctx.classificadorReserva) {
+    const r = await ctx.classificadorReserva(texto).catch(() => null)
+    if (r) {
+      intencao = r.intencao
+      eventos.push({ tipo: "ia", funcao: "classificador", ok: true, tokens: r.tokens })
+    } else {
+      eventos.push({ tipo: "ia", funcao: "classificador", ok: false })
+    }
+  }
+  eventos.push({ tipo: "intencao", intencao })
 
   if (intencao === "falar_com_humano") {
     const s = escalar(estado, ctx, intencao, "pedido_do_cliente")
@@ -130,6 +146,9 @@ export async function processarMensagem(estadoAtual: Estado, texto: string, ctxE
 type CtxCompleto = Contexto & { agora: Date }
 
 async function atender(estado: Estado, intencao: Intencao, texto: string, ctx: CtxCompleto): Promise<Saida> {
+  const cap = CAPACIDADE_POR_INTENCAO[intencao]
+  if (cap && ctx.capacidades?.[cap] === false) return escalar(estado, ctx, intencao, "capacidade_desativada")
+
   // FAQ: não exige identidade.
   if (intencao === "faq") {
     const item = buscarFaq(texto)
