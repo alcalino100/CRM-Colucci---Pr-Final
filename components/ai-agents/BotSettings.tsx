@@ -134,7 +134,7 @@ export function BotSettings({ id }: { id: string }){
           } onChange={e=>{
             const prov = e.target.value
             if(prov==="gemini") setLocal({...local, modelName:"gemini-2.5-flash", apiEndpoint:"https://generativelanguage.googleapis.com"} as any)
-            else if(prov==="claude") setLocal({...local, modelName:"claude-sonnet-5", apiEndpoint:"https://api.anthropic.com"} as any)
+            else if(prov==="claude") setLocal({...local, modelName:"claude-sonnet-5-5", apiEndpoint:"https://api.anthropic.com"} as any)
             else setLocal({...local, modelName:"gpt-4o-mini", apiEndpoint:"https://api.openai.com/v1"} as any)
           }}><option value="openai">OpenAI</option><option value="gemini">Gemini (sua atual)</option><option value="claude">Claude (Anthropic)</option></Select></div>
           <div className="grid gap-1.5"><Label>Modelo</Label><Select value={(local as any).modelName || "gemini-1.5-flash"} onChange={e=>setLocal({...local, modelName:e.target.value} as any)}>
@@ -143,10 +143,11 @@ export function BotSettings({ id }: { id: string }){
               <option value="gemini-1.5-flash">gemini-1.5-flash</option>
               <option value="gemini-1.5-pro">gemini-1.5-pro</option>
             </> : (local as any).modelName?.includes("claude") ? <>
-              <option value="claude-sonnet-5">claude-sonnet-5 (recomendado)</option>
-              <option value="claude-haiku-4-5">claude-haiku-4-5 (rápido)</option>
-              <option value="claude-opus-5">claude-opus-5</option>
-              <option value="claude-fable-5-1">claude-fable-5-1</option>
+              <option value="claude-sonnet-5-5">claude-sonnet-5-5 (recomendado)</option>
+              <option value="claude-haiku-5-5">claude-haiku-5-5 (rápido)</option>
+              <option value="claude-opus-5-5">claude-opus-5-5</option>
+              <option value="claude-fable-5-2">claude-fable-5-2</option>
+              <option value="claude-sonnet-5">claude-sonnet-5 (anterior)</option>
             </> : <>
               <option value="gpt-4o-mini">gpt-4o-mini</option>
               <option value="gpt-4o">gpt-4o</option>

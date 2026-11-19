@@ -45,7 +45,7 @@ export async function POST(req: NextRequest){
       throw new Error(lastErr + (available.length ? ` | Disponíveis para esta key: ${available.slice(0,8).join(", ")}` : " | Nenhum modelo listado - verifique billing em https://aistudio.google.com/app/apikey"))
     }
     if(provider==="claude"){
-      const tryModels = Array.from(new Set([model, "claude-sonnet-5", "claude-haiku-4-5", "claude-opus-5", "claude-fable-5-1"]))
+      const tryModels = Array.from(new Set([model, "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5", "claude-fable-5-2"]))
       let lastErr=""
       for(const m of tryModels){
         const r = await fetch("https://api.anthropic.com/v1/messages", { method:"POST", headers:{"Content-Type":"application/json", "x-api-key": token, "anthropic-version":"2023-06-01"}, body: JSON.stringify({ model:m, max_tokens:10, messages:[{role:"user", content:"Diga ok"}] }) })

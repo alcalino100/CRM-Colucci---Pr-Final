@@ -3,6 +3,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
 import { decryptToken } from "@/lib/encryption"
 import { AI_AGENTS_COLUMNS } from "@/lib/supabase/projections"
 import OpenAI from "openai"
+import { chamarClaudeComFallback, CLAUDE_MODELO_PADRAO, CLAUDE_MODELOS_FALLBACK } from "./claude"
 
 let _aiDb: any = null
 function db(): any {
@@ -89,7 +90,7 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
 
   if(!apiKey) throw new Error(`API key não configurada para ${provider}`)
 
-  const model = (ai as any).model_name || (provider==="gemini" ? "gemini-2.5-flash" : provider==="claude" ? "claude-3-5-sonnet" : "gpt-4o-mini")
+  const model = (ai as any).model_name || (provider==="gemini" ? "gemini-2.5-flash" : provider==="claude" ? CLAUDE_MODELO_PADRAO : "gpt-4o-mini")
   const endpoint = (ai as any).api_endpoint || ""
 
   // Gemini: tenta o modelo configurado diretamente com fallback inteligente (economiza ~1s por resposta sem listar modelos a cada msg)
@@ -117,63 +118,22 @@ export async function generateAIResponse({ aiId, userMessage, conversationHistor
     throw new Error(lastErr || "Gemini falhou - nenhum modelo disponível para esta key. Verifique em https://aistudio.google.com/app/apikey e billing.")
   }
 
-  // Claude - modelos atuais: sonnet-5, haiku-4-5, opus-5, fable-5-1
-  // Com tools: loop tool_use (máx 3 rodadas) — ex.: agenda de visitas.
+  // Claude: cliente compartilhado (lib/ai/claude.ts) com timeout, retry/backoff, cache de prompt,
+  // loop de ferramentas (ex.: agenda de visitas) e fallback entre modelos.
   if(provider==="claude"){
-    const tryModels = Array.from(new Set([model, "claude-sonnet-5", "claude-haiku-4-5", "claude-opus-5", "claude-fable-5-1"]))
-    let lastErr=""
-    for(const m of tryModels){
-      const url = "https://api.anthropic.com/v1/messages"
-      const historyForClaude = conversationHistory.map(mm=> ({ role: (mm.role==="ai" ? "assistant" : mm.role) as "user"|"assistant", content: mm.content }))
-      const msgs: { role: "user"|"assistant"; content: unknown }[] = [...historyForClaude, { role:"user", content: userMessage }]
-      let totalTokens = 0
-      let usedModel = m
-      try {
-        for (let round = 0; round < 4; round++) {
-          const body: Record<string, unknown> = {
-            model: m,
-            max_tokens: 500,
-            system: systemPrompt,
-            messages: msgs,
-          }
-          if (tools?.length) body.tools = tools
-          const r = await fetch(url, {
-            method:"POST",
-            headers:{ "Content-Type":"application/json", "x-api-key": apiKey, "anthropic-version":"2023-06-01" },
-            body: JSON.stringify(body)
-          })
-          const j = await r.json()
-          if(!r.ok) throw new Error(j.error?.message || "Claude falhou")
-          totalTokens += (j.usage?.input_tokens||0) + (j.usage?.output_tokens||0)
-          usedModel = m
-          const blocks = (j.content ?? []) as { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }[]
-          const toolCalls = blocks.filter((b) => b.type === "tool_use")
-          if (!toolCalls.length || !onToolUse) {
-            const text = blocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join("").trim()
-            return { message: text, tokensUsed: totalTokens, model: usedModel }
-          }
-          // Executa as tools e devolve os resultados para a próxima rodada.
-          const results: { type: string; tool_use_id: string; content: string }[] = []
-          for (const t of toolCalls) {
-            let out: string
-            try {
-              out = await onToolUse(t.name ?? "", t.input ?? {})
-            } catch (e) {
-              out = `Erro na ferramenta ${t.name}: ${e instanceof Error ? e.message : String(e)}`
-            }
-            results.push({ type: "tool_result", tool_use_id: t.id ?? "", content: out.slice(0, 2000) })
-          }
-          msgs.push({ role: "assistant", content: blocks })
-          msgs.push({ role: "user", content: results })
-        }
-        return { message: "", tokensUsed: totalTokens, model: usedModel }
-      } catch (e) {
-        lastErr = e instanceof Error ? e.message : String(e)
-        const isModelErr = lastErr.toLowerCase().includes("not found") || lastErr.toLowerCase().includes("model")
-        if(!isModelErr) break
-      }
-    }
-    throw new Error(lastErr)
+    const r = await chamarClaudeComFallback({
+      apiKey,
+      modelos: [model, ...CLAUDE_MODELOS_FALLBACK],
+      system: systemPrompt,
+      messages: [
+        ...conversationHistory.map(mm=> ({ role: (mm.role==="ai" ? "assistant" : mm.role) as "user"|"assistant", content: mm.content })),
+        { role: "user", content: userMessage },
+      ],
+      tools,
+      onToolUse,
+      maxTokens: 500,
+    })
+    return { message: r.texto, tokensUsed: r.tokensTotal, model: r.modelo }
   }
 
   // OpenAI (default)

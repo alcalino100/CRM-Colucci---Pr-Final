@@ -78,6 +78,7 @@ const NAV_AUTOMACOES: { href: string; label: string; icon: any; roles: Role[] }[
 
 const NAV_IA: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/ai-agents", label: "IA Conversacional", icon: Bot, roles: ["gestor"] },
+  { href: "/assistente", label: "Assistente Virtual", icon: MessagesSquare, roles: ["gestor"] },
 ]
 
 const NAV2: { href: string; label: string; icon: any; roles: Role[] }[] = [
@@ -150,7 +151,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (pathname.startsWith("/locacao")) setSecLocacao(true)
     if (pathname.startsWith("/automacoes")) setSecAutomacoes(true)
-    if (pathname.startsWith("/ai-agents")) setSecIA(true)
+    if (pathname.startsWith("/ai-agents") || pathname.startsWith("/assistente")) setSecIA(true)
     if (pathname.startsWith("/admin")) setSecAdmin(true)
     if (pathname.startsWith("/master")) setSecAdmin(true)
     if (pathname.startsWith("/inbox") || pathname.startsWith("/painel-corretor") || pathname.startsWith("/contacts") || pathname.startsWith("/follow-ups") || pathname.startsWith("/arquivados")) setSecVendas(true)
