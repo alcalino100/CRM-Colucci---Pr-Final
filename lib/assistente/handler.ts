@@ -39,7 +39,11 @@ export function podeAtuar(config: ConfigAssistente, provider: ImmobillisProvider
  * Mensagem recebida de um cliente. Devolve true se o assistente "assumiu" a conversa
  * (o fluxo de leads/IA Conversacional NÃO deve responder), false para seguir o fluxo normal.
  */
-export async function tratarMensagemRecebida(p: { telefone: string; texto: string; instanceName: string }, d: DepsHandler): Promise<boolean> {
+export async function tratarMensagemRecebida(
+  p: { telefone: string; texto: string; instanceName: string },
+  d: DepsHandler,
+  opcoes: { exigirTeste?: boolean } = {}
+): Promise<boolean> {
   const texto = p.texto.trim()
   if (!texto) return false
   let config: ConfigAssistente
@@ -49,6 +53,8 @@ export async function tratarMensagemRecebida(p: { telefone: string; texto: strin
     return false // tabelas ainda não existem / banco fora: segue o fluxo normal, sem risco
   }
   if (!podeAtuar(config, d.provider, p.telefone, p.instanceName).pode) return false
+  // Número interno da empresa (bloqueado no webhook): só atende se for número de TESTE do assistente.
+  if (opcoes.exigirTeste && !config.numerosTeste.some((n) => mesmoTelefone(n, p.telefone))) return false
 
   const dormir = d.dormir ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)))
   const agora = d.agora ? d.agora() : new Date()
