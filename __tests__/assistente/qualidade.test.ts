@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { RepositorioMemoria, criarMockProvider, calcularIndicadores, resumirIa, type AgenteDeps, type ChamadaIa } from "@/lib/assistente"
 import { ehSoMidia, LIMITE_RESPOSTAS, MSG_SO_TEXTO, atenderMensagem } from "@/lib/assistente/atendimento"
-import { ehMensagemAutomatica, tratarMensagemRecebida, type DepsHandler } from "@/lib/assistente/handler"
+import { atrasoDigitacao, ehMensagemAutomatica, tratarMensagemRecebida, type DepsHandler } from "@/lib/assistente/handler"
 
 const provider = criarMockProvider()
 const config = { capacidades: { boleto: true, informe: true, reajuste: true, contrato: true, faq: true }, usarIa: true }
@@ -144,5 +144,30 @@ describe("mensagens seguidas (rajada)", () => {
     await tratarMensagemRecebida({ telefone: T, texto: "preciso do boleto", instanceName: "inst", mensagemId: "m2" }, mk(async () => "oi\npreciso da segunda via do boleto"))
     expect(repo.mensagens.get(repo.conversas[0].id)![0].conteudo).toBe("oi\npreciso da segunda via do boleto")
     expect(repo.conversas).toHaveLength(1)
+  })
+})
+
+describe("ritmo de digitação (parecer uma pessoa)", () => {
+  it("fica entre 0,9 s e 4 s e cresce com o tamanho da mensagem", () => {
+    expect(atrasoDigitacao("oi")).toBe(900)
+    expect(atrasoDigitacao("x".repeat(60))).toBeGreaterThan(atrasoDigitacao("x".repeat(20)))
+    expect(atrasoDigitacao("x".repeat(2000))).toBe(4000)
+  })
+
+  it("antes de cada mensagem mostra 'digitando' e espera; nada sai todo de uma vez", async () => {
+    const repo = new RepositorioMemoria()
+    await repo.salvarConfig({ ativo: true, numerosTeste: ["5511999990001"] })
+    const eventos: string[] = []
+    const d: DepsHandler = {
+      repo, provider, resolverIa: async () => null,
+      presenca: async () => { eventos.push("digitando") },
+      dormir: async (ms) => { eventos.push(`espera:${ms}`) },
+      enviarTexto: async () => { eventos.push("envio"); return { ok: true } },
+      log: () => {},
+    }
+    await tratarMensagemRecebida({ telefone: "5511999990001", texto: "oi", instanceName: "inst" }, d)
+    const i = eventos.indexOf("envio")
+    expect(eventos.slice(0, i).filter((e) => e === "digitando").length).toBeGreaterThanOrEqual(1)
+    expect(eventos.slice(0, i).some((e) => e.startsWith("espera:"))).toBe(true)
   })
 })

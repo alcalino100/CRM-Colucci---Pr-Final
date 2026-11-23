@@ -36,7 +36,7 @@ describe("atenderMensagem", () => {
     await atenderMensagem(base(repo, { texto: "segunda via do boleto", agora: t0 }))
     repo.conversas[0].estado = sanitizarEstado(repo.conversas[0].estado) // como o banco devolveria
     const r = await atenderMensagem(base(repo, { texto: "8901", agora: new Date(t0.getTime() + 5000) }))
-    expect(r.respostas.join("\n")).toContain("Identidade confirmada")
+    expect(r.respostas.join("\n")).toMatch(/Mariana, (tudo certo|já confirmei|confirmado)|Perfeito, Mariana|Obrigado, Mariana|Pronto, Mariana/)
   })
 
   it("transferida: não repete o aviso ao cliente que insiste; depois de 15 min responde de novo", async () => {
@@ -158,7 +158,7 @@ describe("tratarMensagemRecebida", () => {
     const registrar = vi.fn().mockResolvedValue(undefined)
     const { d, enviados } = deps(repo, { registrarNoInbox: registrar })
     expect(await tratarMensagemRecebida({ telefone: T, texto: "bom dia", instanceName: "inst" }, d)).toBe(true)
-    expect(enviados.join("")).toContain("assistente virtual")
+    expect(enviados.join("")).toMatch(/tudo (bem|certo)|Em que posso|Me conta/)
     expect(registrar).toHaveBeenCalled()
   })
 

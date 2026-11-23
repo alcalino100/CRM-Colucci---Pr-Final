@@ -35,6 +35,9 @@ export type DepsHandler = {
 export const ehMensagemAutomatica = (texto: string) =>
   /^\s*(?:[^\p{L}\p{N}\s]{1,6}\s*)?(?:RESUMO DE ALERTAS|VENDA FECHADA|LEAD EM NEGOCIA[ÇC][ÃA]O|Assistente Virtual|Resumo do dia)/iu.test(texto)
 
+/** Quanto uma pessoa levaria para digitar: ~35 ms por caractere, entre 0,9 s e 4 s. Mensagens saindo todas de uma vez denunciam o robô. */
+export const atrasoDigitacao = (texto: string) => Math.min(4000, Math.max(900, 500 + texto.length * 35))
+
 const mesmoTelefone = (a: string, b: string) => !!a && !!b && normalizePhone(a) === normalizePhone(b)
 
 /** Pode o assistente atuar neste telefone/instância? Trava única, usada para mensagens do cliente e do humano. */
@@ -86,7 +89,9 @@ export async function tratarMensagemRecebida(
     if (d.presenca) await d.presenca(p.instanceName, p.telefone).catch(() => {})
     const r = await atenderMensagem({ repo: d.repo, provider: d.provider, config, telefone: p.telefone, instanceName: p.instanceName, texto, agora, ia, agente })
     for (let i = 0; i < r.respostas.length; i++) {
-      if (i > 0) await dormir(700)
+      // "digitando..." e uma pausa proporcional ao tamanho, antes de cada mensagem
+      if (d.presenca) await d.presenca(p.instanceName, p.telefone).catch(() => {})
+      await dormir(atrasoDigitacao(r.respostas[i]))
       const env = await d.enviarTexto(p.instanceName, p.telefone, r.respostas[i])
       if (!env.ok) d.log("erro", "assistente: falha ao enviar resposta", { erro: env.erro, instanceName: p.instanceName })
       else if (d.registrarNoInbox) await d.registrarNoInbox({ instanceName: p.instanceName, telefone: p.telefone, texto: r.respostas[i], keyId: env.keyId }).catch(() => {})

@@ -22,7 +22,7 @@ describe("orquestrador", () => {
   it("segunda via: pede confirmação, confirma e entrega o boleto", async () => {
     const r = await conversa("5511999990001", ["preciso da segunda via do boleto", "o final do meu cpf é 8901"])
     expect(r.respostas).toContain("4 últimos dígitos")
-    expect(r.respostas).toContain("Identidade confirmada")
+    expect(r.respostas).toMatch(/Mariana, (tudo certo|já confirmei|confirmado)|Perfeito, Mariana|Obrigado, Mariana|Pronto, Mariana/)
     expect(r.respostas).toContain("23793.38128")
     expect(r.estado.etapa).toBe("identificado")
     expect(r.eventos).toContainEqual({ tipo: "resolvido_automaticamente" })
@@ -58,10 +58,11 @@ describe("orquestrador", () => {
     expect(r.estado.departamento).toBe("manutencao")
   })
 
-  it("duas mensagens ininteligíveis escalam; a primeira mostra o menu", async () => {
+  it("duas mensagens ininteligíveis escalam; a primeira pede para reformular, sem menu", async () => {
     const um = await conversa("5511999990001", ["asdf"])
     expect(um.estado.etapa).toBe("inicio")
-    expect(um.respostas).toContain("Posso ajudar")
+    expect(um.respostas).toMatch(/boleto, (informe|contrato)/)
+    expect(um.respostas).not.toContain("•")
     const dois = await conversa("5511999990001", ["asdf", "qwer"])
     expect(dois.estado.etapa).toBe("transferido")
   })
