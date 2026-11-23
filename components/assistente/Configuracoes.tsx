@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Plug, Save, ShieldCheck, Sparkles } from "lucide-react"
+import { AlertTriangle, Loader2, Plug, Save, ShieldCheck, Sparkles, Zap } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Input, Label, Select } from "@/components/ui/primitives"
 import { Button } from "@/components/ui/button"
 import { CAPACIDADES, MAX_NAO_ENTENDIDAS, MAX_TENTATIVAS_IDENTIDADE, type ConfigAssistente } from "@/lib/assistente"
@@ -10,12 +10,16 @@ import { useApi } from "./use-api"
 
 type Resp = { fonte: string; config: ConfigAssistente; provedor: string; iaDisponivel: boolean; iaOrigem: string | null; iaModelo?: string | null; iaAgente?: string | null; instancias: string[]; agentesClaude: { id: string; nome: string }[] }
 
+const ROTULO_ORIGEM: Record<string, string> = { ambiente: "Chave do servidor (CLAUDE_API_KEY)", agente: "Chave guardada no agente", agente_auto: "Chave de um agente ativo" }
+
 export function Configuracoes() {
   const { dados, erro, recarregar } = useApi<Resp>("/api/assistente/config")
   const [cfg, setCfg] = useState<ConfigAssistente | null>(null)
   const [testes, setTestes] = useState("")
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null)
   const [salvando, setSalvando] = useState(false)
+  const [testando, setTestando] = useState(false)
+  const [diag, setDiag] = useState<{ conectado: boolean; modelo?: string; ms?: number; motivo?: string; status?: number | null; testes?: { origem: string; emUso: boolean; conectado: boolean; modelo?: string; ms?: number; motivo?: string; status?: number | null }[] } | null>(null)
 
   useEffect(() => { if (dados) { setCfg(dados.config); setTestes(dados.config.numerosTeste.join("\n")) } }, [dados])
 
@@ -34,6 +38,19 @@ export function Configuracoes() {
     } catch (e) {
       setMsg({ tipo: "erro", texto: e instanceof Error ? e.message : "Falha ao salvar" })
     } finally { setSalvando(false) }
+  }
+
+  async function testarClaude() {
+    setTestando(true); setDiag(null)
+    try {
+      const r = await fetch("/api/assistente/diagnostico", { method: "POST" })
+      const j = await r.json()
+      if (r.status === 401) throw new Error("Sua sessão precisa ser renovada: saia do CRM e entre novamente.")
+      if (!j.ok) throw new Error(j.erro || "Falha no teste")
+      setDiag(j)
+    } catch (e) {
+      setDiag({ conectado: false, motivo: e instanceof Error ? e.message : "Falha no teste" })
+    } finally { setTestando(false) }
   }
 
   if (erro) return <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
@@ -63,7 +80,7 @@ export function Configuracoes() {
               <div>
                 <Label>Números de teste (um por linha)</Label>
                 <textarea value={testes} onChange={(e) => setTestes(e.target.value)} rows={3} placeholder="5511999990001" className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30" />
-                <p className="mt-1 text-xs text-muted-foreground">Estes números sempre são atendidos, em qualquer instância. Comece por aqui.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Estes números são atendidos nas instâncias marcadas abaixo (ou em qualquer instância, se nenhuma estiver marcada). Comece por aqui.</p>
               </div>
 
               <div>
@@ -110,6 +127,19 @@ export function Configuracoes() {
                 </Select>
               </div>
               <p className="text-xs">{dados.iaDisponivel ? <Badge variant="green">chave Claude encontrada ({dados.iaOrigem === "agente" ? `agente ${dados.iaAgente ?? ""}` : dados.iaOrigem === "agente_auto" ? "de um agente ativo" : "do servidor"}){dados.iaModelo ? ` · ${dados.iaModelo}` : ""}</Badge> : <Badge variant="amber">nenhuma chave Claude encontrada: segue sem IA</Badge>}</p>
+              <div className="space-y-2 rounded-lg border border-border p-3">
+                <Button size="sm" variant="outline" onClick={testarClaude} disabled={testando}>{testando ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />} Testar conexão com o Claude</Button>
+                {diag && (diag.testes && diag.testes.length > 0
+                  ? <ul className="space-y-1 text-xs">
+                      {diag.testes.map((t, i) => (
+                        <li key={i} className={t.conectado ? "text-emerald-700" : "text-red-700"}>
+                          <strong>{ROTULO_ORIGEM[t.origem] ?? t.origem}{t.emUso ? " (em uso)" : ""}:</strong>{" "}
+                          {t.conectado ? `conectou, modelo ${t.modelo} em ${((t.ms ?? 0) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}s` : `não conectou${t.status ? ` (HTTP ${t.status})` : ""}: ${t.motivo}`}
+                        </li>
+                      ))}
+                    </ul>
+                  : <p className="text-xs text-red-700">Não conectou: {diag.motivo}</p>)}
+              </div>
               <p className="text-xs text-muted-foreground">Dica: crie na IA Conversacional um agente próprio para o assistente (prompt, tom de voz e base de conhecimento) e escolha-o aqui. Deixe-o pausado e sem instância vinculada, para não interferir nos leads.</p>
             </CardContent>
           </Card>

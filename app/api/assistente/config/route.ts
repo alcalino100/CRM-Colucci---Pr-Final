@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { exigirGestor } from "@/lib/auth/sessao"
 import { fail, ok } from "@/lib/api/response"
 import { parseBody } from "@/lib/api/validate"
 import { CAPACIDADES, normalizarCapacidades } from "@/lib/assistente/capacidades"
@@ -41,7 +42,9 @@ async function estado(aiAgentId?: string) {
   return { provedor: obterProvider().nome, iaDisponivel: !!res, iaOrigem: res?.cred.origem ?? null, iaModelo: res?.cred.modeloAgente ?? null, iaAgente: res?.persona?.nome ?? null, ...(await opcoes()) }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return fail(auth.erro, auth.status)
   if (!process.env.SUPABASE_SECRET_KEY) return ok({ fonte: "demonstracao", config: CONFIG_PADRAO, provedor: obterProvider().nome, iaDisponivel: false, iaOrigem: null, instancias: [], agentesClaude: [] })
   try {
     const config = await repositorioSupabase.obterConfig()
@@ -53,6 +56,8 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return fail(auth.erro, auth.status)
   const parsed = await parseBody(req, Corpo)
   if (!parsed.success) return parsed.response
   if (!process.env.SUPABASE_SECRET_KEY) return fail("Servidor sem SUPABASE_SECRET_KEY configurada.", 500)

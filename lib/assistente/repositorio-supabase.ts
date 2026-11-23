@@ -97,13 +97,18 @@ export const repositorioSupabase: RepositorioAssistente = {
     }).eq("id", conversaId)
     if (error) throw error
     if (t.mensagens.length) {
-      const { error: e2 } = await db().from("assistente_mensagens").insert(t.mensagens.map((m, i) => ({ conversa_id: conversaId, papel: m.papel, conteudo: m.conteudo, criado_em: new Date(agora.getTime() + i).toISOString() })))
+      const { error: e2 } = await db().from("assistente_mensagens").insert(t.mensagens.map((m, i) => ({ conversa_id: conversaId, papel: m.papel, conteudo: m.conteudo, criado_em: (m.em ?? new Date(agora.getTime() + i)).toISOString() })))
       if (e2) throw e2
     }
     if (t.eventos.length) {
       const { error: e3 } = await db().from("assistente_eventos").insert(t.eventos.map((e) => ({ conversa_id: conversaId, tipo: e.tipo, dados: e, criado_em: iso })))
       if (e3) throw e3
     }
+  },
+
+  async contarRespostasAssistente(conversaId, desde) {
+    const { count } = await db().from("assistente_mensagens").select("id", { count: "exact", head: true }).eq("conversa_id", conversaId).eq("papel", "assistente").gte("criado_em", desde.toISOString())
+    return count ?? 0
   },
 
   async historico(conversaId, limite) {
@@ -148,6 +153,9 @@ export const repositorioSupabase: RepositorioAssistente = {
       const { data: ms } = await db().from("assistente_mensagens").select("conversa_id,papel,criado_em").gte("criado_em", desde.toISOString()).order("criado_em", { ascending: true }).limit(20000)
       for (const m of ms ?? []) if (ids.has(m.conversa_id)) porConversa.set(m.conversa_id, [...(porConversa.get(m.conversa_id) ?? []), { papel: m.papel, conteudo: "", criadoEm: m.criado_em }])
     }
-    return calcularIndicadores(conversas, porConversa)
+    // Saúde da IA no período (eventos do tipo "ia" das conversas da janela).
+    const { data: evs } = await db().from("assistente_eventos").select("conversa_id,dados,criado_em").eq("tipo", "ia").gte("criado_em", desde.toISOString()).order("criado_em", { ascending: true }).limit(20000)
+    const eventosIa = (evs ?? []).filter((e: { conversa_id: string }) => ids.has(e.conversa_id)).map((e: { dados: { funcao: string; ok: boolean; erro?: string } }) => e.dados)
+    return calcularIndicadores(conversas, porConversa, eventosIa)
   },
 }

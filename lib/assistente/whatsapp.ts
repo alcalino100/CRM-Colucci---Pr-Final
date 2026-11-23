@@ -43,12 +43,25 @@ const deps = (): DepsHandler => ({
     })
   },
   notificarGestor: async (t) => { await notifyGestorWhatsApp(t, "numero") },
+  aguardarRajada: async ({ telefone, instanceName, mensagemId, texto }) => {
+    // Espera um instante e confere se chegou mensagem mais nova do mesmo contato. Se sim, devolve null (a execução
+    // da mais nova responde). Senão, junta tudo que o cliente mandou desde a última resposta do assistente.
+    await new Promise((r) => setTimeout(r, 2000))
+    const { data: nova } = await wsupabase.from("whatsapp_mensagens").select("mensagem_id").eq("instance_name", instanceName).eq("telefone", telefone).eq("de_mim", false).order("criado_em", { ascending: false }).limit(1)
+    const ultimaId = (nova as { mensagem_id: string | null }[] | null)?.[0]?.mensagem_id
+    if (mensagemId && ultimaId && ultimaId !== mensagemId) return null
+    const { data: minha } = await wsupabase.from("whatsapp_mensagens").select("criado_em").eq("instance_name", instanceName).eq("telefone", telefone).eq("de_mim", true).order("criado_em", { ascending: false }).limit(1)
+    const desde = (minha as { criado_em: string }[] | null)?.[0]?.criado_em ?? new Date(Date.now() - 60_000).toISOString()
+    const { data: rajada } = await wsupabase.from("whatsapp_mensagens").select("corpo").eq("instance_name", instanceName).eq("telefone", telefone).eq("de_mim", false).gt("criado_em", desde).order("criado_em", { ascending: true }).limit(8)
+    const junto = ((rajada as { corpo: string | null }[] | null) ?? []).map((r) => (r.corpo ?? "").trim()).filter(Boolean).join("\n").slice(0, 1500)
+    return junto || texto
+  },
   log: (nivel, msg, extra) => (nivel === "erro" ? logger.error(msg, extra) : logger.info(msg, extra)),
 })
 
 /** Ponto de entrada do webhook do WhatsApp. true = o assistente assumiu (a IA de leads não deve responder). */
-export async function handleAssistenteInbound(p: { telefone: string; texto: string; instanceName?: string }, opcoes: { exigirTeste?: boolean } = {}): Promise<boolean> {
-  return tratarMensagemRecebida({ telefone: p.telefone, texto: p.texto, instanceName: p.instanceName ?? "" }, deps(), opcoes)
+export async function handleAssistenteInbound(p: { telefone: string; texto: string; instanceName?: string; mensagemId?: string }, opcoes: { exigirTeste?: boolean } = {}): Promise<boolean> {
+  return tratarMensagemRecebida({ telefone: p.telefone, texto: p.texto, instanceName: p.instanceName ?? "", mensagemId: p.mensagemId }, deps(), opcoes)
 }
 
 export async function handleAssistenteMensagemHumana(p: { telefone: string; texto: string; instanceName?: string }): Promise<void> {

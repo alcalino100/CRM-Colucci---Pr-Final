@@ -32,7 +32,7 @@ export type Evento =
   | { tipo: "identidade"; resultado: "confirmada" | "falhou" | "bloqueada" | "telefone_desconhecido" }
   | { tipo: "escalada"; departamento: Departamento; motivo: string; protocolo: string }
   | { tipo: "resolvido_automaticamente" }
-  | { tipo: "ia"; funcao: "classificador" | "humanizador" | "agente"; ok: boolean; tokens?: number }
+  | { tipo: "ia"; funcao: "classificador" | "humanizador" | "agente"; ok: boolean; tokens?: number; erro?: string }
 
 export type Contexto = {
   provider: ImmobillisProvider
@@ -55,8 +55,37 @@ export function protocoloPadrao(agora: Date): string {
   return `COL-${agora.getFullYear()}${p(agora.getMonth() + 1)}${p(agora.getDate())}-${p(rand, 4)}`
 }
 
-export const MENU =
-  "Posso ajudar com:\n• Segunda via de boleto\n• Informe de rendimentos\n• Reajuste do aluguel\n• Dados do seu contrato\n• Manutenção, locação, vendas e dúvidas gerais\n\nÉ só me dizer o que precisa. Se preferir, chamo alguém da equipe."
+/** Escolhe uma variação de forma estável (mesma entrada, mesma saída): o cliente não recebe sempre a mesma frase, e os testes não ficam instáveis. */
+export const variar = <T,>(opcoes: T[], semente: number): T => opcoes[Math.abs(Math.floor(semente)) % opcoes.length]
+
+const primeiroNome = (nome: string) => nome.trim().split(/\s+/)[0]
+
+/** Fluxo de regras (quando o Claude não responde): conversa natural, sem menu e sem lista. */
+export const TEXTO = {
+  saudacao: (nome: string | undefined, sem: number) =>
+    variar(
+      [
+        `Oi${nome ? `, ${nome}` : ""}, tudo bem? Como posso te ajudar hoje?`,
+        `Olá${nome ? `, ${nome}` : ""}, tudo bem por aí? Me conta o que você precisa.`,
+        `Oi${nome ? `, ${nome}` : ""}! Tudo certo? Em que posso te ajudar?`,
+      ],
+      sem
+    ),
+  naoEntendi: (sem: number) =>
+    variar(
+      [
+        "Desculpa, não consegui entender direito. Você precisa de boleto, informe de rendimentos, reajuste ou dados do contrato? Se for outro assunto, me conta que eu chamo alguém da equipe.",
+        "Hmm, acho que não entendi bem. É sobre boleto, contrato, reajuste ou informe de rendimentos? Se for outra coisa, pode me contar com suas palavras.",
+      ],
+      sem
+    ),
+  pedirDigitos: (nome: string) => `Claro, já te ajudo com isso. Só para confirmar que é você mesmo, ${nome}, pode me mandar os 4 últimos dígitos do CPF ou CNPJ cadastrado?`,
+  digitosErrados: "Hmm, esses números não bateram com o cadastro. Pode conferir e me mandar de novo os 4 últimos dígitos do CPF ou CNPJ?",
+  identidadeOk: (nome: string, sem: number) => variar([`Perfeito, ${nome}, tudo certo.`, `Obrigado, ${nome}, já confirmei aqui.`, `Pronto, ${nome}, confirmado.`], sem),
+  encaminhar: (setor: string, protocolo: string) => `Vou passar o seu atendimento para a equipe de ${setor}, que continua com você por aqui. Seu protocolo é ${protocolo}.`,
+  semBoletos: "Boa notícia: você não tem nenhum boleto em aberto no momento. 🎉",
+  boletos: (n: number, total: string) => `Encontrei ${n} boleto${n > 1 ? "s" : ""} em aberto, somando ${total}. Segue:`,
+}
 
 const INTENCOES_COM_DADOS: Intencao[] = ["segunda_via_boleto", "informe_rendimentos", "reajuste", "contrato"]
 
@@ -69,7 +98,7 @@ function escalar(estado: Estado, ctx: Required<Pick<Contexto, "agora">> & Contex
   return {
     estado: novo,
     respostas: [
-      `${intro ? intro + " " : ""}Vou encaminhar você para a equipe de ${ROTULO_DEPARTAMENTO[departamento]}. Protocolo: ${protocolo}. Em breve alguém continua este atendimento por aqui.`,
+      `${intro ? intro + " " : ""}${TEXTO.encaminhar(ROTULO_DEPARTAMENTO[departamento], protocolo)}`,
     ],
     eventos: [{ tipo: "escalada", departamento, motivo, protocolo }],
   }
@@ -91,7 +120,7 @@ export async function processarMensagem(estadoAtual: Estado, texto: string, ctxE
       const saida = await atender(base, estado.intencaoPendente ?? "desconhecida", texto, ctx)
       return {
         ...saida,
-        respostas: [`Obrigado, ${estado.cliente.nome.split(" ")[0]}! Identidade confirmada.`, ...saida.respostas],
+        respostas: [TEXTO.identidadeOk(primeiroNome(estado.cliente.nome), ctx.agora.getTime()), ...saida.respostas],
         eventos: [{ tipo: "identidade", resultado: "confirmada" }, ...saida.eventos],
       }
     }
@@ -102,7 +131,7 @@ export async function processarMensagem(estadoAtual: Estado, texto: string, ctxE
     }
     return {
       estado: { ...estado, tentativasIdentidade: tentativas },
-      respostas: ["Esses dígitos não conferem. Envie os 4 últimos dígitos do CPF/CNPJ cadastrado."],
+      respostas: [TEXTO.digitosErrados],
       eventos: [{ tipo: "identidade", resultado: "falhou" }],
     }
   }
@@ -126,8 +155,7 @@ export async function processarMensagem(estadoAtual: Estado, texto: string, ctxE
   }
 
   if (intencao === "saudacao") {
-    const nome = estado.cliente ? `, ${estado.cliente.nome.split(" ")[0]}` : ""
-    return { estado, respostas: [`Olá${nome}! Sou a assistente virtual da Colucci. ${MENU}`], eventos }
+    return { estado, respostas: [TEXTO.saudacao(estado.cliente ? primeiroNome(estado.cliente.nome) : undefined, ctx.agora.getTime())], eventos }
   }
 
   if (intencao === "desconhecida") {
@@ -136,7 +164,7 @@ export async function processarMensagem(estadoAtual: Estado, texto: string, ctxE
       const s = escalar({ ...estado, naoEntendidas: n }, ctx, intencao, "nao_entendida")
       return { ...s, eventos: [...eventos, ...s.eventos] }
     }
-    return { estado: { ...estado, naoEntendidas: n }, respostas: [`Não consegui entender bem. ${MENU}`], eventos }
+    return { estado: { ...estado, naoEntendidas: n }, respostas: [TEXTO.naoEntendi(ctx.agora.getTime())], eventos }
   }
 
   const saida = await atender({ ...estado, naoEntendidas: 0 }, intencao, texto, ctx)
@@ -171,7 +199,7 @@ async function atender(estado: Estado, intencao: Intencao, texto: string, ctx: C
     }
     return {
       estado: { ...estado, etapa: "aguardando_confirmacao", cliente: r.dados, intencaoPendente: intencao },
-      respostas: [`Para sua segurança, confirme os 4 últimos dígitos do CPF/CNPJ cadastrado, ${r.dados.nome.split(" ")[0]}.`],
+      respostas: [TEXTO.pedirDigitos(primeiroNome(r.dados.nome))],
       eventos: [],
     }
   }
@@ -189,12 +217,12 @@ async function atender(estado: Estado, intencao: Intencao, texto: string, ctx: C
       const boletos = r.dados as Boleto[]
       const ev: Evento[] = [{ tipo: "ferramenta", nome: "buscar_boletos", ok: true }]
       if (boletos.length === 0) {
-        return { estado, respostas: ["Você não tem boletos em aberto no momento. 🎉"], eventos: [...ev, { tipo: "resolvido_automaticamente" }] }
+        return { estado, respostas: [TEXTO.semBoletos], eventos: [...ev, { tipo: "resolvido_automaticamente" }] }
       }
       const total = boletos.reduce((s, b) => s + b.valor, 0)
       return {
         estado,
-        respostas: [`Encontrei ${boletos.length} boleto(s) em aberto (total ${brl(total)}):`, ...boletos.map(textoBoleto)],
+        respostas: [TEXTO.boletos(boletos.length, brl(total)), ...boletos.map(textoBoleto)],
         eventos: [...ev, { tipo: "resolvido_automaticamente" }],
       }
     }

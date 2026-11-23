@@ -90,6 +90,44 @@ describe("chamarClaude", () => {
   })
 })
 
+describe("auto-correção de parâmetros recusados", () => {
+  it("API recusa `temperature` (400): repete sem ele, sem trocar de modelo e sem gastar retry", async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(resp(400, { error: { type: "invalid_request_error", message: "`temperature` is deprecated for this model." } }))
+      .mockResolvedValueOnce(resp(200, texto("ok")))
+    const r = await chamarClaude({ ...base, model: "m", temperature: 0.3, maxRetries: 0, fetchImpl: f as any })
+    expect(r.texto).toBe("ok")
+    expect(f).toHaveBeenCalledTimes(2)
+    expect("temperature" in JSON.parse(f.mock.calls[0][1].body)).toBe(true)
+    expect("temperature" in JSON.parse(f.mock.calls[1][1].body)).toBe(false)
+  })
+
+  it("`temperature` recusado não é confundido com modelo inválido (não aciona troca de modelo)", async () => {
+    const f = vi.fn().mockResolvedValue(resp(400, { error: { type: "invalid_request_error", message: "temperature is not supported for this model" } }))
+    f.mockResolvedValueOnce(resp(400, { error: { message: "temperature is not supported for this model" } })) // corrigido
+    await expect(chamarClaudeComFallback({ ...base, modelos: ["a", "b"], temperature: 0.3, fetchImpl: f as any })).rejects.toMatchObject({ status: 400, modeloInvalido: false })
+    // modelo "a": 1ª chamada corrige, 2ª falha 400 sem temperature -> erro não retentável e não "modelo inválido": não tenta "b"
+    expect(f).toHaveBeenCalledTimes(2)
+  })
+
+  it("cache_control recusado: repete com system em texto simples", async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(resp(400, { error: { message: "system.0.cache_control: Extra inputs are not permitted" } }))
+      .mockResolvedValueOnce(resp(200, texto("ok")))
+    const r = await chamarClaude({ ...base, model: "m", maxRetries: 0, fetchImpl: f as any })
+    expect(r.texto).toBe("ok")
+    expect(typeof JSON.parse(f.mock.calls[1][1].body).system).toBe("string")
+  })
+
+  it("modelo realmente inexistente continua acionando o fallback", async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(resp(400, { error: { type: "invalid_request_error", message: "invalid model: claude-xyz" } }))
+      .mockResolvedValueOnce(resp(200, texto("ok")))
+    const r = await chamarClaudeComFallback({ ...base, modelos: ["claude-xyz", "claude-ok"], fetchImpl: f as any })
+    expect(r.modelo).toBe("claude-ok")
+  })
+})
+
 describe("chamarClaudeComFallback", () => {
   it("cai para o próximo modelo quando o primeiro não existe", async () => {
     const f = vi.fn()

@@ -36,7 +36,7 @@ describe("atenderMensagem", () => {
     await atenderMensagem(base(repo, { texto: "segunda via do boleto", agora: t0 }))
     repo.conversas[0].estado = sanitizarEstado(repo.conversas[0].estado) // como o banco devolveria
     const r = await atenderMensagem(base(repo, { texto: "8901", agora: new Date(t0.getTime() + 5000) }))
-    expect(r.respostas.join("\n")).toContain("Identidade confirmada")
+    expect(r.respostas.join("\n")).toMatch(/Mariana, (tudo certo|já confirmei|confirmado)|Perfeito, Mariana|Obrigado, Mariana|Pronto, Mariana/)
   })
 
   it("transferida: não repete o aviso ao cliente que insiste; depois de 15 min responde de novo", async () => {
@@ -112,8 +112,14 @@ describe("podeAtuar (trava de segurança)", () => {
     expect(podeAtuar(cfg, provider, "5511988887777", "inst")).toEqual({ pode: false, motivo: "provedor_simulado_so_teste" })
     expect(podeAtuar(cfg, provider, T, "inst").pode).toBe(true)
   })
-  it("número de teste funciona em qualquer instância e com/sem DDI", () => {
-    expect(podeAtuar(cfg, provider, "11999990001", "qualquer").pode).toBe(true)
+  it("número de teste vale nas instâncias escolhidas, com ou sem DDI", () => {
+    expect(podeAtuar(cfg, provider, "11999990001", "inst").pode).toBe(true)
+  })
+  it("número de teste FORA das instâncias escolhidas não atende (evita responder a avisos automáticos de outra instância)", () => {
+    expect(podeAtuar(cfg, provider, T, "outra")).toEqual({ pode: false, motivo: "teste_fora_das_instancias" })
+  })
+  it("sem instâncias escolhidas, número de teste vale em qualquer instância", () => {
+    expect(podeAtuar({ ...cfg, instancias: [] }, provider, T, "qualquer").pode).toBe(true)
   })
   it("provedor real: instância liberada atende cliente real", () => {
     expect(podeAtuar(cfg, { ...provider, nome: "immobillis" }, "5511988887777", "inst").pode).toBe(true)
@@ -152,7 +158,7 @@ describe("tratarMensagemRecebida", () => {
     const registrar = vi.fn().mockResolvedValue(undefined)
     const { d, enviados } = deps(repo, { registrarNoInbox: registrar })
     expect(await tratarMensagemRecebida({ telefone: T, texto: "bom dia", instanceName: "inst" }, d)).toBe(true)
-    expect(enviados.join("")).toContain("assistente virtual")
+    expect(enviados.join("")).toMatch(/tudo (bem|certo)|Em que posso|Me conta/)
     expect(registrar).toHaveBeenCalled()
   })
 

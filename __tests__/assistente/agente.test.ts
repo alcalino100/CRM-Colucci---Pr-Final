@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  nomeApresentacao,
   FERRAMENTAS_AGENTE, RepositorioMemoria, criarMockProvider, estadoInicial, fatosNaoRastreaveis, montarSystemPrompt, atenderComAgente,
   type AgenteDeps, type Estado, type LlmAgente,
 } from "@/lib/assistente"
@@ -159,6 +160,63 @@ describe("modo agente: contexto enviado ao Claude", () => {
   })
 })
 
+describe("dados escritos pela Colucci no prompt do agente", () => {
+  const empresa = "Telefone: (18) 2103-4900. WhatsApp: (18) 99197-6332. CEP: 16015-245. CRECI: 039072-J. Atendimento das 8h00 às 18h00."
+  const resposta = "Nosso telefone é (18) 2103-4900 e o endereço fica no CEP 16015-245."
+
+  it("valem como fonte: o assistente pode informar telefone, CEP e CRECI sem ser barrado", async () => {
+    const r = await rodar(async () => resposta, { texto: "qual o telefone de vocês?", extra: { persona: { instrucoes: empresa } } })
+    expect(r).not.toBeNull()
+    expect(r!.respostas.join(" ")).toContain("2103-4900")
+  })
+
+  it("sem estar no prompt, o mesmo número continua barrado (não é inventado em silêncio)", async () => {
+    expect(await rodar(async () => resposta, { texto: "qual o telefone de vocês?" })).toBeNull()
+  })
+
+  it("mas um número que NÃO está no prompt nem nas ferramentas segue barrado", async () => {
+    expect(await rodar(async () => "Ligue para (18) 3333-9999.", { texto: "telefone?", extra: { persona: { instrucoes: empresa } } })).toBeNull()
+  })
+})
+
+describe("nome de apresentação do agente", () => {
+  it.each([
+    ["Aurora - Atendimento Clientes", "Aurora"],
+    ["Aurora", "Aurora"],
+    ["IA - RELAÇÕES PÚBLICAS", "Assistente Colucci"],
+    ["Novo Agente", "Assistente Colucci"],
+    ["", "Assistente Colucci"],
+    [undefined, "Assistente Colucci"],
+  ])("%s → %s", (entrada, esperado) => expect(nomeApresentacao(entrada as string | undefined)).toBe(esperado))
+})
+
+describe("atendimento humanizado", () => {
+  const prompt = montarSystemPrompt({ estado: estadoInicial(), agora })
+
+  it("o agente é instruído a conversar como pessoa: cumprimentar, perguntar se está bem e o que precisa, sem menu", () => {
+    expect(prompt).toContain("SAUDAÇÃO")
+    expect(prompt).toMatch(/pergunte se está tudo bem e o que ele precisa/)
+    expect(prompt).toMatch(/Nunca use menu, lista numerada ou bolinhas/)
+    expect(prompt).toContain("NATURALIDADE")
+  })
+
+  it("transparência: se perguntarem de verdade, ele não nega ser a assistente virtual, e nunca afirma ser pessoa", () => {
+    expect(prompt).toContain("TRANSPARÊNCIA")
+    expect(prompt).toMatch(/perguntar de verdade se está falando com uma pessoa ou com um robô, responda com sinceridade/)
+    expect(prompt).toMatch(/Nunca afirme ser uma pessoa/)
+  })
+
+  it("o fluxo de regras (sem Claude) também conversa: nada de bolinhas, menu ou frase de robô", async () => {
+    const { processarMensagem } = await import("@/lib/assistente")
+    for (const msg of ["oi", "bom dia", "tudo bem?", "asdf"]) {
+      const r = await processarMensagem(estadoInicial(), msg, { provider, telefone: T, agora })
+      const texto = r.respostas.join(" ")
+      expect(texto).not.toContain("•")
+      expect(texto).not.toMatch(/assistente virtual da Colucci|Identidade confirmada|Posso ajudar com:/)
+    }
+  })
+})
+
 describe("fatosNaoRastreaveis", () => {
   it("aceita fatos presentes nas fontes e acusa os ausentes", () => {
     expect(fatosNaoRastreaveis("Vence em 10/11/2026: R$ 2.800,00", ["Vencimento: 10/11/2026\nValor: R$ 2.800,00"])).toEqual([])
@@ -193,8 +251,8 @@ describe("atenderMensagem com agente", () => {
     const repo = new RepositorioMemoria()
     const r = await base(repo, agenteDe(async () => "Seu boleto vence em 01/01/2030 e custa R$ 123,45."), "bom dia")
     expect(r.respondeu).toBe(true)
-    expect(r.respostas.join(" ")).toContain("assistente virtual da Colucci")
-    expect(r.eventos).toContainEqual({ tipo: "ia", funcao: "agente", ok: false })
+    expect(r.respostas.join(" ")).toMatch(/tudo (bem|certo)|Em que posso|Me conta/)
+    expect(r.eventos).toContainEqual(expect.objectContaining({ tipo: "ia", funcao: "agente", ok: false, erro: expect.stringContaining("conferência") }))
   })
 
   it("Claude fora do ar: segue 100% pelas regras", async () => {

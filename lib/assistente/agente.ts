@@ -71,8 +71,14 @@ export const FERRAMENTAS_AGENTE: ClaudeTool[] = [
   },
 ]
 
+/** "Aurora - Atendimento Clientes" → "Aurora". Nomes genéricos demais ("IA - Relações Públicas") caem no padrão. */
+export function nomeApresentacao(nome?: string): string {
+  const base = (nome ?? "").split(" - ")[0].trim()
+  return base.length >= 3 && !/^(ia|ai|bot|agente|novo agente)$/i.test(base) ? base : "Assistente Colucci"
+}
+
 export function montarSystemPrompt(p: { persona?: PersonaAgente; estado: Estado; agora: Date; capacidades?: Partial<MapaCapacidades> }): string {
-  const nome = (p.persona?.nome ?? "").split(" - ")[0].trim() || "Assistente Colucci"
+  const nome = nomeApresentacao(p.persona?.nome)
   const desligadas = Object.entries(p.capacidades ?? {}).filter(([, v]) => v === false).map(([k]) => k)
   const situacao = p.estado.etapa === "identificado" && p.estado.cliente
     ? `Cliente JÁ identificado nesta conversa: ${p.estado.cliente.nome} (${p.estado.cliente.perfil}). Não peça os dígitos de novo.`
@@ -91,6 +97,9 @@ export function montarSystemPrompt(p: { persona?: PersonaAgente; estado: Estado;
     "8. Você só consulta. Não altera cadastro, não negocia, não emite 2ª via fora do que as ferramentas entregam.",
     "",
     "ESTILO: português do Brasil, acolhedor, claro e direto, como uma atendente atenciosa. Mensagens curtas (até 3 frases por bloco), no máximo 1 emoji. Datas no formato dd/mm/aaaa.",
+    "NATURALIDADE: converse como uma pessoa conversaria no WhatsApp. Reaja ao que o cliente disse antes de seguir ('Claro', 'Entendi', 'Poxa, que chato isso'). Varie as palavras e as aberturas entre mensagens; nunca repita a mesma frase pronta. Use o primeiro nome do cliente, de vez em quando e sem exagero, quando já souber. Nunca use menu, lista numerada ou bolinhas para oferecer opções: pergunte de forma aberta.",
+    "SAUDAÇÃO: quando o cliente só cumprimentar ('oi', 'bom dia', 'tudo bem?'), cumprimente de volta com calor, pergunte se está tudo bem e o que ele precisa, em UMA mensagem curta. Exemplos do tom (varie, não copie): 'Oi, tudo bem? Como posso te ajudar hoje?' / 'Bom dia! Tudo certo por aí? Me conta o que você precisa.'",
+    "TRANSPARÊNCIA: você se apresenta pelo seu nome e conversa de forma natural, sem falar em 'sistema', 'ferramenta' ou 'inteligência artificial' por iniciativa própria. Mas, se o cliente perguntar de verdade se está falando com uma pessoa ou com um robô, responda com sinceridade e leveza que é a assistente virtual da Colucci, e que a equipe está à disposição se ele preferir falar com alguém. Nunca afirme ser uma pessoa.",
     `Hoje é ${dataBR(p.agora.toISOString())} (${p.agora.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" })}).`,
     "",
     `SITUAÇÃO: ${situacao}`,
@@ -133,6 +142,8 @@ export async function atenderComAgente(p: {
   agora: Date
   capacidades?: Partial<MapaCapacidades>
   gerarProtocolo?: (agora: Date) => string
+  /** Recebe o MOTIVO quando devolve null (Claude falhou ou a resposta não passou na conferência). Nunca contém a chave. */
+  registrarErro?: (motivo: string) => void
 }): Promise<(Saida & { tokens: number; modelo: string }) | null> {
   let estado: Estado = { ...p.estado }
   const eventos: Evento[] = []
@@ -257,17 +268,27 @@ export async function atenderComAgente(p: {
       system: montarSystemPrompt({ persona: p.agente.persona, estado, agora: p.agora, capacidades: p.capacidades }),
       messages, tools: FERRAMENTAS_AGENTE, onToolUse, maxTokens: 600, timeoutMs: 15_000, maxRounds: 5,
     })
-  } catch {
+  } catch (e) {
+    p.registrarErro?.(`Claude falhou: ${e instanceof Error ? e.message : String(e)}`.slice(0, 220))
     return null
   }
 
   let texto = r.texto.trim()
   if (!texto && estado.etapa === "transferido") texto = `Vou encaminhar você para a equipe de ${ROTULO_DEPARTAMENTO[estado.departamento ?? "administrativo"]}. Protocolo: ${estado.protocolo}. Em breve alguém continua este atendimento por aqui.`
-  if (!texto || texto.length > 1800) return null
+  if (!texto || texto.length > 1800) {
+    p.registrarErro?.(!texto ? "Claude devolveu resposta vazia" : "resposta longa demais")
+    return null
+  }
 
   // Conferência anti-invenção: todo fato da resposta precisa existir nas fontes do turno.
-  const fontesTotais = [...fontes, p.texto, ...p.historico.map((m) => m.conteudo), estado.protocolo ?? "", dataBR(p.agora.toISOString()), String(p.agora.getFullYear())]
-  if (fatosNaoRastreaveis(texto, fontesTotais).length) return null
+  // O que a própria Colucci escreveu no prompt do agente (telefones, endereço, CRECI, horários) também é fonte legítima.
+  const textoDaEmpresa = [p.agente.persona?.system, p.agente.persona?.instrucoes, p.agente.persona?.voz].filter(Boolean).join("\n")
+  const fontesTotais = [...fontes, textoDaEmpresa, p.texto, ...p.historico.map((m) => m.conteudo), estado.protocolo ?? "", dataBR(p.agora.toISOString()), String(p.agora.getFullYear())]
+  const inventados = fatosNaoRastreaveis(texto, fontesTotais)
+  if (inventados.length) {
+    p.registrarErro?.(`conferência bloqueou fato sem fonte: ${inventados.slice(0, 3).join(", ")}`.slice(0, 220))
+    return null
+  }
   // Transferiu mas a resposta não traz o protocolo: acrescenta (o cliente precisa dele).
   if (estado.etapa === "transferido" && estado.protocolo && !texto.includes(estado.protocolo)) texto += `\nProtocolo: ${estado.protocolo}`
 

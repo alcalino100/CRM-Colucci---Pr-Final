@@ -1,4 +1,5 @@
-import { ok } from "@/lib/api/response"
+import { exigirGestor } from "@/lib/auth/sessao"
+import { fail, ok } from "@/lib/api/response"
 import { atendimentosDemo } from "@/lib/assistente/demo-data"
 import { repositorioSupabase, tabelaAusente } from "@/lib/assistente/repositorio-supabase"
 import type { StatusConversa } from "@/lib/assistente/repositorio"
@@ -11,6 +12,8 @@ const STATUS: StatusConversa[] = ["ativa", "resolvida_ia", "transferida", "human
 
 /** Lista de atendimentos (telefone sempre mascarado). Sem a migration aplicada, devolve demonstração sinalizada. */
 export async function GET(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return fail(auth.erro, auth.status)
   const url = new URL(req.url)
   const s = url.searchParams.get("status") as StatusConversa | null
   const limite = Math.min(Math.max(Number(url.searchParams.get("limite")) || 50, 1), 200)

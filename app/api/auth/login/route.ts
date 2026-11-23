@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { assinarSessao, cookieDaSessao } from "@/lib/auth/sessao"
 
 export async function POST(req: NextRequest) {
   const { email, senha } = await req.json().catch(() => ({ email: "", senha: "" }))
@@ -24,7 +25,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 })
   }
 
-  return NextResponse.json({
+  // Sessão assinada (cookie HttpOnly) para as rotas que exigem gestor. Aditivo: o restante do login não muda.
+  const token = assinarSessao({ id: data.id, role: data.role })
+  const resposta = NextResponse.json({
     ok: true,
     user: {
       id: data.id,
@@ -35,4 +38,6 @@ export async function POST(req: NextRequest) {
       criadoEm: data.criado_em,
     },
   })
+  if (token) resposta.headers.append("Set-Cookie", cookieDaSessao(token))
+  return resposta
 }

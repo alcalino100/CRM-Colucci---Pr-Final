@@ -57,6 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   function logout() {
     setUser(null)
     localStorage.removeItem(KEY)
+    // Apaga também a sessão do servidor (cookie). Best-effort: sair nunca pode falhar por causa disso.
+    fetch("/api/auth/logout", { method: "POST" }).catch(() => {})
   }
 
   return <Ctx.Provider value={{ user, loading, login, logout }}>{children}</Ctx.Provider>

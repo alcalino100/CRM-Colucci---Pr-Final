@@ -51,6 +51,8 @@ export type Indicadores = {
   minutosEconomizados: number
   satisfacao: number | null
   porIntencao: { intencao: Intencao; total: number }[]
+  /** Saúde da IA: em quantos atendimentos o Claude respondeu e em quantos caiu para o fluxo de regras (com o último motivo). */
+  ia: { tentativas: number; ok: number; falhas: number; ultimoErro: string | null }
 }
 
 /** Janela em que uma conversa continua "a mesma": depois disso, o cliente começa uma nova. */
@@ -61,7 +63,8 @@ export type SalvarTurno = {
   estado: Estado
   status: StatusConversa
   intencao?: Intencao
-  mensagens: { papel: MensagemRegistro["papel"]; conteudo: string }[]
+  /** `em`: horário da mensagem (cliente = chegada; assistente = fim da resposta). Sem ele, usa o horário do turno. */
+  mensagens: { papel: MensagemRegistro["papel"]; conteudo: string; em?: Date }[]
   eventos: Evento[]
   /** false = turno "em silêncio" (só registra): não renova o prazo da conversa nem a data da última atividade. */
   renovar?: boolean
@@ -76,6 +79,8 @@ export interface RepositorioAssistente {
   salvarTurno(conversaId: string, turno: SalvarTurno, agora: Date): Promise<void>
   /** Últimas mensagens da conversa (ordem cronológica), para dar memória ao agente. */
   historico(conversaId: string, limite: number): Promise<{ papel: MensagemRegistro["papel"]; conteudo: string }[]>
+  /** Quantas respostas o assistente deu nesta conversa desde `desde` (trava anti-loop). */
+  contarRespostasAssistente(conversaId: string, desde: Date): Promise<number>
   /** Últimas mensagens que o assistente enviou (para reconhecer o eco do próprio envio). */
   ultimasMensagensAssistente(conversaId: string, limite: number): Promise<string[]>
   /** Humano respondeu pelo WhatsApp: o assistente cala nessa conversa. */
@@ -121,8 +126,12 @@ export class RepositorioMemoria implements RepositorioAssistente {
     if (!c) return
     Object.assign(c, { estado: t.estado, status: t.status, intencaoAtual: t.intencao ?? c.intencaoAtual, atualizadoEm: agora.toISOString(), ...(t.renovar === false ? {} : { ultimaMsgEm: agora.toISOString() }) })
     const iso = agora.toISOString()
-    this.mensagens.set(id, [...(this.mensagens.get(id) ?? []), ...t.mensagens.map((m) => ({ ...m, criadoEm: iso }))])
+    this.mensagens.set(id, [...(this.mensagens.get(id) ?? []), ...t.mensagens.map((m) => ({ papel: m.papel, conteudo: m.conteudo, criadoEm: (m.em ?? agora).toISOString() }))])
     this.eventos.set(id, [...(this.eventos.get(id) ?? []), ...t.eventos.map((e) => ({ tipo: e.tipo, dados: e, criadoEm: iso }))])
+  }
+
+  async contarRespostasAssistente(id: string, desde: Date) {
+    return (this.mensagens.get(id) ?? []).filter((m) => m.papel === "assistente" && new Date(m.criadoEm) >= desde).length
   }
 
   async historico(id: string, limite: number) {
@@ -147,6 +156,7 @@ export class RepositorioMemoria implements RepositorioAssistente {
     const cs = this.conversas.filter((c) => new Date(c.criadoEm) >= desde)
     const ids = new Set(cs.map((c) => c.id))
     const msgs = new Map([...this.mensagens].filter(([k]) => ids.has(k)))
-    return calcularIndicadores(cs, msgs)
+    const evIa = [...this.eventos].filter(([k]) => ids.has(k)).flatMap(([, v]) => v).filter((e) => e.tipo === "ia").map((e) => e.dados as Extract<Evento, { tipo: "ia" }>)
+    return calcularIndicadores(cs, msgs, evIa)
   }
 }

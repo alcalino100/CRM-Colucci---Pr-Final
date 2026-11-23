@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Clock, Gauge, MessagesSquare, Smile, Timer, UserRoundCheck } from "lucide-react"
+import { AlertTriangle, Bot, Clock, Gauge, MessagesSquare, Smile, Timer, UserRoundCheck } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Select } from "@/components/ui/primitives"
 import { ROTULO_INTENCAO, type Indicadores as TIndicadores } from "@/lib/assistente"
 import { FonteBadge } from "./FonteBadge"
@@ -49,6 +49,16 @@ export function Indicadores() {
             <Kpi icone={Smile} rotulo="Satisfação" valor={D.satisfacao === null ? "—" : D.satisfacao.toLocaleString("pt-BR")} detalhe={D.satisfacao === null ? "pesquisa ainda não ativada" : "nota média de 1 a 5"} />
             <Kpi icone={UserRoundCheck} rotulo="Transferências" valor={String(D.transferidos)} />
           </div>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2"><Bot className="size-4" /> Saúde da IA (Claude)</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {D.ia.tentativas === 0
+                ? <p className="text-muted-foreground">Nenhuma resposta conduzida pela IA no período.</p>
+                : <p><strong>{D.ia.ok}</strong> de <strong>{D.ia.tentativas}</strong> respostas foram conduzidas pelo Claude ({Math.round((D.ia.ok / D.ia.tentativas) * 100)}%). Nas outras {D.ia.falhas}, o atendimento seguiu pelo fluxo de regras.</p>}
+              {D.ia.falhas > 0 && D.ia.ultimoErro && <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Último motivo: {D.ia.ultimoErro}</p>}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-2"><CardTitle>Assuntos mais frequentes</CardTitle></CardHeader>
             <CardContent className="space-y-3">

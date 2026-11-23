@@ -23,6 +23,7 @@ export const indicadoresDemo = (): Indicadores => ({
   tempoMedioRespostaSeg: 4,
   minutosEconomizados: 1240,
   satisfacao: 4.6,
+  ia: { tentativas: 96, ok: 91, falhas: 5, ultimoErro: null as string | null },
   porIntencao: [
     { intencao: "segunda_via_boleto", total: 52 },
     { intencao: "informe_rendimentos", total: 21 },

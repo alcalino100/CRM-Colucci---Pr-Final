@@ -63,7 +63,7 @@ describe("webhook × Assistente Virtual", () => {
     assistente.mockResolvedValue(true)
     await handleMessageUpsert(payload(interno))
     expect(inserts.filter((i) => i.table === "whatsapp_mensagens")).toHaveLength(1)
-    expect(assistente).toHaveBeenCalledWith({ telefone: interno, texto: "oi", instanceName: "patricia2" }, { exigirTeste: true })
+    expect(assistente).toHaveBeenCalledWith(expect.objectContaining({ telefone: interno, texto: "oi", instanceName: "patricia2", mensagemId: expect.any(String) }), { exigirTeste: true })
     expect(patricia).not.toHaveBeenCalled()
     expect(criarLead).not.toHaveBeenCalled()
   })
@@ -78,7 +78,7 @@ describe("webhook × Assistente Virtual", () => {
   it("contato normal: assistente assume e a IA de leads não responde", async () => {
     assistente.mockResolvedValue(true)
     await handleMessageUpsert(payload(normal))
-    expect(assistente).toHaveBeenCalledWith({ telefone: normal, texto: "oi", instanceName: "patricia2" }, {})
+    expect(assistente).toHaveBeenCalledWith(expect.objectContaining({ telefone: normal, texto: "oi", instanceName: "patricia2", mensagemId: expect.any(String) }), {})
     expect(patricia).not.toHaveBeenCalled()
   })
 
