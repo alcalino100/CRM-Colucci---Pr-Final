@@ -218,7 +218,7 @@ export function ConversaView(){
                         </p>
                       )}
                       {m.tipoMidia && <MidiaBolha midia={{ tipo: m.tipoMidia, url: m.midiaUrl, nome: m.nomeArquivo }} />}
-                      {m.content && <span className="whitespace-pre-wrap break-words">{m.content}</span>}
+                      {m.content && !(m.tipoMidia && /^\[(m[ií]dia|[aá]udio|imagem)\]$/i.test(String(m.content).trim())) && <span className="whitespace-pre-wrap break-words">{m.content}</span>}
                       <span className={cn("float-right ml-3 mt-1 flex items-center gap-0.5 text-[11px] leading-none", minha ? "text-slate-500 dark:text-slate-300/80" : "text-slate-500 dark:text-slate-400")}>
                         {fmtHora(m.timestamp)}
                         {minha && <CheckCheck className="size-3.5 text-sky-500" aria-label="Enviada" />}
