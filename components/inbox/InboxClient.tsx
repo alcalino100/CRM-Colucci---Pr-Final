@@ -234,16 +234,16 @@ export function InboxClient(){
           <span className="ml-auto flex items-center gap-2">Instância: <InstanceSelector /></span>
         </div>
       )}
-    <div className="flex flex-col gap-4 lg:h-[calc(100vh-11rem)] lg:flex-row">
+    <div className="flex min-h-[70vh] flex-col overflow-hidden rounded-xl border border-slate-200 shadow-sm dark:border-slate-800 lg:h-[calc(100vh-11rem)] lg:flex-row">
       {/* Desktop: 3 colunas | Mobile: drawer Inbox quando conversa aberta */}
-      <div className={`${selectedId ? "hidden md:flex" : "flex"} w-full md:w-[280px] shrink-0`}>
+      <div className={`${selectedId ? "hidden md:flex" : "flex"} w-full md:w-[340px] shrink-0 md:border-r md:border-slate-200 md:dark:border-slate-800`}>
         <PanelBoundary nome="da lista"><InboxList /></PanelBoundary>
       </div>
       <div className={`${!selectedId ? "hidden md:flex" : "flex"} min-w-0 flex-1`}>
         <PanelBoundary nome="da conversa"><ConversaView /></PanelBoundary>
       </div>
       {/* Widget: esconde em mobile quando conversa aberta, mostra em desktop sempre */}
-      <div className={`${selectedId ? "hidden lg:flex" : "flex"} w-full lg:w-[240px] shrink-0`}>
+      <div className={`${selectedId ? "hidden lg:flex" : "flex"} w-full lg:w-[280px] shrink-0 lg:border-l lg:border-slate-200 lg:dark:border-slate-800`}>
         <PanelBoundary nome="lateral"><WidgetPanel /></PanelBoundary>
       </div>
     </div>

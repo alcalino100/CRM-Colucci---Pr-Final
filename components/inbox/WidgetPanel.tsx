@@ -39,6 +39,16 @@ export function WidgetPanel(){
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (!conv) { setSugestoes([]); return }
+    let vivo = true
+    fetch(`/api/whatsapp/chat/sugestao?telefone=${encodeURIComponent(conv.telefone)}`)
+      .then((r) => r.json())
+      .then((j) => { if (vivo && j.ok) setSugestoes(j.sugestoes ?? []) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [conv?.id])
+
   if(!conv){
     const statusPeso: Record<string,number> = { aguardando_resposta:0, em_follow_up:1, respondido:2 }
     const prioritarios = [...conversas].sort((a,b)=>{
@@ -166,15 +176,6 @@ export function WidgetPanel(){
     }finally{ setAcaoIniciando(null) }
   }
 
-  useEffect(() => {
-    if (!conv) { setSugestoes([]); return }
-    let vivo = true
-    fetch(`/api/whatsapp/chat/sugestao?telefone=${encodeURIComponent(conv.telefone)}`)
-      .then((r) => r.json())
-      .then((j) => { if (vivo && j.ok) setSugestoes(j.sugestoes ?? []) })
-      .catch(() => {})
-    return () => { vivo = false }
-  }, [conv?.id])
 
   async function agirSugestao(s: Sugestao, acao: "enviar" | "descartar") {
     if (!conv || sugAgindo) return
@@ -246,7 +247,7 @@ export function WidgetPanel(){
   }
 
   return (
-    <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[260px]">
+    <div className="flex h-full w-full flex-col gap-3 overflow-y-auto bg-[#f0f2f5] p-3 dark:bg-[#0b141a]">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-2 font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Lead Details</h3>
         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{conv.leadName}</p>
