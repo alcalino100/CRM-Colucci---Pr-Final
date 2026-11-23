@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,7 +10,7 @@ const VERSAO = process.env.META_API_VERSION || "v26.0"
 const BASE = `https://graph.facebook.com/${VERSAO}`
 
 function db() {
-  return createClient(SUPABASE_URL, SUPABASE_KEY)
+  return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY)
 }
 
 async function resolveToken(): Promise<{ token: string | null; source: string }> {

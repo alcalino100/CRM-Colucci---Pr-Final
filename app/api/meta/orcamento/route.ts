@@ -4,7 +4,8 @@
 // POST → atualiza a configuração (somente gestor ativo).
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,7 +23,7 @@ const DEFAULTS = {
 }
 
 function db() {
-  return createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
 }
 
 // Mesmo fallback do /api/meta: meta_conexao (OAuth) → env → mock

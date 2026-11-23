@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
-function db(){ return createClient(SUPABASE_URL, SUPABASE_KEY) }
+function db(){ return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY) }
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

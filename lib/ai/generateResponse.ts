@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { decryptToken } from "@/lib/encryption"
 import { AI_AGENTS_COLUMNS } from "@/lib/supabase/projections"
 import OpenAI from "openai"
@@ -7,7 +8,7 @@ import { chamarClaudeComFallback, CLAUDE_MODELO_PADRAO, CLAUDE_MODELOS_FALLBACK 
 
 let _aiDb: any = null
 function db(): any {
-  if(!_aiDb) _aiDb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  if(!_aiDb) _aiDb = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
   return _aiDb
 }
 

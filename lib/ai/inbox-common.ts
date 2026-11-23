@@ -1,11 +1,12 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
 let _inboxDb: SupabaseClient | null = null
 
 export function db(): SupabaseClient {
   if (!_inboxDb) {
-    _inboxDb = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    _inboxDb = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, {
       auth: { persistSession: false },
     })
   }

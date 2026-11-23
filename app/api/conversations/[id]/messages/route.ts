@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { CONVERSATIONS_IA_COLUMNS, MESSAGES_IA_COLUMNS } from "@/lib/supabase/projections"
 import { generateAIResponse } from "@/lib/ai/generateResponse"
 import { logger } from "@/lib/logger"
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 function db() {
-  return createClient(SUPABASE_URL, SUPABASE_KEY)
+  return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY)
 }
 
 // Lista mensagens da conversa (usado por telas de auditoria/teste).

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { NOTIFICACOES_COLUMNS } from "@/lib/supabase/projections"
 
 type Payload = {
@@ -14,7 +15,7 @@ type Payload = {
   agendadaPara?: string | null
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
 
 function fail(status: number, code: string, error: string, details?: string) {
   return NextResponse.json({ ok: false, code, error, details }, { status })

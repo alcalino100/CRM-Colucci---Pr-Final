@@ -7,7 +7,8 @@
 // - ?clear_logs=1: apaga o histórico de meta_event_logs antes de enviar (limpa e grava logs novos).
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { resolveMetaToken, metaPixelId, buildPurchaseEvent, sendMetaEvents, persistMetaEventLog } from "@/lib/meta/capi"
 
 export const runtime = "nodejs"
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
   const limparLogs = url.searchParams.get("clear_logs") === "1"
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY)
 
     // Apaga o histórico antigo de envios antes de gravar os novos (opcional).
     if (limparLogs) {

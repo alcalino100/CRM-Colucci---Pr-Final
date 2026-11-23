@@ -2,7 +2,8 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
     const expiresIn = Number(j2.expires_in || 60 * 86400)
     const expiraEm = new Date(Date.now() + expiresIn * 1000).toISOString()
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY)
     await supabase.from("meta_conexao").upsert({ id: 1, access_token: j2.access_token, token_expira_em: expiraEm, atualizado_em: new Date().toISOString() })
 
     return NextResponse.redirect(new URL("/meta-ads?connected=1", req.url))

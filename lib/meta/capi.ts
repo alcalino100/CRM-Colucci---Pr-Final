@@ -2,7 +2,8 @@
 // Usados por /api/meta/events (fechamento em tempo real) e /api/meta/backfill (leads já fechados).
 import { createHash } from "crypto"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
 const VERSAO = process.env.META_API_VERSION || "v21.0"
 export const BASE = `https://graph.facebook.com/${VERSAO}`
@@ -166,7 +167,7 @@ export async function sendMetaEvents(token: string, pixelId: string, events: unk
 
 let _logSupabase: ReturnType<typeof createClient> | null = null
 function logDb() {
-  if (!_logSupabase) _logSupabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  if (!_logSupabase) _logSupabase = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
   return _logSupabase
 }
 

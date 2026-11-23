@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 function db() {
-  return createClient(SUPABASE_URL, SUPABASE_KEY)
+  return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY)
 }
 
 async function ensureKB(aiId: string): Promise<string> {

@@ -14,10 +14,11 @@ export const maxDuration = 60
 const VERSAO = process.env.META_API_VERSION || "v26.0"
 const BASE = `https://graph.facebook.com/${VERSAO}`
 
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
 function db() {
-  return createClient(SUPABASE_URL, SUPABASE_KEY)
+  return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY)
 }
 
 // ---------- Token: meta_conexao (OAuth, permite trocar no futuro) → env → mock ----------
