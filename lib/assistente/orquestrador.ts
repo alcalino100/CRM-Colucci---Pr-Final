@@ -83,6 +83,14 @@ export const TEXTO = {
   digitosErrados: "Hmm, esses números não bateram com o cadastro. Pode conferir e me mandar de novo os 4 últimos dígitos do CPF ou CNPJ?",
   identidadeOk: (nome: string, sem: number) => variar([`Perfeito, ${nome}, tudo certo.`, `Obrigado, ${nome}, já confirmei aqui.`, `Pronto, ${nome}, confirmado.`], sem),
   encaminhar: (setor: string, protocolo: string) => `Vou passar o seu atendimento para a equipe de ${setor}, que continua com você por aqui. Seu protocolo é ${protocolo}.`,
+  jaEncaminhado: (protocolo: string, sem: number) =>
+    variar(
+      [
+        `Seu atendimento já está com a nossa equipe, protocolo ${protocolo}. Assim que alguém estiver disponível, continua com você por aqui.`,
+        `Já passei o seu caso para a equipe, protocolo ${protocolo}. Em breve alguém te responde por aqui mesmo.`,
+      ],
+      sem
+    ),
   semBoletos: "Boa notícia: você não tem nenhum boleto em aberto no momento. 🎉",
   boletos: (n: number, total: string) => `Encontrei ${n} boleto${n > 1 ? "s" : ""} em aberto, somando ${total}. Segue:`,
 }
@@ -109,7 +117,7 @@ export async function processarMensagem(estadoAtual: Estado, texto: string, ctxE
   const estado = estadoAtual
 
   if (estado.etapa === "transferido") {
-    return { estado, respostas: [`Seu atendimento já foi encaminhado à equipe (protocolo ${estado.protocolo}). Em breve alguém responde por aqui.`], eventos: [] }
+    return { estado, respostas: [TEXTO.jaEncaminhado(estado.protocolo ?? "", ctxEntrada.agora?.getTime() ?? Date.now())], eventos: [] }
   }
 
   // --- Confirmação de identidade (últimos 4 dígitos do CPF/CNPJ) ---

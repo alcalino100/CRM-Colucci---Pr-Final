@@ -8,7 +8,7 @@ import { normalizar } from "./intencoes"
 import { statusAposTurno, type ConfigAssistente, type RepositorioAssistente } from "./repositorio"
 
 /** Depois de encaminhada, o cliente que insiste não recebe o mesmo aviso de novo antes disso. */
-export const SILENCIO_APOS_TRANSFERENCIA_MIN = 15
+export const SILENCIO_APOS_TRANSFERENCIA_MIN = 3
 
 /** Trava anti-loop (ex.: outro robô respondendo ao assistente): passou disso, o assistente cala e chama a equipe. */
 export const LIMITE_RESPOSTAS = 12
@@ -47,6 +47,11 @@ export async function atenderMensagem(p: {
   /** Modo agente (Claude conduz a conversa). Se falhar ou não passar na conferência, cai para o fluxo por regras. */
   agente?: AgenteDeps | null
   gerarProtocolo?: (agora: Date) => string
+  /**
+   * Chamado só quando o assistente VAI responder (depois das checagens de silêncio), antes de gerar a resposta.
+   * É aqui que o WhatsApp mostra "digitando...": antes, aparecia mesmo quando ele decidia ficar em silêncio.
+   */
+  antesDeGerar?: () => Promise<void>
 }): Promise<ResultadoAtendimento> {
   const agora = p.agora ?? new Date()
   const relogio = p.relogio ?? (() => new Date())
@@ -76,6 +81,8 @@ export async function atenderMensagem(p: {
   }
   // Já encaminhado há pouco: não repete o aviso a cada mensagem.
   if (conv.estado.etapa === "transferido" && agora.getTime() - new Date(conv.ultimaMsgEm).getTime() < SILENCIO_APOS_TRANSFERENCIA_MIN * 60_000) return silencioso()
+
+  if (p.antesDeGerar) await p.antesDeGerar().catch(() => {})
 
   // 1) MODO AGENTE: o Claude responde, com ferramentas e conferência de fatos.
   let saidaAgente: Awaited<ReturnType<typeof atenderComAgente>> = null

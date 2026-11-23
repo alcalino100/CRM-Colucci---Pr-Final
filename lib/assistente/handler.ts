@@ -38,6 +38,16 @@ export const ehMensagemAutomatica = (texto: string) =>
 /** Quanto uma pessoa levaria para digitar: ~35 ms por caractere, entre 0,9 s e 4 s. Mensagens saindo todas de uma vez denunciam o robô. */
 export const atrasoDigitacao = (texto: string) => Math.min(4000, Math.max(900, 500 + texto.length * 35))
 
+/**
+ * Mensagens "seguidas" são as dos últimos 60 s, depois da última resposta. Sem esse teto, mensagens antigas
+ * que ficaram sem resposta (silêncio pós-transferência) grudavam em toda conversa nova ("ok\noi\noi\noi").
+ */
+export function janelaRajada(ultimaRespostaIso: string | undefined, agoraMs = Date.now()): string {
+  const piso = agoraMs - 60_000
+  const ultima = ultimaRespostaIso ? new Date(ultimaRespostaIso).getTime() : 0
+  return new Date(Math.max(piso, ultima)).toISOString()
+}
+
 const mesmoTelefone = (a: string, b: string) => !!a && !!b && normalizePhone(a) === normalizePhone(b)
 
 /** Pode o assistente atuar neste telefone/instância? Trava única, usada para mensagens do cliente e do humano. */
@@ -86,8 +96,10 @@ export async function tratarMensagemRecebida(
     }
     const ia = await d.resolverIa(config).catch(() => null)
     const agente = d.resolverAgente ? await d.resolverAgente(config).catch(() => null) : null
-    if (d.presenca) await d.presenca(p.instanceName, p.telefone).catch(() => {})
-    const r = await atenderMensagem({ repo: d.repo, provider: d.provider, config, telefone: p.telefone, instanceName: p.instanceName, texto, agora, ia, agente })
+    const r = await atenderMensagem({
+      repo: d.repo, provider: d.provider, config, telefone: p.telefone, instanceName: p.instanceName, texto, agora, ia, agente,
+      antesDeGerar: d.presenca ? () => d.presenca!(p.instanceName, p.telefone) : undefined,
+    })
     for (let i = 0; i < r.respostas.length; i++) {
       // "digitando..." e uma pausa proporcional ao tamanho, antes de cada mensagem
       if (d.presenca) await d.presenca(p.instanceName, p.telefone).catch(() => {})

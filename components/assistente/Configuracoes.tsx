@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Loader2, Plug, Save, ShieldCheck, Sparkles, Zap } from "lucide-react"
+import { AlertTriangle, Loader2, Plug, RotateCcw, Save, ShieldCheck, Sparkles, Zap } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, Input, Label, Select } from "@/components/ui/primitives"
 import { Button } from "@/components/ui/button"
 import { CAPACIDADES, MAX_NAO_ENTENDIDAS, MAX_TENTATIVAS_IDENTIDADE, type ConfigAssistente } from "@/lib/assistente"
@@ -19,6 +19,7 @@ export function Configuracoes() {
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [testando, setTestando] = useState(false)
+  const [reiniciando, setReiniciando] = useState(false)
   const [diag, setDiag] = useState<{ conectado: boolean; modelo?: string; ms?: number; motivo?: string; status?: number | null; testes?: { origem: string; emUso: boolean; conectado: boolean; modelo?: string; ms?: number; motivo?: string; status?: number | null }[] } | null>(null)
 
   useEffect(() => { if (dados) { setCfg(dados.config); setTestes(dados.config.numerosTeste.join("\n")) } }, [dados])
@@ -38,6 +39,26 @@ export function Configuracoes() {
     } catch (e) {
       setMsg({ tipo: "erro", texto: e instanceof Error ? e.message : "Falha ao salvar" })
     } finally { setSalvando(false) }
+  }
+
+  async function reiniciarTestes() {
+    const numeros = dados?.config.numerosTeste ?? []
+    if (numeros.length === 0) { setMsg({ tipo: "erro", texto: "Salve primeiro ao menos um número de teste." }); return }
+    if (!window.confirm(`Recomeçar do zero a conversa de ${numeros.length === 1 ? "o número de teste" : `${numeros.length} números de teste`}?\n\nNa próxima mensagem, o atendimento começa como se fosse a primeira vez.`)) return
+    setReiniciando(true); setMsg(null)
+    try {
+      let total = 0
+      for (const telefone of numeros) {
+        const r = await fetch("/api/assistente/reiniciar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ telefone }) })
+        const j = await r.json()
+        if (r.status === 401) throw new Error("Sua sessão precisa ser renovada: saia do CRM e entre novamente.")
+        if (!j.ok) throw new Error(j.erro || "Falha ao reiniciar")
+        total += j.reiniciadas ?? 0
+      }
+      setMsg({ tipo: "ok", texto: total > 0 ? `Pronto: ${total} conversa(s) reiniciada(s). Mande uma mensagem para testar do zero.` : "Não havia conversa aberta: o próximo \"oi\" já começa do zero." })
+    } catch (e) {
+      setMsg({ tipo: "erro", texto: e instanceof Error ? e.message : "Falha ao reiniciar" })
+    } finally { setReiniciando(false) }
   }
 
   async function testarClaude() {
@@ -80,6 +101,7 @@ export function Configuracoes() {
               <div>
                 <Label>Números de teste (um por linha)</Label>
                 <textarea value={testes} onChange={(e) => setTestes(e.target.value)} rows={3} placeholder="5511999990001" className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30" />
+                <div className="mt-2"><Button size="sm" variant="outline" onClick={reiniciarTestes} disabled={reiniciando || semBanco}>{reiniciando ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />} Recomeçar a conversa dos números de teste do zero</Button>{msg && <p className={`mt-2 text-xs ${msg.tipo === "ok" ? "text-emerald-700" : "text-red-700"}`}>{msg.texto}</p>}</div>
                 <p className="mt-1 text-xs text-muted-foreground">Estes números são atendidos nas instâncias marcadas abaixo (ou em qualquer instância, se nenhuma estiver marcada). Comece por aqui.</p>
               </div>
 
