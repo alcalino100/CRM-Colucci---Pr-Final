@@ -22,40 +22,48 @@ function chaveDoAgente(a: { api_token?: string | null }): string | undefined {
 }
 
 /**
- * Reaproveita a IA que já está conectada no CRM, nesta ordem:
- *  1) agente escolhido na config (usa chave + modelo + tom de voz + base de conhecimento dele);
- *  2) CLAUDE_API_KEY / ANTHROPIC_API_KEY do servidor;
- *  3) qualquer agente Claude da IA Conversacional que tenha chave própria (só a CHAVE e o modelo:
- *     o prompt de um agente de leads nunca vira a personalidade do assistente por acaso).
- * Devolve null se não houver nenhuma chave Claude (o assistente segue pelo fluxo de regras).
+ * Chaves Claude disponíveis, em ORDEM DE PRIORIDADE:
+ *  1) CLAUDE_API_KEY / ANTHROPIC_API_KEY do servidor (variável de ambiente: o lugar certo para um segredo);
+ *  2) chave guardada no agente escolhido na config (legado: fica em texto puro na tabela ai_agents);
+ *  3) chave de qualquer agente Claude da IA Conversacional (só a CHAVE e o modelo: o prompt de um agente de leads
+ *     nunca vira a personalidade do assistente por acaso).
+ * A personalidade (prompt, tom de voz, base de conhecimento) vem SEMPRE do agente escolhido, seja qual for a chave usada.
  */
-export async function resolverClaude(aiAgentId?: string): Promise<ResolucaoClaude | null> {
+export async function candidatasClaude(aiAgentId?: string): Promise<ResolucaoClaude[]> {
   const env = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY
+  const out: ResolucaoClaude[] = []
+  let persona: ResolucaoClaude["persona"]
+  let modeloAgente: string | undefined
+  let chaveAgente: string | undefined
   try {
     if (aiAgentId) {
       const { data: a } = await db().from("ai_agents").select(COLUNAS).eq("id", aiAgentId).maybeSingle()
       if (a && providerFromModel(a.model_name) === "claude") {
-        const apiKey = chaveDoAgente(a) || env
-        if (apiKey) {
-          const { data: kb } = await db().from("knowledge_bases").select("id").eq("ai_id", a.id).maybeSingle()
-          return {
-            cred: { apiKey, modeloAgente: a.model_name, origem: "agente" },
-            persona: { id: a.id, nome: a.name, system: a.system_prompt ?? undefined, instrucoes: a.additional_instructions ?? undefined, voz: a.brand_voice ?? undefined, kbId: kb?.id },
-          }
-        }
+        const { data: kb } = await db().from("knowledge_bases").select("id").eq("ai_id", a.id).maybeSingle()
+        persona = { id: a.id, nome: a.name, system: a.system_prompt ?? undefined, instrucoes: a.additional_instructions ?? undefined, voz: a.brand_voice ?? undefined, kbId: kb?.id }
+        modeloAgente = a.model_name
+        chaveAgente = chaveDoAgente(a)
       }
     }
   } catch { /* segue para as demais fontes */ }
-  if (env) return { cred: { apiKey: env, origem: "ambiente" } }
-  try {
-    const { data } = await db().from("ai_agents").select(COLUNAS).order("is_active", { ascending: false }).limit(20)
-    for (const a of data ?? []) {
-      if (providerFromModel(a.model_name) !== "claude") continue
-      const apiKey = chaveDoAgente(a)
-      if (apiKey) return { cred: { apiKey, modeloAgente: a.model_name, origem: "agente_auto" } }
-    }
-  } catch { /* sem chave */ }
-  return null
+  if (env) out.push({ cred: { apiKey: env, modeloAgente, origem: "ambiente" }, persona })
+  if (chaveAgente && chaveAgente !== env) out.push({ cred: { apiKey: chaveAgente, modeloAgente, origem: "agente" }, persona })
+  if (!out.length) {
+    try {
+      const { data } = await db().from("ai_agents").select(COLUNAS).order("is_active", { ascending: false }).limit(20)
+      for (const a of data ?? []) {
+        if (providerFromModel(a.model_name) !== "claude") continue
+        const apiKey = chaveDoAgente(a)
+        if (apiKey) { out.push({ cred: { apiKey, modeloAgente: a.model_name, origem: "agente_auto" }, persona }); break }
+      }
+    } catch { /* sem chave */ }
+  }
+  return out
+}
+
+/** A chave de maior prioridade. Devolve null se não houver nenhuma chave Claude (o assistente segue pelo fluxo de regras). */
+export async function resolverClaude(aiAgentId?: string): Promise<ResolucaoClaude | null> {
+  return (await candidatasClaude(aiAgentId))[0] ?? null
 }
 
 export async function resolverCredencialClaude(aiAgentId?: string): Promise<CredencialClaude | null> {

@@ -1,7 +1,7 @@
 import { exigirGestor } from "@/lib/auth/sessao"
 import { fail, ok } from "@/lib/api/response"
 import { ClaudeError, CLAUDE_MODELO_PADRAO, CLAUDE_MODELO_RAPIDO, chamarClaudeComFallback } from "@/lib/ai/claude"
-import { resolverClaude } from "@/lib/assistente/ia-claude"
+import { candidatasClaude } from "@/lib/assistente/ia-claude"
 import { repositorioSupabase } from "@/lib/assistente/repositorio-supabase"
 
 export const runtime = "nodejs"
@@ -18,21 +18,27 @@ export async function POST(req: Request) {
 
   let aiAgentId: string | undefined
   try { aiAgentId = process.env.SUPABASE_SECRET_KEY ? (await repositorioSupabase.obterConfig()).aiAgentId : undefined } catch { /* sem config */ }
-  const res = await resolverClaude(aiAgentId)
-  if (!res) return ok({ conectado: false, motivo: "Nenhuma chave Claude encontrada (agente escolhido, CLAUDE_API_KEY/ANTHROPIC_API_KEY ou agente Claude ativo)." })
+  const candidatas = await candidatasClaude(aiAgentId)
+  if (!candidatas.length) return ok({ conectado: false, testes: [], motivo: "Nenhuma chave Claude encontrada (CLAUDE_API_KEY/ANTHROPIC_API_KEY, chave do agente escolhido ou de um agente Claude ativo)." })
 
-  const t0 = Date.now()
-  try {
-    const r = await chamarClaudeComFallback({
-      apiKey: res.cred.apiKey,
-      modelos: [res.cred.modeloAgente ?? "", CLAUDE_MODELO_PADRAO, CLAUDE_MODELO_RAPIDO],
-      system: "Você é um teste de conexão. Responda somente com a palavra: ok",
-      messages: [{ role: "user", content: "teste" }],
-      maxTokens: 10, timeoutMs: 15_000, maxRetries: 0,
-    })
-    return ok({ conectado: true, modelo: r.modelo, ms: Date.now() - t0, origem: res.cred.origem, agente: res.persona?.nome ?? null, resposta: r.texto.slice(0, 40) })
-  } catch (e) {
-    const ce = e instanceof ClaudeError ? e : null
-    return ok({ conectado: false, ms: Date.now() - t0, origem: res.cred.origem, agente: res.persona?.nome ?? null, status: ce?.status ?? null, tipo: ce?.tipo ?? null, motivo: (e instanceof Error ? e.message : String(e)).slice(0, 300) })
+  // Testa CADA chave separadamente (a de maior prioridade é a que o assistente usa de fato).
+  const testes = []
+  for (const [i, res] of candidatas.entries()) {
+    const t0 = Date.now()
+    try {
+      const r = await chamarClaudeComFallback({
+        apiKey: res.cred.apiKey,
+        modelos: [res.cred.modeloAgente ?? "", CLAUDE_MODELO_PADRAO, CLAUDE_MODELO_RAPIDO],
+        system: "Você é um teste de conexão. Responda somente com a palavra: ok",
+        messages: [{ role: "user", content: "teste" }],
+        maxTokens: 10, timeoutMs: 15_000, maxRetries: 0,
+      })
+      testes.push({ origem: res.cred.origem, emUso: i === 0, conectado: true, modelo: r.modelo, ms: Date.now() - t0 })
+    } catch (e) {
+      const ce = e instanceof ClaudeError ? e : null
+      testes.push({ origem: res.cred.origem, emUso: i === 0, conectado: false, ms: Date.now() - t0, status: ce?.status ?? null, motivo: (e instanceof Error ? e.message : String(e)).slice(0, 300) })
+    }
   }
+  const emUso = testes[0]
+  return ok({ conectado: emUso.conectado, modelo: emUso.modelo, ms: emUso.ms, motivo: emUso.motivo, status: emUso.status ?? null, agente: candidatas[0].persona?.nome ?? null, testes })
 }

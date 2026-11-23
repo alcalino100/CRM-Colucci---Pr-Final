@@ -4,7 +4,7 @@ vi.mock("@/lib/assistente/repositorio-supabase", () => ({
   repositorioSupabase: { listarAtendimentos: vi.fn().mockResolvedValue([]), calcularIndicadores: vi.fn(), obterConfig: vi.fn().mockResolvedValue({ ativo: false, instancias: [], numerosTeste: [], capacidades: {}, usarIa: false }), salvarConfig: vi.fn().mockResolvedValue({}) },
   tabelaAusente: () => false,
 }))
-vi.mock("@/lib/assistente/ia-claude", () => ({ resolverClaude: vi.fn().mockResolvedValue(null), criarChamadaIa: vi.fn(), criarAgenteDeps: vi.fn() }))
+vi.mock("@/lib/assistente/ia-claude", () => ({ resolverClaude: vi.fn().mockResolvedValue(null), candidatasClaude: vi.fn().mockResolvedValue([]), criarChamadaIa: vi.fn(), criarAgenteDeps: vi.fn() }))
 vi.mock("@/lib/supabase/admin", () => ({ getSupabaseAdmin: () => ({ from: () => ({ select: () => ({ limit: async () => ({ data: [] }) }) }) }) }))
 
 import { assinarSessao, COOKIE_SESSAO } from "@/lib/auth/sessao"

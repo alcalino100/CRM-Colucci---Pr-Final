@@ -10,6 +10,8 @@ import { useApi } from "./use-api"
 
 type Resp = { fonte: string; config: ConfigAssistente; provedor: string; iaDisponivel: boolean; iaOrigem: string | null; iaModelo?: string | null; iaAgente?: string | null; instancias: string[]; agentesClaude: { id: string; nome: string }[] }
 
+const ROTULO_ORIGEM: Record<string, string> = { ambiente: "Chave do servidor (CLAUDE_API_KEY)", agente: "Chave guardada no agente", agente_auto: "Chave de um agente ativo" }
+
 export function Configuracoes() {
   const { dados, erro, recarregar } = useApi<Resp>("/api/assistente/config")
   const [cfg, setCfg] = useState<ConfigAssistente | null>(null)
@@ -17,7 +19,7 @@ export function Configuracoes() {
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [testando, setTestando] = useState(false)
-  const [diag, setDiag] = useState<{ conectado: boolean; modelo?: string; ms?: number; motivo?: string; status?: number | null } | null>(null)
+  const [diag, setDiag] = useState<{ conectado: boolean; modelo?: string; ms?: number; motivo?: string; status?: number | null; testes?: { origem: string; emUso: boolean; conectado: boolean; modelo?: string; ms?: number; motivo?: string; status?: number | null }[] } | null>(null)
 
   useEffect(() => { if (dados) { setCfg(dados.config); setTestes(dados.config.numerosTeste.join("\n")) } }, [dados])
 
@@ -127,9 +129,16 @@ export function Configuracoes() {
               <p className="text-xs">{dados.iaDisponivel ? <Badge variant="green">chave Claude encontrada ({dados.iaOrigem === "agente" ? `agente ${dados.iaAgente ?? ""}` : dados.iaOrigem === "agente_auto" ? "de um agente ativo" : "do servidor"}){dados.iaModelo ? ` · ${dados.iaModelo}` : ""}</Badge> : <Badge variant="amber">nenhuma chave Claude encontrada: segue sem IA</Badge>}</p>
               <div className="space-y-2 rounded-lg border border-border p-3">
                 <Button size="sm" variant="outline" onClick={testarClaude} disabled={testando}>{testando ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />} Testar conexão com o Claude</Button>
-                {diag && (diag.conectado
-                  ? <p className="text-xs text-emerald-700">Conectado: modelo {diag.modelo} respondeu em {((diag.ms ?? 0) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}s.</p>
-                  : <p className="text-xs text-red-700">Não conectou{diag.status ? ` (HTTP ${diag.status})` : ""}: {diag.motivo}</p>)}
+                {diag && (diag.testes && diag.testes.length > 0
+                  ? <ul className="space-y-1 text-xs">
+                      {diag.testes.map((t, i) => (
+                        <li key={i} className={t.conectado ? "text-emerald-700" : "text-red-700"}>
+                          <strong>{ROTULO_ORIGEM[t.origem] ?? t.origem}{t.emUso ? " (em uso)" : ""}:</strong>{" "}
+                          {t.conectado ? `conectou, modelo ${t.modelo} em ${((t.ms ?? 0) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}s` : `não conectou${t.status ? ` (HTTP ${t.status})` : ""}: ${t.motivo}`}
+                        </li>
+                      ))}
+                    </ul>
+                  : <p className="text-xs text-red-700">Não conectou: {diag.motivo}</p>)}
               </div>
               <p className="text-xs text-muted-foreground">Dica: crie na IA Conversacional um agente próprio para o assistente (prompt, tom de voz e base de conhecimento) e escolha-o aqui. Deixe-o pausado e sem instância vinculada, para não interferir nos leads.</p>
             </CardContent>
