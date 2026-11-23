@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server"
 import { MCP_TOOLS_DEFINITIONS, executeMcpTool } from "@/lib/meta/mcp-server"
+import { exigirServicoOuGestor, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,6 +16,9 @@ export const maxDuration = 60
  * Retorna as informações do servidor MCP, ferramentas disponíveis e instruções de conexão.
  */
 export async function GET(req: Request) {
+  const auth = exigirServicoOuGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const url = new URL(req.url)
   const origin = url.origin
 
@@ -43,6 +47,9 @@ export async function GET(req: Request) {
  * Manipulador JSON-RPC 2.0 para requisições MCP
  */
 export async function POST(req: Request) {
+  const auth = exigirServicoOuGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const body = await req.json()
     const { id, method, params } = body

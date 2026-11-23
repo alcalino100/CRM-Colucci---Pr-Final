@@ -87,6 +87,7 @@ export function exigirSessao(req: Request, agoraMs = Date.now()): { ok: true; se
   const sessao = lerSessao(lerCookie(req.headers.get("cookie")), agoraMs)
   if (!sessao) return { ok: false, status: 401, erro: "Sessão expirada ou ausente. Saia e entre novamente no CRM." }
   if (req.method !== "GET" && req.method !== "HEAD") {
+    if (sessao.role === "visitante") return { ok: false, status: 403, erro: "Perfil somente leitura." }
     const origem = req.headers.get("origin")
     if (origem) {
       let host = ""
@@ -95,4 +96,42 @@ export function exigirSessao(req: Request, agoraMs = Date.now()): { ok: true; se
     }
   }
   return { ok: true, sessao }
+}
+
+type Negado = { ok: false; status: 401 | 403 | 503; erro: string }
+
+/** Chamada de serviço (Vercel Cron / integrações): Authorization: Bearer CRON_SECRET. */
+export function temSegredoDeServico(req: Request): boolean {
+  const secret = process.env.CRON_SECRET
+  if (!secret) return false
+  const enviado = req.headers.get("authorization") ?? ""
+  const esperado = `Bearer ${secret}`
+  const a = Buffer.from(enviado)
+  const b = Buffer.from(esperado)
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
+}
+
+/** Serviço (cron/integração) OU sessão de qualquer perfil. */
+export function exigirServicoOuSessao(req: Request): ResultadoAuth {
+  if (temSegredoDeServico(req)) return { ok: true, sessao: { id: "servico", role: "servico", exp: 0 } }
+  return exigirSessao(req)
+}
+
+/** Serviço (cron/integração) OU sessão de gestor. */
+export function exigirServicoOuGestor(req: Request): ResultadoAuth {
+  if (temSegredoDeServico(req)) return { ok: true, sessao: { id: "servico", role: "servico", exp: 0 } }
+  return exigirGestor(req)
+}
+
+/** Leitura (GET/HEAD) para qualquer sessão; alterações só para gestor. */
+export function exigirSessaoLeituraGestorEscrita(req: Request): ResultadoAuth {
+  return req.method === "GET" || req.method === "HEAD" ? exigirSessao(req) : exigirGestor(req)
+}
+
+/** Resposta JSON padrão para uma autorização negada. */
+export function negarAcesso(r: Negado): Response {
+  return new Response(JSON.stringify({ ok: false, error: r.erro }), {
+    status: r.status,
+    headers: { "content-type": "application/json" },
+  })
 }

@@ -3,6 +3,7 @@ import { wsupabase } from "@/lib/whatsapp/server"
 import { getBoundInstances, getRules } from "@/lib/ai/rules"
 import { normalizePhone } from "@/lib/labels"
 import { TELEFONES_BLOQUEADOS } from "@/lib/telefones-bloqueados"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,6 +19,9 @@ const ehBloqueado = (telefone: string) => {
 // mensagem e a contagem. Inclui contatos que ainda não viraram lead do CRM, para o
 // gestor ver TODAS as conversas reais do WhatsApp.
 export async function GET(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const instanceName = new URL(request.url).searchParams.get("instanceName")
   if (!instanceName) return NextResponse.json({ error: "Instância não informada." }, { status: 400 })
 

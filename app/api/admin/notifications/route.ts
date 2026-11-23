@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { NOTIFICACOES_COLUMNS } from "@/lib/supabase/projections"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 type Payload = {
   senderId?: string
@@ -22,6 +23,9 @@ function fail(status: number, code: string, error: string, details?: string) {
 }
 
 export async function POST(request: Request) {
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: Payload
   try {
     body = await request.json()

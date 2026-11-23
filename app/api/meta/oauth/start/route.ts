@@ -1,7 +1,10 @@
 // Inicia o fluxo OAuth (Facebook Login for Business) — somente leitura de anúncios.
 import { NextResponse } from "next/server"
 
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 export async function GET(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
   const appId = process.env.META_APP_ID
   if (!appId) {
     return NextResponse.redirect(new URL("/meta-ads?meta_error=Configure%20META_APP_ID%20e%20META_APP_SECRET", req.url))

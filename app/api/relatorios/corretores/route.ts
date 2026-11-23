@@ -3,11 +3,15 @@
 
 import { ok, fail } from "@/lib/api/response"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   if (!process.env.SUPABASE_SECRET_KEY) return fail("configure SUPABASE_SECRET_KEY", 500)
   const admin = getSupabaseAdmin()
   const { data, error } = await admin

@@ -5,6 +5,7 @@ import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { CONVERSATIONS_IA_COLUMNS, MESSAGES_IA_COLUMNS } from "@/lib/supabase/projections"
 import { generateAIResponse } from "@/lib/ai/generateResponse"
 import { logger } from "@/lib/logger"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -16,6 +17,9 @@ function db() {
 
 // Lista mensagens da conversa (usado por telas de auditoria/teste).
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessao(_req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     if (!id) return NextResponse.json({ error: "id é obrigatório" }, { status: 400 })
@@ -33,6 +37,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessao(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const t0 = Date.now()
   const { id } = await params
   const { message, aiId } = await req.json().catch(() => ({}))

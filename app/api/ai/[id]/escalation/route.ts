@@ -4,6 +4,7 @@ import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { ESCALATION_TRIGGERS_COLUMNS } from "@/lib/supabase/projections"
 import { TriggerSchema, zodMessage } from "@/lib/ai/types"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,6 +15,9 @@ function db() {
 
 // Lista triggers de escalação do agente (mais recentes primeiro).
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(_req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     if (!id) return NextResponse.json({ error: "id é obrigatório" }, { status: 400 })
@@ -31,6 +35,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // Cria um trigger de escalação + auditoria.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     if (!id) return NextResponse.json({ error: "id é obrigatório" }, { status: 400 })

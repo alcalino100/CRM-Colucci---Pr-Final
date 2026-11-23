@@ -4,12 +4,16 @@
 // - Pixel padrão: "Colucci Imóveis - DashboardCRM" (2053723892017546). Override via env META_PIXEL_ID.
 import { NextResponse } from "next/server"
 import { resolveMetaToken, metaPixelId, buildPurchaseEvent, sendMetaEvents, persistMetaEventLog } from "@/lib/meta/capi"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
 
 export async function POST(req: Request) {
+  const auth = exigirSessao(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const token = resolveMetaToken()
   if (!token) return NextResponse.json({ error: "sem token (env META_ACCESS_TOKEN / META_CAPI_TOKEN)" }, { status: 401 })
 

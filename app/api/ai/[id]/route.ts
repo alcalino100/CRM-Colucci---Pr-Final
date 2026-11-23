@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { AI_AGENTS_COLUMNS } from "@/lib/supabase/projections"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY) }
 
@@ -38,6 +39,9 @@ function resumoAlteracao(body: any): string {
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{id:string}> }){
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { id } = await params
   const body = await req.json()
   try{
@@ -94,6 +98,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{id:st
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{id:string}> }){
+  const auth = exigirSessaoLeituraGestorEscrita(_req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { id } = await params
   try{
     const { error } = await db().from("ai_agents").delete().eq("id", id)

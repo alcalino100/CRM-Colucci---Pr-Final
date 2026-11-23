@@ -13,11 +13,15 @@ import {
   runWorker,
 } from "@/app/api/automation/worker/route"
 
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 180
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = exigirSessaoLeituraGestorEscrita(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const agora = Date.now()
     const cutoff24h = new Date(agora - 24 * 3600_000).toISOString()
@@ -160,7 +164,10 @@ export async function GET() {
 }
 
 // POST: dispara a execução controlada da contenção IA via worker
-export async function POST() {
+export async function POST(request: Request) {
+  const auth = exigirSessaoLeituraGestorEscrita(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const resWorker = await runWorker()
     return resWorker

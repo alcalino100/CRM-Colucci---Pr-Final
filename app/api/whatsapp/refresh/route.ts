@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { evolutionConfig, mapConnectionState, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
 import { logger } from "@/lib/logger"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,6 +19,9 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 8000) {
 // Atualização manual: consulta o estado real na Evolution (fonte de verdade nesta chamada)
 // e sincroniza o banco. Em caso de falha, devolve o último dado salvo com stale=true.
 export async function GET(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const instanceName = new URL(request.url).searchParams.get("instanceName")
   if (!instanceName) return NextResponse.json({ error: "Instância não informada." }, { status: 400 })
 

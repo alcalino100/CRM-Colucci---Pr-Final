@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,6 +14,9 @@ function db() {
 // Apaga conversa de TESTE + mensagens (somente test_mode/channel=test —
 // nunca apaga conversa real de produção por aqui).
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessao(_req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     if (!id) return NextResponse.json({ error: "id é obrigatório" }, { status: 400 })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
 import { logger } from "@/lib/logger"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 function providerFrom(model?: string, token?: string, endpoint?: string){
   const m=(model||"").toLowerCase()
@@ -14,6 +15,9 @@ function providerFrom(model?: string, token?: string, endpoint?: string){
 }
 
 export async function POST(req: NextRequest){
+  const auth = exigirGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { apiToken, apiEndpoint, modelName } = await req.json()
   const model = modelName || "gemini-1.5-flash"
   const provider = providerFrom(modelName, apiToken, apiEndpoint)

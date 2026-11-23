@@ -2,6 +2,7 @@
 // POST best-effort: nunca derruba o fluxo de fechamento do CRM.
 import { NextResponse } from "next/server"
 import { notifyGestorWhatsApp } from "@/lib/whatsapp/server"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,6 +14,9 @@ const brl = (v: unknown) => {
 }
 
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: any
   try {
     body = await request.json()

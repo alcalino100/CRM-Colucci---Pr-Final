@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { sendWhatsAppText, wsupabase } from "@/lib/whatsapp/server"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -8,6 +9,9 @@ type Sugestao = { id: string; created_at: string; telefone: string; instance: st
 
 // Lista sugestões pendentes da IA para um telefone (modo sugestão).
 export async function GET(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const telefone = new URL(request.url).searchParams.get("telefone")?.replace(/\D/g, "") ?? ""
   if (!telefone) return NextResponse.json({ ok: false, erro: "telefone é obrigatório." }, { status: 400 })
   try {
@@ -41,6 +45,9 @@ export async function GET(request: Request) {
 
 // Enviar (dispara no WhatsApp) ou descartar uma sugestão — tudo auditado.
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: { action?: string; telefone?: string; instanceName?: string; texto?: string; leadId?: string | null }
   try {
     body = await request.json()

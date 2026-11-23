@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { onlyDigits, sendWhatsAppText } from "@/lib/whatsapp/server"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -8,6 +9,9 @@ export const dynamic = "force-dynamic"
 // A mensagem enviada só aparece na conversa quando o webhook da Evolution confirma o
 // envio (evento fromMe) — evita duplicar a linha no banco.
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: { instanceName?: string; telefone?: string; texto?: string }
   try {
     body = await request.json()

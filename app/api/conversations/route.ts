@@ -3,10 +3,14 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { CONVERSATIONS_IA_COLUMNS } from "@/lib/supabase/projections"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY) }
 
 export async function POST(req: NextRequest){
+  const auth = exigirSessao(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { aiId, contactId, channel, testMode } = await req.json()
   if(!aiId || !contactId) return NextResponse.json({ error:"aiId e contactId obrigatórios" }, {status:400})
   const id = `conv_${Date.now()}`
@@ -23,6 +27,9 @@ export async function POST(req: NextRequest){
 }
 
 export async function GET(req: NextRequest){
+  const auth = exigirSessao(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const aiId = new URL(req.url).searchParams.get("aiId")
   const q = db().from("conversations_ia").select(CONVERSATIONS_IA_COLUMNS).order("last_message_at", {ascending:false}).limit(50)
   if(aiId) q.eq("ai_id", aiId)

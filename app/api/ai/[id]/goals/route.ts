@@ -4,6 +4,7 @@ import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { GOALS_COLUMNS } from "@/lib/supabase/projections"
 import { GoalSchema, zodMessage } from "@/lib/ai/types"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -30,6 +31,9 @@ function mapRow(g: Record<string, unknown>) {
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(_req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     const { data, error } = await db().from("goals").select(GOALS_COLUMNS).eq("ai_id", id).order("created_at", { ascending: true })
@@ -41,6 +45,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     const body = await req.json().catch(() => null)
@@ -68,6 +75,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // Substituição completa dos goals do agente (bulk). Valida cada item.
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     const body = await req.json().catch(() => null)
@@ -119,6 +129,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // Desativa um goal (soft delete via is_active).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     const goalId = new URL(req.url).searchParams.get("goalId")

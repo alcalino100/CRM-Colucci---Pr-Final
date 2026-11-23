@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { logger } from "@/lib/logger"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,6 +24,9 @@ async function ensureKB(aiId: string): Promise<string> {
 
 // Lista documentos da KB do agente (com contagem de chunks).
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(_req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     const kbId = await ensureKB(id)
@@ -40,6 +44,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // Salva documento (texto extraído no cliente) + indexa chunks/embeddings.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     const body = await req.json().catch(() => null)
@@ -88,6 +95,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // Remove documento (embeddings apagam em cascata).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     const docId = new URL(req.url).searchParams.get("docId")

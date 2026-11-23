@@ -2,12 +2,16 @@ import { NextResponse } from "next/server"
 import { instanceNameFor, wsupabase } from "@/lib/whatsapp/server"
 import { logger } from "@/lib/logger"
 import { WHATSAPP_INSTANCIAS_COLUMNS } from "@/lib/supabase/projections"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 // Lista todas as instâncias com o nome do corretor resolvido
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { data: instancias, error } = await wsupabase
     .from("whatsapp_instancias")
     .select(WHATSAPP_INSTANCIAS_COLUMNS)
@@ -29,6 +33,9 @@ export async function GET() {
 // NUNCA renomeia linha existente: nomes custom (ex. patricia2) são preservados —
 // renomear quebra whitelist da IA, Evolution e roleta (tudo amarra por nome).
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: { corretorId?: string; corretorNome?: string }
   try {
     body = await request.json()

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,6 +15,9 @@ const diaISO = (d: Date) => d.toISOString().slice(0, 10)
 
 // Agrega métricas reais do agente: conversas, respostas, escalações, tempo, tokens, custo.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id } = await params
     if (!id) return NextResponse.json({ error: "id é obrigatório" }, { status: 400 })

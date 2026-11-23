@@ -12,6 +12,7 @@ import { secoesNecessarias, type SecoesAtivasConfig } from "@/lib/relatorios/sec
 import { enviarRelatorioParaDestinatario, type DestinatarioRelatorio } from "@/lib/relatorios/enviar"
 import { resolverInstanciaEnvio } from "@/lib/relatorios/agendador"
 import { onlyDigits } from "@/lib/whatsapp/server"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -24,6 +25,9 @@ const testeSchema = z.object({
 })
 
 export async function POST(request: Request) {
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   if (!process.env.SUPABASE_SECRET_KEY) {
     return fail("configure SUPABASE_SECRET_KEY", 500)
   }

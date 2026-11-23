@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -112,7 +113,10 @@ async function gastoMes(token: string, contas: string[], since: string, until: s
   return { total, porConta }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { token, source } = await resolveToken()
   const config = await loadConfig()
 
@@ -160,6 +164,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: any
   try {
     body = await req.json()

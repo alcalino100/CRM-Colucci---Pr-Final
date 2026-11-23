@@ -4,6 +4,7 @@ import { ok, fail } from "@/lib/api/response"
 import { parseBody } from "@/lib/api/validate"
 import { sanitizePostgrestFilter } from "@/lib/supabase/postgrest"
 import { logger } from "@/lib/logger"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,6 +24,9 @@ const createLeadSchema = z.object({
 
 // Lista/busca leads (usado pelo Inbox para vincular uma conversa ao lead por telefone).
 export async function GET(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { searchParams } = new URL(request.url)
   const rawSearch = searchParams.get("search") ?? ""
   const search = sanitizePostgrestFilter(rawSearch)
@@ -46,6 +50,9 @@ export async function GET(request: Request) {
 
 // Cria um lead a partir do Inbox (conversa sem lead ainda).
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const parsed = await parseBody(request, createLeadSchema)
   if (!parsed.success) return parsed.response
 

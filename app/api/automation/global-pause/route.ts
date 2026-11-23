@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -10,7 +11,10 @@ export const dynamic = "force-dynamic"
 
 const TERMINAL = ["sent", "delivered", "read", "responded", "cancelled_human", "cancelled_condition", "cancelled_manual", "blocked_limit", "failed", "cancelled"]
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = exigirSessaoLeituraGestorEscrita(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const [autos, jobs, ais] = await Promise.all([
     wsupabase.from("automations").select("id, status").is("deleted_at", null),
     wsupabase.from("automation_jobs").select("id, status").in("status", ["scheduled", "pending_validation", "retrying", "processing", "blocked_hour"]),
@@ -41,6 +45,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = exigirSessaoLeituraGestorEscrita(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: { pausado?: boolean }
   try {
     body = await request.json()

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -8,6 +9,9 @@ export const dynamic = "force-dynamic"
 // o contato não tem lead vinculado — dentro de uma instância), em ordem cronológica,
 // para renderizar a thread do chat.
 export async function GET(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const url = new URL(request.url)
   const instanceName = url.searchParams.get("instanceName")
   const leadId = url.searchParams.get("leadId")

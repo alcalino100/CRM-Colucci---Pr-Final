@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { MASTER_EMAIL } from "@/lib/master"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,6 +22,9 @@ function extOf(mime: string, filename: string): string {
 }
 
 export async function POST(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const body = await req.json().catch(() => ({}))
     const { email, kind, filename, mime, dataBase64 } = body as {

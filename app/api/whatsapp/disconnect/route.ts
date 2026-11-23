@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { evolutionConfig, notifyDisconnection, wsupabase } from "@/lib/whatsapp/server"
 import { logger } from "@/lib/logger"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,6 +19,9 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 10000) {
 // Faz logout da sessão na Evolution (mantém a instância para reconexão rápida)
 // e marca a instância como desconectada no banco (fail-safe mesmo se a Evolution cair).
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: { instanceName?: string }
   try {
     body = await request.json()

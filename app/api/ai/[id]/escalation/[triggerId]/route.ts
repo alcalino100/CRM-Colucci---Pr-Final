@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -11,10 +12,11 @@ function db() {
 }
 
 // Deleta um trigger de escalação (escopado ao agente) + auditoria.
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string; triggerId: string }> },
-) {
+export async function DELETE(_req: NextRequest,
+  { params }: { params: Promise<{ id: string; triggerId: string }> },) {
+  const auth = exigirSessaoLeituraGestorEscrita(_req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { id, triggerId } = await params
     if (!id || !triggerId) {

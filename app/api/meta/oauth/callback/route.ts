@@ -5,7 +5,10 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 export async function GET(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
   const url = new URL(req.url)
   const code = url.searchParams.get("code")
   const appId = process.env.META_APP_ID

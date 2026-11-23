@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { evolutionConfig, mapConnectionState, notifyDisconnection, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
+import { exigirServicoOuSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -142,10 +143,16 @@ export async function sincronizarInstanciasWhatsApp() {
 }
 
 // Suporte para Vercel Cron (GET) e chamadas do frontend (POST)
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = exigirServicoOuSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   return sincronizarInstanciasWhatsApp()
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const auth = exigirServicoOuSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   return sincronizarInstanciasWhatsApp()
 }
