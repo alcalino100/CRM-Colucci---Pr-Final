@@ -71,8 +71,14 @@ export const FERRAMENTAS_AGENTE: ClaudeTool[] = [
   },
 ]
 
+/** "Aurora - Atendimento Clientes" → "Aurora". Nomes genéricos demais ("IA - Relações Públicas") caem no padrão. */
+export function nomeApresentacao(nome?: string): string {
+  const base = (nome ?? "").split(" - ")[0].trim()
+  return base.length >= 3 && !/^(ia|ai|bot|agente|novo agente)$/i.test(base) ? base : "Assistente Colucci"
+}
+
 export function montarSystemPrompt(p: { persona?: PersonaAgente; estado: Estado; agora: Date; capacidades?: Partial<MapaCapacidades> }): string {
-  const nome = (p.persona?.nome ?? "").split(" - ")[0].trim() || "Assistente Colucci"
+  const nome = nomeApresentacao(p.persona?.nome)
   const desligadas = Object.entries(p.capacidades ?? {}).filter(([, v]) => v === false).map(([k]) => k)
   const situacao = p.estado.etapa === "identificado" && p.estado.cliente
     ? `Cliente JÁ identificado nesta conversa: ${p.estado.cliente.nome} (${p.estado.cliente.perfil}). Não peça os dígitos de novo.`
@@ -272,7 +278,9 @@ export async function atenderComAgente(p: {
   }
 
   // Conferência anti-invenção: todo fato da resposta precisa existir nas fontes do turno.
-  const fontesTotais = [...fontes, p.texto, ...p.historico.map((m) => m.conteudo), estado.protocolo ?? "", dataBR(p.agora.toISOString()), String(p.agora.getFullYear())]
+  // O que a própria Colucci escreveu no prompt do agente (telefones, endereço, CRECI, horários) também é fonte legítima.
+  const textoDaEmpresa = [p.agente.persona?.system, p.agente.persona?.instrucoes, p.agente.persona?.voz].filter(Boolean).join("\n")
+  const fontesTotais = [...fontes, textoDaEmpresa, p.texto, ...p.historico.map((m) => m.conteudo), estado.protocolo ?? "", dataBR(p.agora.toISOString()), String(p.agora.getFullYear())]
   const inventados = fatosNaoRastreaveis(texto, fontesTotais)
   if (inventados.length) {
     p.registrarErro?.(`conferência bloqueou fato sem fonte: ${inventados.slice(0, 3).join(", ")}`.slice(0, 220))

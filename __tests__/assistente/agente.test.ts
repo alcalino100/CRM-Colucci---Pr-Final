@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  nomeApresentacao,
   FERRAMENTAS_AGENTE, RepositorioMemoria, criarMockProvider, estadoInicial, fatosNaoRastreaveis, montarSystemPrompt, atenderComAgente,
   type AgenteDeps, type Estado, type LlmAgente,
 } from "@/lib/assistente"
@@ -157,6 +158,36 @@ describe("modo agente: contexto enviado ao Claude", () => {
     expect(p).toContain("reajuste")
     expect(p).toContain("19/11/2026")
   })
+})
+
+describe("dados escritos pela Colucci no prompt do agente", () => {
+  const empresa = "Telefone: (18) 2103-4900. WhatsApp: (18) 99197-6332. CEP: 16015-245. CRECI: 039072-J. Atendimento das 8h00 às 18h00."
+  const resposta = "Nosso telefone é (18) 2103-4900 e o endereço fica no CEP 16015-245."
+
+  it("valem como fonte: o assistente pode informar telefone, CEP e CRECI sem ser barrado", async () => {
+    const r = await rodar(async () => resposta, { texto: "qual o telefone de vocês?", extra: { persona: { instrucoes: empresa } } })
+    expect(r).not.toBeNull()
+    expect(r!.respostas.join(" ")).toContain("2103-4900")
+  })
+
+  it("sem estar no prompt, o mesmo número continua barrado (não é inventado em silêncio)", async () => {
+    expect(await rodar(async () => resposta, { texto: "qual o telefone de vocês?" })).toBeNull()
+  })
+
+  it("mas um número que NÃO está no prompt nem nas ferramentas segue barrado", async () => {
+    expect(await rodar(async () => "Ligue para (18) 3333-9999.", { texto: "telefone?", extra: { persona: { instrucoes: empresa } } })).toBeNull()
+  })
+})
+
+describe("nome de apresentação do agente", () => {
+  it.each([
+    ["Aurora - Atendimento Clientes", "Aurora"],
+    ["Aurora", "Aurora"],
+    ["IA - RELAÇÕES PÚBLICAS", "Assistente Colucci"],
+    ["Novo Agente", "Assistente Colucci"],
+    ["", "Assistente Colucci"],
+    [undefined, "Assistente Colucci"],
+  ])("%s → %s", (entrada, esperado) => expect(nomeApresentacao(entrada as string | undefined)).toBe(esperado))
 })
 
 describe("fatosNaoRastreaveis", () => {
