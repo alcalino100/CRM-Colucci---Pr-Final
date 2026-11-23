@@ -43,6 +43,7 @@ export function ConversaView(){
   const toast = useToast()
   const [texto, setTexto] = useState("")
   const [carregandoReal, setCarregandoReal] = useState(false)
+  const [recarga, setRecarga] = useState(0)
   const threadRef = useRef<HTMLDivElement>(null)
   const conv = conversas.find((c: any) => c.id === selectedId) || null
   const thread = selectedId ? (mensagens[selectedId] || []) : []
@@ -95,7 +96,7 @@ export function ConversaView(){
       finally{ if(!silencioso) setCarregandoReal(false) }
     }
     void carregarThread(false)
-    const stopInterval = safeSetInterval(() => void carregarThread(true), 30000)
+    const stopInterval = safeSetInterval(() => void carregarThread(true), 10000)
     // Tempo real: mensagem nova (ou mídia que terminou de baixar) desta conversa atualiza o thread na hora.
     const canal = supabase
       .channel(`inbox-thread-${chave}`)
@@ -110,7 +111,7 @@ export function ConversaView(){
       stopInterval()
       supabase.removeChannel(canal)
     }
-  }, [selectedId, modoReal, conv])
+  }, [selectedId, modoReal, conv, recarga])
 
   if(!conv){
     return (
@@ -131,6 +132,8 @@ export function ConversaView(){
         if(!j.ok) throw new Error(j.erro || "falha")
         enviarMensagem(selectedId, content)
         setTexto("")
+        // Busca a mensagem já gravada (troca a versão provisória pela real)
+        setTimeout(() => setRecarga(n => n + 1), 600)
       }catch(e:any){
         toast(e.message || "Erro ao enviar via WhatsApp","error")
       }
