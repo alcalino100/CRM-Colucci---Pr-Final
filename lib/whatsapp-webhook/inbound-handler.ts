@@ -14,6 +14,14 @@ async function handleAssistenteInbound(p: { telefone: string; texto: string; ins
     return false
   }
 }
+/** O Assistente Virtual atenderia este contato? (decide se um áudio deve ser transcrito.) Qualquer falha = não. */
+async function assistenteAtende(p: { telefone: string; instanceName?: string }): Promise<boolean> {
+  try {
+    return await (await import("@/lib/assistente/whatsapp")).assistenteAtende(p)
+  } catch {
+    return false
+  }
+}
 async function handleAssistenteMensagemHumana(p: { telefone: string; texto: string; instanceName?: string }): Promise<void> {
   try {
     await (await import("@/lib/assistente/whatsapp")).handleAssistenteMensagemHumana(p)
@@ -71,7 +79,7 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
     !semIA &&
     !!midia &&
     key?.fromMe !== true &&
-    ((await agenteParaInstancia(instanceName)) !== null || (await isNumeroTesteIA(telefone)))
+    ((await agenteParaInstancia(instanceName)) !== null || (await isNumeroTesteIA(telefone)) || (await assistenteAtende({ telefone, instanceName })))
 
   const corpo = await processarCorpoMidia({
     msg,

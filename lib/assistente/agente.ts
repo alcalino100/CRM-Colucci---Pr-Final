@@ -3,6 +3,7 @@ import { type Capacidade, type MapaCapacidades } from "./capacidades"
 import { executarFerramenta } from "./ferramentas"
 import { dataBR, textoBoleto, textoContrato, textoInforme, textoReajuste } from "./formatadores"
 import { extrairFatos } from "./humanizador"
+import { blocoGatilhos, blocoMetas, gatilhoObrigatorio, type GatilhoAgente, type MetaAgente } from "./gatilhos"
 import { classificarIntencao, ROTULO_DEPARTAMENTO } from "./intencoes"
 import { MAX_TENTATIVAS_IDENTIDADE, protocoloPadrao, type Estado, type Evento, type Saida } from "./orquestrador"
 import type { ImmobillisProvider } from "./provider"
@@ -27,7 +28,7 @@ export type LlmAgente = (p: {
   maxRounds: number
 }) => Promise<{ texto: string; tokensTotal: number; modelo: string }>
 
-export type PersonaAgente = { nome?: string; system?: string; voz?: string; instrucoes?: string }
+export type PersonaAgente = { nome?: string; system?: string; voz?: string; instrucoes?: string; metas?: MetaAgente[]; gatilhos?: GatilhoAgente[] }
 
 export type AgenteDeps = {
   llm: LlmAgente
@@ -77,7 +78,7 @@ export function nomeApresentacao(nome?: string): string {
   return base.length >= 3 && !/^(ia|ai|bot|agente|novo agente)$/i.test(base) ? base : "Assistente Colucci"
 }
 
-export function montarSystemPrompt(p: { persona?: PersonaAgente; estado: Estado; agora: Date; capacidades?: Partial<MapaCapacidades> }): string {
+export function montarSystemPrompt(p: { persona?: PersonaAgente; estado: Estado; agora: Date; capacidades?: Partial<MapaCapacidades>; extra?: string }): string {
   const nome = nomeApresentacao(p.persona?.nome)
   const desligadas = Object.entries(p.capacidades ?? {}).filter(([, v]) => v === false).map(([k]) => k)
   const situacao = p.estado.etapa === "identificado" && p.estado.cliente
@@ -107,6 +108,9 @@ export function montarSystemPrompt(p: { persona?: PersonaAgente; estado: Estado;
     ...(p.persona?.system?.trim() ? ["", "INSTRUÇÕES DA COLUCCI PARA ESTE ASSISTENTE:", p.persona.system.trim()] : []),
     ...(p.persona?.instrucoes?.trim() ? [p.persona.instrucoes.trim()] : []),
     ...(p.persona?.voz?.trim() ? [`Tom de voz: ${p.persona.voz.trim()}`] : []),
+    ...(blocoMetas(p.persona?.metas ?? []) ? ["", blocoMetas(p.persona?.metas ?? [])] : []),
+    ...(blocoGatilhos(p.persona?.gatilhos ?? []) ? ["", blocoGatilhos(p.persona?.gatilhos ?? [])] : []),
+    ...(p.extra ? ["", p.extra] : []),
   ].join("\n")
 }
 
@@ -257,6 +261,18 @@ export async function atenderComAgente(p: {
     return saida
   }
 
+  // Escalação de AÇÃO IMEDIATA cadastrada no agente (pediu atendente, ameaça jurídica, urgência...): o código encaminha
+  // ANTES do Claude. O Claude só escreve a mensagem ao cliente, já com protocolo e setor.
+  let notaGatilho: string | undefined
+  if (estado.etapa !== "transferido") {
+    const g = gatilhoObrigatorio(p.agente.persona?.gatilhos ?? [], p.texto)
+    if (g) {
+      usadas.push("gatilho")
+      encaminhar(g.departamento, g.nome)
+      notaGatilho = `ENCAMINHAMENTO JÁ REALIZADO PELO SISTEMA: o gatilho "${g.nome}" exigiu encaminhar agora para o setor ${ROTULO_DEPARTAMENTO[g.departamento]} (protocolo ${estado.protocolo}). Escreva a mensagem ao cliente: acolha em uma frase, informe o protocolo e diga que a equipe continua por esta conversa. Não faça perguntas e não tente resolver.`
+    }
+  }
+
   // Histórico: só cliente/assistente, começando por mensagem do cliente (exigência da API).
   const hist = p.historico.filter((m) => m.papel !== "sistema").slice(-20).map((m) => ({ role: (m.papel === "cliente" ? "user" : "assistant") as "user" | "assistant", content: m.conteudo }))
   while (hist.length && hist[0].role !== "user") hist.shift()
@@ -265,7 +281,7 @@ export async function atenderComAgente(p: {
   let r: Awaited<ReturnType<LlmAgente>>
   try {
     r = await p.agente.llm({
-      system: montarSystemPrompt({ persona: p.agente.persona, estado, agora: p.agora, capacidades: p.capacidades }),
+      system: montarSystemPrompt({ persona: p.agente.persona, estado, agora: p.agora, capacidades: p.capacidades, extra: notaGatilho }),
       messages, tools: FERRAMENTAS_AGENTE, onToolUse, maxTokens: 600, timeoutMs: 15_000, maxRounds: 5,
     })
   } catch (e) {

@@ -39,7 +39,7 @@ async function opcoes() {
 
 async function estado(aiAgentId?: string) {
   const res = await resolverClaude(aiAgentId)
-  return { provedor: obterProvider().nome, iaDisponivel: !!res, iaOrigem: res?.cred.origem ?? null, iaModelo: res?.cred.modeloAgente ?? null, iaAgente: res?.persona?.nome ?? null, ...(await opcoes()) }
+  return { provedor: obterProvider().nome, audio: process.env.OPENAI_API_KEY ? "whisper" : process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY ? "gemini" : null, iaDisponivel: !!res, iaOrigem: res?.cred.origem ?? null, iaModelo: res?.cred.modeloAgente ?? null, iaAgente: res?.persona?.nome ?? null, ...(await opcoes()) }
 }
 
 export async function GET(req: Request) {

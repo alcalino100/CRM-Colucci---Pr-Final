@@ -4,7 +4,7 @@ import { notifyGestorWhatsApp, sendPresence, sendWhatsAppText, wsupabase } from 
 import { criarAgenteDeps, criarChamadaIa, resolverClaude } from "./ia-claude"
 import { obterProvider } from "./provider-factory"
 import { repositorioSupabase } from "./repositorio-supabase"
-import { janelaRajada, tratarMensagemHumana, tratarMensagemRecebida, type DepsHandler } from "./handler"
+import { janelaRajada, podeAtuar, tratarMensagemHumana, tratarMensagemRecebida, type DepsHandler } from "./handler"
 import type { ConfigAssistente, RepositorioAssistente } from "./repositorio"
 
 /** Memoriza a config por 20s: cada mensagem do WhatsApp passa por aqui e não precisa de uma ida ao banco. */
@@ -66,4 +66,17 @@ export async function handleAssistenteInbound(p: { telefone: string; texto: stri
 
 export async function handleAssistenteMensagemHumana(p: { telefone: string; texto: string; instanceName?: string }): Promise<void> {
   return tratarMensagemHumana({ telefone: p.telefone, texto: p.texto, instanceName: p.instanceName ?? "" }, deps())
+}
+
+/**
+ * O assistente atenderia esta mensagem? Usado pelo webhook para decidir se vale transcrever um ÁUDIO antes
+ * (a transcrição só roda quando alguém vai de fato ler o texto). Não envia nada.
+ */
+export async function assistenteAtende(p: { telefone: string; instanceName?: string }): Promise<boolean> {
+  try {
+    const config = await repoComCache.obterConfig()
+    return podeAtuar(config, obterProvider(), p.telefone, p.instanceName ?? "").pode
+  } catch {
+    return false
+  }
 }
