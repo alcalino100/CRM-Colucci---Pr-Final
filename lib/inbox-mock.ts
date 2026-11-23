@@ -8,6 +8,11 @@ export type InboxMessage = {
   sender: "lead" | "você" | "ia"
   content: string
   origem?: "inbound" | "outbound"
+  tipoMidia?: "image" | "audio" | "video" | "document" | "sticker" | null
+  midiaUrl?: string | null
+  nomeArquivo?: string | null
+  viaAnuncio?: boolean
+  anuncioTitulo?: string | null
 }
 
 export type InboxConversation = {
@@ -29,6 +34,8 @@ export type InboxConversation = {
   iaRespondendo?: boolean
   tags?: string[]
   ia?: { responde: boolean; motivo: string }
+  /** Última mensagem foi enviada pela equipe/IA (true) ou pelo cliente (false). */
+  ultimaDeMim?: boolean
 }
 
 function hoursAgo(h: number) { return new Date(Date.now() - h * 3600_000).toISOString() }

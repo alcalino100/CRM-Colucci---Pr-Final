@@ -31,13 +31,23 @@ const badgeLabel: Record<string,string> = {
 }
 
 export function InboxList() {
-  const { conversas, selectedId, filtro, ordenacao, filtroOrigem, filtroStatus, filtroCorretor, setSelected, setFiltro, setOrdenacao, setFiltroOrigem, setFiltroStatus, setFiltroCorretor } = useInboxStore()
+  const { conversas, selectedId, filtro, ordenacao, filtroOrigem, filtroStatus, filtroCorretor, setSelected, setFiltro, setOrdenacao, setFiltroOrigem, setFiltroStatus, setFiltroCorretor, filtroRapido, setFiltroRapido } = useInboxStore()
   const origensUnicas = Array.from(new Set(conversas.map(c=>c.origem))).filter(Boolean)
   const corretoresUnicos = Array.from(new Set(conversas.map(c=>c.responsavel))).filter(Boolean)
-  const naoRespondidas = conversas.filter(c=> c.status==="aguardando_resposta").length
+  const naoLidas = conversas.filter(c=> c.unread>0).length
 
   let filtradas = conversas.filter(c => {
-    if(filtro && !c.leadName.toLowerCase().includes(filtro.toLowerCase()) && !c.telefone.includes(filtro)) return false
+    if(filtro){
+      const q = filtro.toLowerCase()
+      const soDigitos = filtro.replace(/\D/g,"")
+      const achou = c.leadName.toLowerCase().includes(q)
+        || (soDigitos.length>0 && c.telefone.replace(/\D/g,"").includes(soDigitos))
+        || c.ultimaMensagem.toLowerCase().includes(q)
+        || (c.tags||[]).some((t:any)=> String(typeof t==="string" ? t : t?.ref ?? "").toLowerCase().includes(q))
+      if(!achou) return false
+    }
+    if(filtroRapido==="nao_lidas" && !(c.unread>0)) return false
+    if(filtroRapido==="sem_ia" && !(c.ia && !c.ia.responde)) return false
     if(filtroOrigem!=="todas" && c.origem!==filtroOrigem) return false
     if(filtroStatus!=="todos" && c.status!==filtroStatus) return false
     if(filtroCorretor!=="todos" && c.responsavel!==filtroCorretor) return false
@@ -73,11 +83,16 @@ export function InboxList() {
       <div className="border-b border-slate-200 p-3 dark:border-slate-800">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>Inbox</h2>
-          {naoRespondidas>0 && <span className="rounded-full bg-cyan-500 px-2 py-0.5 text-[11px] font-bold text-slate-950">{naoRespondidas}</span>}
+          {naoLidas>0 && <span aria-label={`${naoLidas} não lidas`} className="rounded-full bg-cyan-500 px-2 py-0.5 text-[11px] font-bold text-slate-950">{naoLidas}</span>}
         </div>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
-          <input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar por nome ou telefone..." aria-label="Buscar conversas" className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" />
+          <input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar nome, telefone, texto ou etiqueta..." aria-label="Buscar conversas" className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" />
+        </div>
+        <div role="group" aria-label="Filtros rápidos" className="mt-2 flex gap-1.5">
+          {([["todas","Todas"],["nao_lidas",`Não lidas${naoLidas>0 ? ` (${naoLidas})` : ""}`],["sem_ia","Sem IA"]] as const).map(([v,l])=>(
+            <button key={v} type="button" onClick={()=>setFiltroRapido(v)} aria-pressed={filtroRapido===v} className={cn("rounded-full border px-2.5 py-1 text-[11px] font-medium transition", filtroRapido===v ? "border-cyan-500 bg-cyan-500/15 text-cyan-600 dark:text-cyan-300" : "border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800")}>{l}</button>
+          ))}
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <select value={ordenacao} onChange={e=>setOrdenacao(e.target.value as any)} aria-label="Ordenar" className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
@@ -116,7 +131,7 @@ export function InboxList() {
                 <button key={c.id} onClick={()=>setSelected(c.id)} aria-pressed={selectedId===c.id} style={{ position:"absolute", top:0, left:0, width:"100%", transform:`translateY(${v.start}px)`}} className={cn("flex flex-col gap-1 border-b border-slate-200/60 px-3 py-3 text-left transition hover:bg-slate-100 dark:border-slate-800/60 dark:hover:bg-slate-800", selectedId===c.id && "bg-slate-100 dark:bg-slate-800 border-l-2 border-l-cyan-500")}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-1.5 truncate text-sm font-medium text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>
-                      {c.leadName} {c.followUpAtivo && <span aria-label="IA ativa">🤖</span>}
+                      {c.unread>0 && <span aria-label="não lida" className="size-2 shrink-0 rounded-full bg-cyan-500" />}<span className={cn(c.unread>0 && "font-bold")}>{c.leadName}</span> {c.followUpAtivo && <span aria-label="IA ativa">🤖</span>}
                     </span>
                     <span className="shrink-0 font-mono text-[11px] text-slate-500 dark:text-slate-400" style={{fontFamily:"var(--font-jetbrains)"}}>{timeAgo(c.timestamp)}</span>
                   </div>
@@ -134,7 +149,7 @@ export function InboxList() {
           <button key={c.id} onClick={()=>setSelected(c.id)} aria-pressed={selectedId===c.id} className={cn("flex w-full flex-col gap-1 border-b border-slate-200/60 px-3 py-3 text-left transition hover:bg-slate-100 dark:border-slate-800/60 dark:hover:bg-slate-800", selectedId===c.id && "bg-slate-100 dark:bg-slate-800 border-l-2 border-l-cyan-500")}>
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 truncate text-sm font-medium text-slate-900 dark:text-slate-100" style={{fontFamily:"var(--font-inter)"}}>
-                {c.leadName} {c.followUpAtivo && <span aria-label="IA ativa">🤖</span>}
+                {c.unread>0 && <span aria-label="não lida" className="size-2 shrink-0 rounded-full bg-cyan-500" />}<span className={cn(c.unread>0 && "font-bold")}>{c.leadName}</span> {c.followUpAtivo && <span aria-label="IA ativa">🤖</span>}
               </span>
               <span className="shrink-0 font-mono text-[11px] text-slate-500 dark:text-slate-400" style={{fontFamily:"var(--font-jetbrains)"}}>{timeAgo(c.timestamp)}</span>
             </div>

@@ -146,7 +146,13 @@ export function InboxClient(){
           proximaTentativaISO: c.leadId && leadsMap.get(c.leadId)?.status === "em_followup" ? new Date(Date.now()+2*3600_000).toISOString() : undefined,
           ultimaMensagem: c.ultima || "",
           timestamp: c.ultimaEm || new Date().toISOString(),
-          unread: c.leadId && leadsMap.get(c.leadId)?.status === "novo" ? 1 : 0,
+          unread: (() => {
+            const id = `real-${c.leadId || c.telefone}`
+            const lido = (useInboxStore.getState().lidoEm || {})[id]
+            const ehAberta = useInboxStore.getState().selectedId === id
+            return !c.ultimaDeMim && !ehAberta && (!lido || new Date(c.ultimaEm).getTime() > new Date(lido).getTime()) ? 1 : 0
+          })(),
+          ultimaDeMim: !!c.ultimaDeMim,
           origem: "WhatsApp" as const,
           iaRespondendo: c.iaRespondendo,
           tags: c.tags || [],
@@ -168,13 +174,27 @@ export function InboxClient(){
     loadReal()
     // Atualização ao vivo: polling a cada 15s (pausa com aba oculta) + ao voltar o foco.
     // Sem isso, mensagens novas só apareciam recarregando a página.
-    const stopInterval = safeSetInterval(loadReal, 15000)
+    const stopInterval = safeSetInterval(loadReal, 30000)
     const aoFocar = () => { void loadReal() }
     window.addEventListener("focus", aoFocar)
+    // Tempo real: nova mensagem da instância atualiza a lista na hora (com pequeno agrupamento).
+    let agendado: ReturnType<typeof setTimeout> | null = null
+    const inst = instanciaSelecionada || PATRICIA_INSTANCE
+    const canal = supabase
+      .channel(`inbox-lista-${inst}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "whatsapp_mensagens" }, (payload) => {
+        const row: any = payload.new
+        if (row?.instance_name !== inst) return
+        if (agendado) clearTimeout(agendado)
+        agendado = setTimeout(() => { void loadReal() }, 400)
+      })
+      .subscribe()
     return () => {
       cancelled = true
       stopInterval()
       window.removeEventListener("focus", aoFocar)
+      if (agendado) clearTimeout(agendado)
+      supabase.removeChannel(canal)
     }
   }, [isGestorVendas, user, filtroTrafego, mostrarBloqueados, instanciaSelecionada, setConversas, setModoReal])
   if(loading){

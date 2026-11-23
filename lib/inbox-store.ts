@@ -2,6 +2,11 @@
 import { create } from "zustand"
 import { mockConversas, mockMensagens, type InboxConversation, type InboxMessage } from "./inbox-mock"
 
+const LIDO_KEY = "inbox-lido-em"
+function lerLido(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(LIDO_KEY) || "{}") } catch { return {} }
+}
+
 export type OrdenacaoInbox = "recente" | "antigo" | "status" | "origem" | "corretor" | "prioridade_ia"
 
 type InboxState = {
@@ -15,6 +20,11 @@ type InboxState = {
   filtroOrigem: string
   filtroStatus: string
   filtroCorretor: string
+  /** Quando cada conversa foi aberta pela última vez (por navegador). Base da contagem de não lidas. */
+  lidoEm: Record<string, string>
+  filtroRapido: "todas" | "nao_lidas" | "sem_ia"
+  marcarLido: (id: string) => void
+  setFiltroRapido: (v: "todas" | "nao_lidas" | "sem_ia") => void
   // actions
   setSelected: (id: string | null) => void
   setFiltro: (v: string) => void
@@ -47,7 +57,19 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   filtroOrigem: "todas",
   filtroStatus: "todos",
   filtroCorretor: "todos",
-  setSelected: (id) => set({ selectedId: id }),
+  lidoEm: typeof window !== "undefined" ? lerLido() : {},
+  filtroRapido: "todas",
+  marcarLido: (id) => {
+    const agora = new Date().toISOString()
+    const lidoEm = { ...(typeof window !== "undefined" ? lerLido() : get().lidoEm), [id]: agora }
+    try { localStorage.setItem(LIDO_KEY, JSON.stringify(lidoEm)) } catch { /* localStorage indisponível */ }
+    set((s) => ({ lidoEm, conversas: s.conversas.map((c) => (c.id === id ? { ...c, unread: 0 } : c)) }))
+  },
+  setFiltroRapido: (v) => set({ filtroRapido: v }),
+  setSelected: (id) => {
+    set({ selectedId: id })
+    if (id) get().marcarLido(id)
+  },
   setFiltro: (v) => set({ filtro: v }),
   setConversas: (c) => set({ conversas: c }),
   setConversaLead: (id, leadId, tags) =>
