@@ -4,6 +4,7 @@ import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { normalizePhone } from "@/lib/labels"
 import { getRules } from "@/lib/ai/rules"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY) }
 
@@ -27,6 +28,9 @@ function horaBrasil(iso: string): { diaISO: string; diaSemana: string; hora: str
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{id:string}> }){
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { id } = await params
   const url = new URL(req.url)
   const dias = Math.min(Math.max(parseInt(url.searchParams.get("days") || "7", 10), 1), 90)

@@ -3,6 +3,7 @@
 // POST best-effort: nunca derruba o fluxo do CRM.
 import { NextResponse } from "next/server"
 import { notifyGestorWhatsApp, resolveNotifyTarget, sendWhatsAppText, wsupabase } from "@/lib/whatsapp/server"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -17,6 +18,9 @@ const brl = (v: unknown) => {
 const NEGOCIO_EXTRA = (process.env.WHATSAPP_NOTIFY_NEGOCIO_EXTRA || "5518991975661").replace(/\D/g, "")
 
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: any
   try {
     body = await request.json()

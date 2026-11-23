@@ -8,12 +8,16 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { resolveMetaToken, metaPixelId, buildPurchaseEvent, sendMetaEvents, persistMetaEventLog } from "@/lib/meta/capi"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
 
 export async function POST(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: any
   try {
     body = await req.json()

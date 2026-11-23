@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getTagsCatalog, saveTagsCatalog, tagColor, type TagDef } from "@/lib/ai/tags-catalog"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -7,6 +8,9 @@ export const dynamic = "force-dynamic"
 // PATCH /api/tags/:name — edita cor/comportamento/renomeia uma tag.
 // Body: { color?, responderIA?, followUp?, novoNome? }
 export async function PATCH(request: Request, { params }: { params: Promise<{ name: string }> }) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { name } = await params
     const alvo = decodeURIComponent(name).trim().toLowerCase()
@@ -38,6 +42,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ na
 
 // DELETE /api/tags/:name — remove a tag do catálogo.
 export async function DELETE(_request: Request, { params }: { params: Promise<{ name: string }> }) {
+  const auth = exigirSessao(_request)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { name } = await params
     const alvo = decodeURIComponent(name).trim().toLowerCase()

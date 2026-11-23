@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { evolutionConfig, mapConnectionState, notifyDisconnection, onlyDigits, wsupabase } from "@/lib/whatsapp/server"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -17,6 +18,9 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 8000) {
 // Consulta ativa: pergunta o estado à Evolution e persiste no banco.
 // Assim o status atualiza mesmo sem o webhook estar configurado.
 export async function GET(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const instanceName = new URL(request.url).searchParams.get("instanceName")
   if (!instanceName) return NextResponse.json({ error: "Instância não informada." }, { status: 400 })
 

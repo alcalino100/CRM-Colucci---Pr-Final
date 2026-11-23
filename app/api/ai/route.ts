@@ -3,10 +3,14 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { AI_AGENTS_COLUMNS } from "@/lib/supabase/projections"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY) }
 
-export async function GET(){
+export async function GET(request: Request){
+  const auth = exigirSessaoLeituraGestorEscrita(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   try{
     const { data, error } = await db().from("ai_agents").select(AI_AGENTS_COLUMNS).order("created_at", {ascending:false})
     if(error) throw error
@@ -18,6 +22,9 @@ export async function GET(){
 }
 
 export async function POST(req: NextRequest){
+  const auth = exigirSessaoLeituraGestorEscrita(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try{
     const body = await req.json()
     const id = body.id || `ai_${Date.now()}`

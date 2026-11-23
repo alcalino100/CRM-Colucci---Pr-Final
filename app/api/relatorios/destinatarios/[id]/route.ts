@@ -9,6 +9,7 @@ import { logger } from "@/lib/logger"
 import { onlyDigits } from "@/lib/whatsapp/server"
 import { secoesSchema } from "@/lib/relatorios/secoes"
 import { equipeFiltroSchema } from "@/lib/relatorios/equipe-filtro"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,10 +23,11 @@ const destinatarioPatchSchema = z.object({
   equipe_filtro: equipeFiltroSchema.nullable().optional(),
 })
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: Request,
+  { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   if (!process.env.SUPABASE_SECRET_KEY) {
     return fail("configure SUPABASE_SECRET_KEY", 500)
   }
@@ -68,10 +70,11 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_request: Request,
+  { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirGestor(_request)
+  if (!auth.ok) return negarAcesso(auth)
+
   if (!process.env.SUPABASE_SECRET_KEY) {
     return fail("configure SUPABASE_SECRET_KEY", 500)
   }

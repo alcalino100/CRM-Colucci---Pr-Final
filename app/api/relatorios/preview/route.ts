@@ -9,11 +9,15 @@ import { consolidarRelatorioDia } from "@/lib/relatorios/montar"
 import { secoesEfetivas, secoesNecessarias, type SecoesAtivasConfig } from "@/lib/relatorios/secoes"
 import { aplicarFiltroEquipe, type EquipeFiltro, type UsuarioEquipe } from "@/lib/relatorios/equipe-filtro"
 import { formatarRelatorioWhatsApp } from "@/lib/relatorios/formatar-whatsapp"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   if (!process.env.SUPABASE_SECRET_KEY) {
     return fail("configure SUPABASE_SECRET_KEY", 500)
   }

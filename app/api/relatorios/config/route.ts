@@ -7,11 +7,15 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { SECOES_PADRAO } from "@/lib/relatorios/montar"
 import { configUpdateSchema } from "@/lib/relatorios/config-schema"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   if (!process.env.SUPABASE_SECRET_KEY) {
     return fail("configure SUPABASE_SECRET_KEY", 500)
   }
@@ -52,6 +56,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   if (!process.env.SUPABASE_SECRET_KEY) {
     return fail("configure SUPABASE_SECRET_KEY", 500)
   }

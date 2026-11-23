@@ -3,6 +3,7 @@ import { wsupabase } from "@/lib/whatsapp/server"
 import { ok, fail } from "@/lib/api/response"
 import { parseBody } from "@/lib/api/validate"
 import { logger } from "@/lib/logger"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,10 +23,11 @@ const patchLeadSchema = z.object({
 // Exclui um lead (usado pelo Inbox). Exige motivo + detalhe, grava auditoria e
 // desvincula as mensagens do WhatsApp (lead_id = null) para a conversa continuar
 // no Inbox, apenas sem lead associado.
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(request: Request,
+  { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { id } = await params
   if (!id) return fail("ID ausente.", 400)
 
@@ -65,10 +67,11 @@ export async function DELETE(
 
 // Atualiza campos permitidos de um lead (usado pelo Inbox para salvar tags/estágio).
 // Aceita somente campos controlados — nunca sobrescreve telefone/corretor.
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: Request,
+  { params }: { params: Promise<{ id: string }> }) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { id } = await params
   if (!id) return fail("ID ausente.", 400)
 

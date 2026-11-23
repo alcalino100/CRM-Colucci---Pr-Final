@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,6 +10,9 @@ export const dynamic = "force-dynamic"
 // RETOMADA: além de liberar a conversa, dispara uma resposta IMEDIATA da IA para a
 // última mensagem do lead (botão "Iniciar IA aqui" do Inbox).
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: { telefone?: string; pausado?: boolean; instanceName?: string }
   try {
     body = await request.json()

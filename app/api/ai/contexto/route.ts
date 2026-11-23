@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 function db(){ return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY) }
 
@@ -11,7 +12,10 @@ export const dynamic = "force-dynamic"
 // Vocabulário REAL do CRM para as regras de atendimento IA: origens, status e tags
 // (referências) que de fato existem em leads. Assim o editor fala com dados vivos,
 // não com textos digitados soltos — e oferece chips clicáveis com os valores reais.
-export async function GET(){
+export async function GET(request: Request){
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { data: leads } = await db().from("leads").select("origem,status,referencias").limit(20000)
     const origens = new Set<string>()

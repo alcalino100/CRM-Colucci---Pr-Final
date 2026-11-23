@@ -9,6 +9,7 @@ export const maxDuration = 120
 
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 function db() {
   return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY)
@@ -66,6 +67,9 @@ interface AdData {
 }
 
 export async function POST(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const { message, history = [] }: { message: string; history?: Mensagem[] } = await req.json()
     if (!message?.trim()) return NextResponse.json({ response: "Digite uma pergunta." })

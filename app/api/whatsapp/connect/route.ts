@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { evolutionConfig, wsupabase } from "@/lib/whatsapp/server"
 import { logger } from "@/lib/logger"
 import { definirWebhook } from "@/lib/whatsapp/webhook-config"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -32,6 +33,9 @@ async function configureWebhook(_cfg: { url: string; key: string }, instanceName
 }
 
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   const cfg = evolutionConfig()
   if (!cfg.ok) return NextResponse.json({ error: "Integração WhatsApp não configurada." }, { status: 500 })
 

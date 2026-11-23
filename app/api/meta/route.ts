@@ -17,6 +17,7 @@ const BASE = `https://graph.facebook.com/${VERSAO}`
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
+import { exigirServicoOuGestor, negarAcesso } from "@/lib/auth/sessao"
 function db() {
   return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY)
 }
@@ -73,6 +74,8 @@ async function metaGetAll(url: string): Promise<any[]> {
 const INSIGHT_FIELDS = "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type"
 
 export async function GET(req: Request) {
+  const auth = exigirServicoOuGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
   const url = new URL(req.url)
   const op = url.searchParams.get("op") || "status"
   const { token, source, expiresAt } = await resolveToken()
@@ -183,6 +186,8 @@ export async function GET(req: Request) {
 // ---------- Mutação: atualizar orçamento diário de um conjunto ----------
 // POST /api/meta?op=set_budget  body: { adset_id: string, daily_budget: number (em centavos) }
 export async function POST(req: Request) {
+  const auth = exigirServicoOuGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
   const url = new URL(req.url)
   const op = url.searchParams.get("op")
   const { token } = await resolveToken()

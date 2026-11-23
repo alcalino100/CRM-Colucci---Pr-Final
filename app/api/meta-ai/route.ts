@@ -12,6 +12,7 @@ export const maxDuration = 60
 
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
+import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
 
 function db() {
   return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY)
@@ -62,6 +63,9 @@ interface Relatorio {
 }
 
 export async function GET(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const url = new URL(req.url)
   const since = url.searchParams.get("since") || iso(ontem())
   const until = url.searchParams.get("until") || iso(ontem())

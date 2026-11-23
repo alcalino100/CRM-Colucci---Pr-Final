@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server"
 import { getTagsCatalog, saveTagsCatalog, tagColor, type TagDef } from "@/lib/ai/tags-catalog"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 // GET /api/tags — catálogo central de tags (configurado + em uso nos leads).
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const catalog = await getTagsCatalog()
     return NextResponse.json({ ok: true, ...catalog })
@@ -17,6 +21,9 @@ export async function GET() {
 // POST /api/tags — cria uma tag no catálogo. Body: { name, color? }
 // Bulk (usado pelo painel para salvar a lista inteira): { _bulk: true, _tags: [{name,color,responderIA,followUp}] }
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   try {
     const body = await request.json()
 

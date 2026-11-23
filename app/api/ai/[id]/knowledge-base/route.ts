@@ -3,9 +3,13 @@ import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL } from "@/lib/supabase/config"
 import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { KNOWLEDGE_BASES_COLUMNS, DOCUMENTS_COLUMNS } from "@/lib/supabase/projections"
+import { exigirSessaoLeituraGestorEscrita, negarAcesso } from "@/lib/auth/sessao"
 function db(){ return createClient(SUPABASE_URL, SUPABASE_SERVER_KEY) }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{id:string}> }){
+  const auth = exigirSessaoLeituraGestorEscrita(_req)
+  if (!auth.ok) return negarAcesso(auth)
+
   const { id } = await params
   const { data: kb } = await db().from("knowledge_bases").select(KNOWLEDGE_BASES_COLUMNS).eq("ai_id", id).maybeSingle()
   if(!kb) return NextResponse.json({ id:null, documents:[] })

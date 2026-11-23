@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
+import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -10,6 +11,9 @@ export const dynamic = "force-dynamic"
 // fazia o vínculo sumir após recarregar o Inbox. Com `unlink: true`, desfaz o
 // vínculo (lead_id = null) sem excluir nem o lead nem as mensagens.
 export async function POST(request: Request) {
+  const auth = exigirSessao(request)
+  if (!auth.ok) return negarAcesso(auth)
+
   let body: any
   try {
     body = await request.json()
