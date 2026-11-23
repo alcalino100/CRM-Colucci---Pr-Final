@@ -90,10 +90,12 @@ export async function processarCorpoMidia(params: {
     (typeof listResp?.title === "string" ? listResp.title : null) ??
     (midia ? (midia.legenda ?? "") : "")
 
+  // Guarda ANTES do marcador: áudio/imagem sem legenda precisam ser transcritos/descritos abaixo.
+  const semTexto = !corpo.trim()
   if (!corpo && midia) corpo = "[mídia]"
 
   // ÁUDIO: transcreve (Claude do agente primeiro, Gemini como fallback) e segue o fluxo NORMAL
-  if (midia?.tipo === "audio" && !corpo.trim() && mensagemId && deveProcessarMidiaIA) {
+  if (midia?.tipo === "audio" && semTexto && mensagemId && deveProcessarMidiaIA) {
     const b64 = await baixarMidiaComRetry(instanceName, mensagemId)
     if (!b64) {
       await auditarMidia("ia_midia_download_falhou", "Áudio não baixado", `Áudio de ${telefone} (${instanceName}) após 3 tentativas — registrado sem transcrição.`)
@@ -121,7 +123,7 @@ export async function processarCorpoMidia(params: {
   }
 
   // IMAGEM sem legenda: descreve via IA para o Inbox e IA
-  if (midia?.tipo === "image" && !corpo.trim() && mensagemId && deveProcessarMidiaIA) {
+  if (midia?.tipo === "image" && semTexto && mensagemId && deveProcessarMidiaIA) {
     const b64 = await baixarMidiaComRetry(instanceName, mensagemId)
     if (!b64) {
       await auditarMidia("ia_midia_download_falhou", "Imagem não baixada", `Imagem de ${telefone} (${instanceName}) após 3 tentativas — registrada sem descrição.`)
