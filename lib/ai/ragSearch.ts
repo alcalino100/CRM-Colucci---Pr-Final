@@ -1,10 +1,11 @@
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import OpenAI from "openai"
 
 let _ragDb: any = null
 function db(): any {
-  if (!_ragDb) _ragDb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  if (!_ragDb) _ragDb = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
   return _ragDb
 }
 

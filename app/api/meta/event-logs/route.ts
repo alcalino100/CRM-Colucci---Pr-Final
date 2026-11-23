@@ -2,7 +2,8 @@
 // GET ?usuario_id=... — valida que o solicitante é um gestor ativo.
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { META_EVENT_LOGS_COLUMNS } from "@/lib/supabase/projections"
 
 export const runtime = "nodejs"
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
 
   if (!usuarioId) return NextResponse.json({ ok: false, erro: "usuario_id é obrigatório" }, { status: 400 })
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
   const { data: usuario, error: ue } = await supabase
     .from("usuarios")
     .select("id,role,status")

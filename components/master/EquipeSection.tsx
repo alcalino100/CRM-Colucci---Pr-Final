@@ -19,9 +19,17 @@ export function EquipeSection() {
   }, [])
 
   const trocar = async (id: string, role: Role) => {
-    const { error } = await supabase.from("usuarios").update({ role }).eq("id", id)
-    if (error) {
-      toast("Falha.", "error")
+    // A troca de perfil passa pelo servidor, que aplica as regras de permissão (antes ia direto ao banco).
+    try {
+      const r = await fetch(`/api/usuarios/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) })
+      const j = await r.json().catch(() => ({}))
+      if (!j?.ok) {
+        toast(r.status === 401 ? "Sua sessão precisa ser renovada: saia do CRM e entre novamente." : j?.erro || "Falha.", "error")
+        carregar()
+        return
+      }
+    } catch {
+      toast("Sem conexão. Tente novamente.", "error")
       return
     }
     toast("Perfil atualizado.")

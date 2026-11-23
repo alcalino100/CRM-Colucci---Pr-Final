@@ -5,7 +5,8 @@
 // igual ao backfill. O arquivamento é feito pelo cliente após o envio bem-sucedido.
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import { resolveMetaToken, metaPixelId, buildPurchaseEvent, sendMetaEvents, persistMetaEventLog } from "@/lib/meta/capi"
 
 export const runtime = "nodejs"
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
   if (!lead_id || !usuario_id)
     return NextResponse.json({ ok: false, erro: "lead_id e usuario_id são obrigatórios" }, { status: 400 })
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
 
   const { data: usuario, error: ue } = await supabase
     .from("usuarios")

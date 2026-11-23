@@ -3,7 +3,8 @@
 // O webhook usa esse click_id para casar o clique com o lead.
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
   const metaAdsetId = /^\d+$/.test(conjunto) ? conjunto : null
   const metaAdId = /^\d+$/.test(anuncio) ? anuncio : null
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
 
   // Tenta até 5x um click_id único
   let inserido: any = null

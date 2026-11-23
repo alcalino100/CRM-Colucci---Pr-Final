@@ -80,3 +80,19 @@ export function exigirGestor(req: Request, agoraMs = Date.now()): ResultadoAuth 
   }
   return { ok: true, sessao }
 }
+
+/** Exige apenas uma sessão válida (qualquer perfil). Quem decide o que cada perfil pode fazer é a rota. Mutação exige mesma origem. */
+export function exigirSessao(req: Request, agoraMs = Date.now()): { ok: true; sessao: Sessao } | { ok: false; status: 401 | 403 | 503; erro: string } {
+  if (!segredo()) return { ok: false, status: 503, erro: "Servidor sem segredo de sessão configurado (SESSION_SECRET ou CRON_SECRET)." }
+  const sessao = lerSessao(lerCookie(req.headers.get("cookie")), agoraMs)
+  if (!sessao) return { ok: false, status: 401, erro: "Sessão expirada ou ausente. Saia e entre novamente no CRM." }
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    const origem = req.headers.get("origin")
+    if (origem) {
+      let host = ""
+      try { host = new URL(origem).host } catch { /* origem inválida */ }
+      if (host !== new URL(req.url).host) return { ok: false, status: 403, erro: "Origem não permitida." }
+    }
+  }
+  return { ok: true, sessao }
+}

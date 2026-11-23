@@ -1,9 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
-import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_URL } from "@/lib/supabase/config"
+import { SUPABASE_SERVER_KEY } from "@/lib/supabase/server-key"
 import type { Database } from "@/lib/supabase/database.types"
 
 // Cliente Supabase server-side (sem sessão persistida)
-export const wsupabase: SupabaseClient<Database> = createClient<Database>(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+export const wsupabase: SupabaseClient<Database> = createClient<Database>(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
 
 // Configuração da Evolution API. A chave fica em EVOLUTION_API_KEY_2 (com fallback).
 export function evolutionConfig() {
