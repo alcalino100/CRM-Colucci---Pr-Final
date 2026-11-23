@@ -48,7 +48,6 @@ const NAV: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/arquivados", label: "Arquivados", icon: Archive, roles: ["corretor", "gestor"] },
   { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["corretor", "gestor"] },
   { href: "/dashboard-gestao", label: "Dashboard", icon: LayoutDashboard, roles: ["gestor"] },
-  { href: "/chat", label: "Chat", icon: MessagesSquare, roles: ["gestor"] },
   { href: "/cadastros", label: "Leads Cadastrados", icon: UserPlus, roles: ["gestor"] },
   { href: "/fechamento", label: "Fechamentos", icon: Handshake, roles: ["gestor"] },
   { href: "/auditoria", label: "Auditoria de Leads", icon: ClipboardCheck, roles: ["gestor"] },

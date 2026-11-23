@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/primitives"
 import { safeSetInterval } from "@/hooks/use-safe-interval"
 import { logger } from "@/lib/logger"
+import { supabase } from "@/lib/supabase/client"
+import { MidiaBolha } from "./MidiaBolha"
 
 function fmtHora(iso: string){
   return new Date(iso).toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
@@ -62,13 +64,19 @@ export function ConversaView(){
           timestamp: m.criado_em,
           sender: m.de_mim ? "você" as const : "lead" as const,
           origem: m.de_mim ? "outbound" as const : "inbound" as const,
-          content: m.corpo || (m.tipo_midia ? `[${m.tipo_midia}]` : ""),
+          content: m.corpo || "",
+          tipoMidia: m.tipo_midia ?? null,
+          midiaUrl: m.midia_url ?? null,
+          nomeArquivo: m.nome_arquivo ?? null,
+          viaAnuncio: !!m.veio_de_anuncio,
+          anuncioTitulo: m.anuncio_titulo ?? null,
         }))
         const store = useInboxStore.getState() as any
         const atual = (store.mensagens[chave] || []) as any[]
         const ultimaAtual = atual.length ? atual[atual.length-1]?.id : null
         const ultimaNova = mapped.length ? mapped[mapped.length-1]?.id : null
-        if(mapped.length !== atual.length || ultimaNova !== ultimaAtual){
+        const midiaMudou = mapped.some((m, i) => atual[i] && (m as any).midiaUrl !== (atual[i] as any).midiaUrl)
+        if(mapped.length !== atual.length || ultimaNova !== ultimaAtual || midiaMudou){
           store.setMensagens({ ...store.mensagens, [chave]: mapped })
         }
       }catch(err){
@@ -77,10 +85,20 @@ export function ConversaView(){
       finally{ if(!silencioso) setCarregandoReal(false) }
     }
     void carregarThread(false)
-    const stopInterval = safeSetInterval(() => void carregarThread(true), 15000)
+    const stopInterval = safeSetInterval(() => void carregarThread(true), 30000)
+    // Tempo real: mensagem nova (ou mídia que terminou de baixar) desta conversa atualiza o thread na hora.
+    const canal = supabase
+      .channel(`inbox-thread-${chave}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_mensagens" }, (payload) => {
+        const row: any = payload.new
+        if (row?.instance_name !== inst) return
+        if (leadId ? row?.lead_id === leadId : row?.telefone === telefone) void carregarThread(true)
+      })
+      .subscribe()
     return () => {
       cancelled = true
       stopInterval()
+      supabase.removeChannel(canal)
     }
   }, [selectedId, modoReal, conv])
 
@@ -171,7 +189,13 @@ export function ConversaView(){
                   "rounded-bl-sm bg-slate-800 text-slate-100"
                 )}>
                   {m.sender==="ia" && <span className="mr-1">🤖</span>}
-                  <span className="whitespace-pre-wrap break-words">{m.content}</span>
+                  {m.viaAnuncio && (
+                    <p className="mb-1 inline-block rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                      Via anúncio{m.anuncioTitulo ? ` · ${String(m.anuncioTitulo).slice(0, 40)}` : ""}
+                    </p>
+                  )}
+                  {m.tipoMidia && <MidiaBolha midia={{ tipo: m.tipoMidia, url: m.midiaUrl, nome: m.nomeArquivo }} />}
+                  {m.content && <span className="whitespace-pre-wrap break-words">{m.content}</span>}
                   <p className={cn("mt-1 text-right font-mono text-[10px]", m.sender==="você" ? "text-white/70" : "text-slate-400")}>
                     <span className="md:hidden">{timeAgoShort(m.timestamp)} · {m.sender}</span>
                     <span className="hidden md:inline">{fmtHora(m.timestamp)} · {m.sender}</span>
