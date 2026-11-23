@@ -31,7 +31,7 @@ function descreverEvento(e: Evento): string {
     case "identidade": return `Identidade: ${e.resultado.replace(/_/g, " ")}`
     case "escalada": return `Escalada → ${ROTULO_DEPARTAMENTO[e.departamento]} (${e.motivo.replace(/_/g, " ")})`
     case "resolvido_automaticamente": return "Resolvido pela IA"
-    case "ia": return e.funcao === "agente" ? (e.ok ? `Claude respondeu${e.tokens ? ` (${e.tokens} tokens)` : ""}` : "Claude não passou na conferência: usei o fluxo de regras") : `Claude (${e.funcao}) ${e.ok ? "✓" : "indisponível, usei o padrão"}`
+    case "ia": return e.funcao === "agente" ? (e.ok ? `Claude respondeu${e.tokens ? ` (${e.tokens} tokens)` : ""}` : `Claude não respondeu, usei o fluxo de regras${e.erro ? `: ${e.erro}` : ""}`) : `Claude (${e.funcao}) ${e.ok ? "✓" : "indisponível, usei o padrão"}`
   }
 }
 
@@ -85,7 +85,7 @@ export function Simulador() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <Card className="flex h-[36rem] flex-col overflow-hidden">
+      <Card className="flex h-[28rem] flex-col overflow-hidden sm:h-[36rem]">
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-emerald-600 px-4 py-3 text-white">
           <Bot className="size-5" />
           <div className="min-w-0 flex-1">

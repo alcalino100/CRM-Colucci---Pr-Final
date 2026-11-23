@@ -133,6 +133,8 @@ export async function atenderComAgente(p: {
   agora: Date
   capacidades?: Partial<MapaCapacidades>
   gerarProtocolo?: (agora: Date) => string
+  /** Recebe o MOTIVO quando devolve null (Claude falhou ou a resposta não passou na conferência). Nunca contém a chave. */
+  registrarErro?: (motivo: string) => void
 }): Promise<(Saida & { tokens: number; modelo: string }) | null> {
   let estado: Estado = { ...p.estado }
   const eventos: Evento[] = []
@@ -257,17 +259,25 @@ export async function atenderComAgente(p: {
       system: montarSystemPrompt({ persona: p.agente.persona, estado, agora: p.agora, capacidades: p.capacidades }),
       messages, tools: FERRAMENTAS_AGENTE, onToolUse, maxTokens: 600, timeoutMs: 15_000, maxRounds: 5,
     })
-  } catch {
+  } catch (e) {
+    p.registrarErro?.(`Claude falhou: ${e instanceof Error ? e.message : String(e)}`.slice(0, 220))
     return null
   }
 
   let texto = r.texto.trim()
   if (!texto && estado.etapa === "transferido") texto = `Vou encaminhar você para a equipe de ${ROTULO_DEPARTAMENTO[estado.departamento ?? "administrativo"]}. Protocolo: ${estado.protocolo}. Em breve alguém continua este atendimento por aqui.`
-  if (!texto || texto.length > 1800) return null
+  if (!texto || texto.length > 1800) {
+    p.registrarErro?.(!texto ? "Claude devolveu resposta vazia" : "resposta longa demais")
+    return null
+  }
 
   // Conferência anti-invenção: todo fato da resposta precisa existir nas fontes do turno.
   const fontesTotais = [...fontes, p.texto, ...p.historico.map((m) => m.conteudo), estado.protocolo ?? "", dataBR(p.agora.toISOString()), String(p.agora.getFullYear())]
-  if (fatosNaoRastreaveis(texto, fontesTotais).length) return null
+  const inventados = fatosNaoRastreaveis(texto, fontesTotais)
+  if (inventados.length) {
+    p.registrarErro?.(`conferência bloqueou fato sem fonte: ${inventados.slice(0, 3).join(", ")}`.slice(0, 220))
+    return null
+  }
   // Transferiu mas a resposta não traz o protocolo: acrescenta (o cliente precisa dele).
   if (estado.etapa === "transferido" && estado.protocolo && !texto.includes(estado.protocolo)) texto += `\nProtocolo: ${estado.protocolo}`
 

@@ -194,7 +194,7 @@ describe("atenderMensagem com agente", () => {
     const r = await base(repo, agenteDe(async () => "Seu boleto vence em 01/01/2030 e custa R$ 123,45."), "bom dia")
     expect(r.respondeu).toBe(true)
     expect(r.respostas.join(" ")).toContain("assistente virtual da Colucci")
-    expect(r.eventos).toContainEqual({ tipo: "ia", funcao: "agente", ok: false })
+    expect(r.eventos).toContainEqual(expect.objectContaining({ tipo: "ia", funcao: "agente", ok: false, erro: expect.stringContaining("conferência") }))
   })
 
   it("Claude fora do ar: segue 100% pelas regras", async () => {

@@ -13,6 +13,7 @@ export function useApi<T>(url: string) {
     try {
       const r = await fetch(url, { cache: "no-store" })
       const j = await r.json()
+      if (r.status === 401) throw new Error("Sua sessão precisa ser renovada: saia do CRM e entre novamente.")
       if (!j.ok) throw new Error(j.erro || "Falha ao carregar")
       setDados(j as T)
       setErro(null)

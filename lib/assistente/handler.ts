@@ -20,7 +20,20 @@ export type DepsHandler = {
   log: (nivel: "info" | "erro", msg: string, extra?: Record<string, unknown>) => void
   dormir?: (ms: number) => Promise<void>
   agora?: () => Date
+  /**
+   * Agrupa mensagens seguidas ("oi" + "preciso do boleto" em 2s): espera um instante e devolve o texto junto,
+   * ou null se chegou mensagem mais nova (aquela execução responde por todas). Sem isso, duas execuções
+   * simultâneas criariam conversas duplicadas e respostas embaralhadas.
+   */
+  aguardarRajada?: (p: { telefone: string; instanceName: string; mensagemId?: string; texto: string }) => Promise<string | null>
 }
+
+/**
+ * Avisos que o PRÓPRIO sistema manda para números da equipe (resumos, vendas, alertas, notificações do assistente).
+ * O assistente nunca responde a eles: evita conversa entre robôs.
+ */
+export const ehMensagemAutomatica = (texto: string) =>
+  /^\s*(?:[^\p{L}\p{N}\s]{1,6}\s*)?(?:RESUMO DE ALERTAS|VENDA FECHADA|LEAD EM NEGOCIA[ÇC][ÃA]O|Assistente Virtual|Resumo do dia)/iu.test(texto)
 
 const mesmoTelefone = (a: string, b: string) => !!a && !!b && normalizePhone(a) === normalizePhone(b)
 
@@ -30,6 +43,9 @@ export function podeAtuar(config: ConfigAssistente, provider: ImmobillisProvider
   const ehTeste = config.numerosTeste.some((n) => mesmoTelefone(n, telefone))
   const vinculada = !!instanceName && config.instancias.includes(instanceName)
   if (!ehTeste && !vinculada) return { pode: false, motivo: "fora_do_escopo" }
+  // Número de teste só vale nas instâncias escolhidas (se houver). Antes valia em QUALQUER instância e o assistente
+  // respondeu até aos avisos automáticos que o sistema manda para o celular do gestor por outra instância.
+  if (ehTeste && !vinculada && config.instancias.length > 0) return { pode: false, motivo: "teste_fora_das_instancias" }
   // Provedor simulado = dado fictício. NUNCA para cliente real: só número de teste.
   if (provider.nome === "simulado" && !ehTeste) return { pode: false, motivo: "provedor_simulado_so_teste" }
   return { pode: true }
@@ -40,12 +56,13 @@ export function podeAtuar(config: ConfigAssistente, provider: ImmobillisProvider
  * (o fluxo de leads/IA Conversacional NÃO deve responder), false para seguir o fluxo normal.
  */
 export async function tratarMensagemRecebida(
-  p: { telefone: string; texto: string; instanceName: string },
+  p: { telefone: string; texto: string; instanceName: string; mensagemId?: string },
   d: DepsHandler,
   opcoes: { exigirTeste?: boolean } = {}
 ): Promise<boolean> {
-  const texto = p.texto.trim()
+  let texto = p.texto.trim()
   if (!texto) return false
+  if (ehMensagemAutomatica(texto)) return false
   let config: ConfigAssistente
   try {
     config = await d.repo.obterConfig()
@@ -59,6 +76,11 @@ export async function tratarMensagemRecebida(
   const dormir = d.dormir ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)))
   const agora = d.agora ? d.agora() : new Date()
   try {
+    if (d.aguardarRajada) {
+      const junto = await d.aguardarRajada({ telefone: p.telefone, instanceName: p.instanceName, mensagemId: p.mensagemId, texto })
+      if (junto === null) return true // outra execução (da mensagem mais nova) responde por todas
+      texto = junto.trim() || texto
+    }
     const ia = await d.resolverIa(config).catch(() => null)
     const agente = d.resolverAgente ? await d.resolverAgente(config).catch(() => null) : null
     if (d.presenca) await d.presenca(p.instanceName, p.telefone).catch(() => {})
@@ -68,6 +90,12 @@ export async function tratarMensagemRecebida(
       const env = await d.enviarTexto(p.instanceName, p.telefone, r.respostas[i])
       if (!env.ok) d.log("erro", "assistente: falha ao enviar resposta", { erro: env.erro, instanceName: p.instanceName })
       else if (d.registrarNoInbox) await d.registrarNoInbox({ instanceName: p.instanceName, telefone: p.telefone, texto: r.respostas[i], keyId: env.keyId }).catch(() => {})
+    }
+    // Claude falhou/foi barrado: deixa o MOTIVO nos logs (antes sumia em silêncio e ninguém via que a IA não estava rodando).
+    const falhaIa = r.eventos.find((e) => e.tipo === "ia" && !e.ok && e.erro)
+    if (falhaIa && falhaIa.tipo === "ia") d.log("erro", `assistente: IA (${falhaIa.funcao}) não respondeu`, { motivo: falhaIa.erro, instanceName: p.instanceName })
+    if (r.limitado && d.notificarGestor) {
+      await d.notificarGestor(`⚠️ Assistente Virtual: muitas respostas em pouco tempo para ${p.telefone}. Pausei o assistente nessa conversa; veja se não há outro robô respondendo.`).catch(() => {})
     }
     if (r.escalada && d.notificarGestor) {
       const e = r.escalada

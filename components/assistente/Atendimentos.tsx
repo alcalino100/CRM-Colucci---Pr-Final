@@ -37,7 +37,7 @@ export function Atendimentos() {
 
       {erro && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
-      <Card className="overflow-hidden">
+      {!erro && <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[44rem] text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -66,7 +66,7 @@ export function Atendimentos() {
             </tbody>
           </table>
         </div>
-      </Card>
+      </Card>}
     </div>
   )
 }

@@ -69,7 +69,7 @@ export function criarChamadaIa(cred: CredencialClaude): ChamadaIa {
       apiKey: cred.apiKey,
       modelos: [CLAUDE_MODELO_RAPIDO, cred.modeloAgente ?? "", CLAUDE_MODELO_PADRAO],
       system: p.system, messages: p.messages, tools: p.tools, toolChoice: p.toolChoice,
-      maxTokens: p.maxTokens, timeoutMs: p.timeoutMs, maxRetries: 1, temperature: 0.3,
+      maxTokens: p.maxTokens, timeoutMs: p.timeoutMs, maxRetries: 1,
     })
 }
 
@@ -107,7 +107,7 @@ export function criarAgenteDeps(res: ResolucaoClaude): AgenteDeps {
         apiKey: res.cred.apiKey,
         modelos: [res.cred.modeloAgente ?? "", CLAUDE_MODELO_PADRAO, CLAUDE_MODELO_RAPIDO],
         system: p.system, messages: p.messages, tools: p.tools, onToolUse: p.onToolUse,
-        maxTokens: p.maxTokens, timeoutMs: p.timeoutMs, maxRounds: p.maxRounds, maxRetries: 1, temperature: 0.3,
+        maxTokens: p.maxTokens, timeoutMs: p.timeoutMs, maxRounds: p.maxRounds, maxRetries: 1,
       })
       return { texto: r.texto, tokensTotal: r.tokensTotal, modelo: r.modelo }
     },

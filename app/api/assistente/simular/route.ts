@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { exigirGestor } from "@/lib/auth/sessao"
 import { fail, ok } from "@/lib/api/response"
 import { CAPACIDADES_PADRAO, RepositorioMemoria, criarMockProvider, type Estado } from "@/lib/assistente"
 import { atenderMensagem } from "@/lib/assistente/atendimento"
@@ -34,6 +35,8 @@ const Corpo = z.object({
 })
 
 export async function POST(req: Request) {
+  const auth = exigirGestor(req)
+  if (!auth.ok) return fail(auth.erro, auth.status)
   const parsed = Corpo.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return fail("Requisição inválida", 400)
   const { texto, telefone, indisponivel, usarIa, estado, historico } = parsed.data

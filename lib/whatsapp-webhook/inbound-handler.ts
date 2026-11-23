@@ -5,7 +5,7 @@ import { registrarRespostaDeLead } from "@/lib/automation-services"
 import { agenteParaInstancia, handlePatriciaInbound, isNumeroTesteIA, pausarIaMensagemManual, saudarLeadCTWA } from "@/lib/ai/inboxHandler"
 
 // Assistente Virtual carregado sob demanda: não pesa no webhook e qualquer falha dele nunca afeta o fluxo de leads.
-async function handleAssistenteInbound(p: { telefone: string; texto: string; instanceName?: string }, opcoes: { exigirTeste?: boolean } = {}): Promise<boolean> {
+async function handleAssistenteInbound(p: { telefone: string; texto: string; instanceName?: string; mensagemId?: string }, opcoes: { exigirTeste?: boolean } = {}): Promise<boolean> {
   try {
     return await (await import("@/lib/assistente/whatsapp")).handleAssistenteInbound(p, opcoes)
   } catch (e) {
@@ -97,7 +97,7 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
     await preencherMidiaUrl(instanceName, mensagemId, midia)
     // Número interno da empresa: nunca vira lead nem aciona a IA de leads. Exceção: se for número de TESTE
     // do Assistente Virtual, ele atende (é assim que a equipe testa o assistente com o próprio celular).
-    if (!semIA) await handleAssistenteInbound({ telefone, texto: corpo, instanceName }, { exigirTeste: true })
+    if (!semIA) await handleAssistenteInbound({ telefone, texto: corpo, instanceName, mensagemId: mensagemId || undefined }, { exigirTeste: true })
     return
   }
 
@@ -185,7 +185,7 @@ export async function handleMessageUpsert(payload: Record<string, unknown> | nul
     if (!key?.fromMe && !semIA) {
       // Assistente Virtual (clientes): só assume se estiver ligado e o número/instância estiver liberado.
       // Desligado por padrão: nesse caso devolve false e o fluxo de leads segue exatamente como antes.
-      if (await handleAssistenteInbound({ telefone, texto: corpo, instanceName }).catch(() => false)) return
+      if (await handleAssistenteInbound({ telefone, texto: corpo, instanceName, mensagemId: mensagemId || undefined }).catch(() => false)) return
       await handlePatriciaInbound({
         telefone,
         texto: corpo,

@@ -110,7 +110,15 @@ async function uma(params: ClaudeParams, messages: ClaudeMsg[], tools: ClaudeToo
       if (r.ok) return j
       const tipo: string | undefined = j?.error?.type
       const msg: string = j?.error?.message || `Claude HTTP ${r.status}`
-      const modeloInvalido = r.status === 404 || tipo === "not_found_error" || (r.status === 400 && /model/i.test(msg))
+      // Só é "modelo inválido" quando a API diz que o MODELO não existe/não é aceito. Antes, qualquer 400 que
+      // citasse a palavra "model" (ex.: "temperature is not supported for this model") disparava a troca de modelo.
+      const modeloInvalido = r.status === 404 || tipo === "not_found_error" || (r.status === 400 && /(invalid|unknown|unsupported|unrecognized)\s+model|model\s*[:'"`]|model .{0,40}(not found|does not exist)/i.test(msg) && !/temperature|top_p|top_k|cache_control|sampling/i.test(msg))
+      // Auto-correção: se a API recusa um parâmetro opcional (varia conforme o modelo), tira o parâmetro e repete
+      // na hora, sem gastar tentativa. Cada correção vale uma vez.
+      if (r.status === 400 && !modeloInvalido) {
+        if (/temperature|top_p|top_k|sampling/i.test(msg) && ("temperature" in body)) { delete body.temperature; tentativa--; continue }
+        if (/cache_control/i.test(msg) && Array.isArray(body.system)) { body.system = params.system; tentativa--; continue }
+      }
       ultimo = new ClaudeError(msg, { status: r.status, tipo, retentavel: STATUS_RETENTAVEL.has(r.status), modeloInvalido })
       if (!ultimo.retentavel || tentativa === maxRetries) throw ultimo
       await dorme(atrasoRetry(tentativa, r.headers?.get?.("retry-after") ?? null))
