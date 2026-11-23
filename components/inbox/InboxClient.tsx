@@ -174,7 +174,7 @@ export function InboxClient(){
     loadReal()
     // Atualização ao vivo: polling a cada 15s (pausa com aba oculta) + ao voltar o foco.
     // Sem isso, mensagens novas só apareciam recarregando a página.
-    const stopInterval = safeSetInterval(loadReal, 30000)
+    const stopInterval = safeSetInterval(loadReal, 15000)
     const aoFocar = () => { void loadReal() }
     window.addEventListener("focus", aoFocar)
     // Tempo real: nova mensagem da instância atualiza a lista na hora (com pequeno agrupamento).

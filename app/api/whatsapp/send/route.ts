@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server"
 import { onlyDigits, sendWhatsAppText } from "@/lib/whatsapp/server"
+import { registrarEnvioManual } from "@/lib/whatsapp-webhook/registrar-envio"
 import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 // Envia uma mensagem de texto pelo WhatsApp de um corretor (usado pelo Chat do gestor).
-// A mensagem enviada só aparece na conversa quando o webhook da Evolution confirma o
-// envio (evento fromMe) — evita duplicar a linha no banco.
+// A mensagem é gravada aqui mesmo (pelo id devolvido pela Evolution); se o eco fromMe do
+// webhook chegar depois, o id repetido é ignorado — sem duplicar a linha.
 export async function POST(request: Request) {
   const auth = exigirSessao(request)
   if (!auth.ok) return negarAcesso(auth)
@@ -29,5 +30,6 @@ export async function POST(request: Request) {
 
   const res = await sendWhatsAppText(instanceName, telefone, texto)
   if (!res.ok) return NextResponse.json({ ok: false, erro: res.erro }, { status: 502 })
+  await registrarEnvioManual({ instanceName, telefone, texto, keyId: res.keyId })
   return NextResponse.json({ ok: true })
 }
