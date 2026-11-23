@@ -68,7 +68,7 @@ export const repositorioSupabase: RepositorioAssistente = {
   async buscarConversaRecente(telefone, instanceName, agora) {
     const { data, error } = await db()
       .from("assistente_conversas").select("*")
-      .eq("telefone", telefone).eq("instance_name", instanceName)
+      .eq("telefone", telefone).eq("instance_name", instanceName).neq("status", "encerrada")
       .order("ultima_msg_em", { ascending: false }).limit(1).maybeSingle()
     if (error) throw error
     if (!data) return null
@@ -104,6 +104,22 @@ export const repositorioSupabase: RepositorioAssistente = {
       const { error: e3 } = await db().from("assistente_eventos").insert(t.eventos.map((e) => ({ conversa_id: conversaId, tipo: e.tipo, dados: e, criado_em: iso })))
       if (e3) throw e3
     }
+  },
+
+  async reiniciarConversas(alvo, agora) {
+    const campos = { status: "encerrada", atualizado_em: agora.toISOString() }
+    let q = db().from("assistente_conversas").update(campos).neq("status", "encerrada")
+    if (alvo.conversaId) {
+      // Encerra também as outras conversas abertas do mesmo cliente na mesma instância (nada "ressuscita" depois).
+      const { data: ref } = await db().from("assistente_conversas").select("telefone,instance_name").eq("id", alvo.conversaId).maybeSingle()
+      if (!ref) return 0
+      q = q.eq("telefone", ref.telefone).eq("instance_name", ref.instance_name)
+    } else if (alvo.telefone && alvo.telefone.replace(/\D/g, "").length >= 10) {
+      q = q.like("telefone", `%${alvo.telefone.replace(/\D/g, "").slice(-10)}`)
+    } else return 0
+    const { data, error } = await q.select("id")
+    if (error) throw error
+    return (data ?? []).length
   },
 
   async contarRespostasAssistente(conversaId, desde) {

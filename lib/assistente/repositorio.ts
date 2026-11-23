@@ -83,6 +83,11 @@ export interface RepositorioAssistente {
   contarRespostasAssistente(conversaId: string, desde: Date): Promise<number>
   /** Últimas mensagens que o assistente enviou (para reconhecer o eco do próprio envio). */
   ultimasMensagensAssistente(conversaId: string, limite: number): Promise<string[]>
+  /**
+   * "Recomeçar do zero": encerra as conversas do alvo (por id, ou por telefone). A próxima mensagem do cliente abre uma
+   * conversa nova, sem memória e sem o estado de "já transferido". Devolve quantas foram encerradas.
+   */
+  reiniciarConversas(alvo: { conversaId?: string; telefone?: string }, agora: Date): Promise<number>
   /** Humano respondeu pelo WhatsApp: o assistente cala nessa conversa. */
   marcarHumano(telefone: string, instanceName: string, agora: Date): Promise<void>
   listarAtendimentos(opts: { limite: number; status?: StatusConversa }): Promise<AtendimentoResumo[]>
@@ -111,7 +116,7 @@ export class RepositorioMemoria implements RepositorioAssistente {
   async salvarConfig(p: Partial<ConfigAssistente>) { this.config = { ...this.config, ...p }; return this.config }
 
   async buscarConversaRecente(telefone: string, instanceName: string, agora: Date) {
-    const c = this.conversas.filter((x) => x.telefone === telefone && x.instanceName === instanceName).sort((a, b) => b.ultimaMsgEm.localeCompare(a.ultimaMsgEm))[0]
+    const c = this.conversas.filter((x) => x.telefone === telefone && x.instanceName === instanceName && x.status !== "encerrada").sort((a, b) => b.ultimaMsgEm.localeCompare(a.ultimaMsgEm))[0]
     return c && dentroDoTtl(c.ultimaMsgEm, agora) ? c : null
   }
 
@@ -136,6 +141,14 @@ export class RepositorioMemoria implements RepositorioAssistente {
 
   async historico(id: string, limite: number) {
     return (this.mensagens.get(id) ?? []).slice(-limite).map(({ papel, conteudo }) => ({ papel, conteudo }))
+  }
+
+  async reiniciarConversas(alvo: { conversaId?: string; telefone?: string }, agora: Date) {
+    const ref = alvo.conversaId ? this.conversas.find((c) => c.id === alvo.conversaId) : undefined
+    const final10 = (t: string) => t.replace(/\D/g, "").slice(-10)
+    const alvos = this.conversas.filter((c) => c.status !== "encerrada" && (ref ? c.telefone === ref.telefone && c.instanceName === ref.instanceName : !!alvo.telefone && final10(c.telefone) === final10(alvo.telefone)))
+    for (const c of alvos) { c.status = "encerrada"; c.atualizadoEm = agora.toISOString() }
+    return alvos.length
   }
 
   async ultimasMensagensAssistente(id: string, limite: number) {

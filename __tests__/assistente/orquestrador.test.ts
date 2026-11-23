@@ -103,6 +103,7 @@ describe("orquestrador", () => {
 
   it("após transferência, não responde sozinho de novo", async () => {
     const r = await conversa("5511999990001", ["quero falar com humano", "e o boleto?"])
-    expect(r.respostas).toContain("já foi encaminhado")
+    expect(r.respostas).toMatch(/já está com a nossa equipe|Já passei o seu caso/)
+    expect(r.respostas).toContain("COL-")
   })
 })

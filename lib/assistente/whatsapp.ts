@@ -4,7 +4,7 @@ import { notifyGestorWhatsApp, sendPresence, sendWhatsAppText, wsupabase } from 
 import { criarAgenteDeps, criarChamadaIa, resolverClaude } from "./ia-claude"
 import { obterProvider } from "./provider-factory"
 import { repositorioSupabase } from "./repositorio-supabase"
-import { tratarMensagemHumana, tratarMensagemRecebida, type DepsHandler } from "./handler"
+import { janelaRajada, tratarMensagemHumana, tratarMensagemRecebida, type DepsHandler } from "./handler"
 import type { ConfigAssistente, RepositorioAssistente } from "./repositorio"
 
 /** Memoriza a config por 20s: cada mensagem do WhatsApp passa por aqui e não precisa de uma ida ao banco. */
@@ -51,7 +51,7 @@ const deps = (): DepsHandler => ({
     const ultimaId = (nova as { mensagem_id: string | null }[] | null)?.[0]?.mensagem_id
     if (mensagemId && ultimaId && ultimaId !== mensagemId) return null
     const { data: minha } = await wsupabase.from("whatsapp_mensagens").select("criado_em").eq("instance_name", instanceName).eq("telefone", telefone).eq("de_mim", true).order("criado_em", { ascending: false }).limit(1)
-    const desde = (minha as { criado_em: string }[] | null)?.[0]?.criado_em ?? new Date(Date.now() - 60_000).toISOString()
+    const desde = janelaRajada((minha as { criado_em: string }[] | null)?.[0]?.criado_em)
     const { data: rajada } = await wsupabase.from("whatsapp_mensagens").select("corpo").eq("instance_name", instanceName).eq("telefone", telefone).eq("de_mim", false).gt("criado_em", desde).order("criado_em", { ascending: true }).limit(8)
     const junto = ((rajada as { corpo: string | null }[] | null) ?? []).map((r) => (r.corpo ?? "").trim()).filter(Boolean).join("\n").slice(0, 1500)
     return junto || texto

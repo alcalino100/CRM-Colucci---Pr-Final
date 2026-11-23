@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { RepositorioMemoria, criarMockProvider, calcularIndicadores, resumirIa, type AgenteDeps, type ChamadaIa } from "@/lib/assistente"
-import { ehSoMidia, LIMITE_RESPOSTAS, MSG_SO_TEXTO, atenderMensagem } from "@/lib/assistente/atendimento"
-import { atrasoDigitacao, ehMensagemAutomatica, tratarMensagemRecebida, type DepsHandler } from "@/lib/assistente/handler"
+import { ehSoMidia, LIMITE_RESPOSTAS, MSG_SO_TEXTO, SILENCIO_APOS_TRANSFERENCIA_MIN, atenderMensagem } from "@/lib/assistente/atendimento"
+import { atrasoDigitacao, ehMensagemAutomatica, janelaRajada, tratarMensagemRecebida, type DepsHandler } from "@/lib/assistente/handler"
 
 const provider = criarMockProvider()
 const config = { capacidades: { boleto: true, informe: true, reajuste: true, contrato: true, faq: true }, usarIa: true }
@@ -169,5 +169,76 @@ describe("ritmo de digitação (parecer uma pessoa)", () => {
     const i = eventos.indexOf("envio")
     expect(eventos.slice(0, i).filter((e) => e === "digitando").length).toBeGreaterThanOrEqual(1)
     expect(eventos.slice(0, i).some((e) => e.startsWith("espera:"))).toBe(true)
+  })
+})
+
+describe("depois de transferir, e recomeçar do zero pelo painel", () => {
+  const transferir = async (repo: RepositorioMemoria) => base(repo, { texto: "quero falar com um atendente" })
+  const min = (n: number) => new Date(t0.getTime() + n * 60_000)
+
+  it("logo depois de transferir (poucos minutos) fica em silêncio; passado o prazo, lembra do protocolo com naturalidade", async () => {
+    const repo = new RepositorioMemoria()
+    await transferir(repo)
+    const logo = await base(repo, { texto: "ok", agora: new Date(t0.getTime() + 20_000) })
+    expect(logo.respondeu).toBe(false)
+    const depois = await base(repo, { texto: "oi", agora: min(SILENCIO_APOS_TRANSFERENCIA_MIN + 1) })
+    expect(depois.respondeu).toBe(true)
+    expect(depois.respostas.join(" ")).toMatch(/já está com a nossa equipe|Já passei o seu caso/)
+    expect(depois.respostas.join(" ")).toContain("COL-")
+  })
+
+  it("reiniciar encerra a conversa: o próximo 'oi' é atendido como o primeiro, sem estado nem histórico", async () => {
+    const repo = new RepositorioMemoria()
+    await transferir(repo)
+    expect(repo.conversas[0].estado.etapa).toBe("transferido")
+    expect(await repo.reiniciarConversas({ telefone: T }, min(1))).toBe(1)
+    expect(repo.conversas[0].status).toBe("encerrada")
+
+    const r = await base(repo, { texto: "oi", agora: min(2) })
+    expect(r.respondeu).toBe(true)
+    expect(r.respostas.join(" ")).toMatch(/tudo (bem|certo)|Em que posso|Me conta/)
+    expect(repo.conversas).toHaveLength(2)
+    expect(repo.conversas[1].estado.etapa).toBe("inicio")
+    expect(repo.conversas[1].estado.protocolo).toBeUndefined()
+    expect(await repo.historico(repo.conversas[1].id, 20)).toHaveLength(2) // só "oi" e a resposta nova
+  })
+
+  it("reiniciar por telefone aceita número com ou sem DDI e não mexe em outros clientes", async () => {
+    const repo = new RepositorioMemoria()
+    await base(repo, { texto: "oi" })
+    await base(repo, { texto: "oi", telefone: "5511999990002" })
+    expect(await repo.reiniciarConversas({ telefone: "11999990001" }, t0)).toBe(1)
+    expect(repo.conversas.find((c) => c.telefone === "5511999990002")!.status).not.toBe("encerrada")
+  })
+
+  it("reiniciar por id encerra todas as abertas do mesmo cliente na mesma instância", async () => {
+    const repo = new RepositorioMemoria()
+    await base(repo, { texto: "oi" })
+    expect(await repo.reiniciarConversas({ conversaId: repo.conversas[0].id }, min(1))).toBe(1)
+    expect(await repo.reiniciarConversas({ conversaId: repo.conversas[0].id }, min(1))).toBe(0) // já encerrada
+    expect(await repo.reiniciarConversas({}, min(1))).toBe(0)
+  })
+
+  it("'digitando' só aparece quando ele realmente vai responder", async () => {
+    const repo = new RepositorioMemoria()
+    await repo.salvarConfig({ ativo: true, numerosTeste: [T] })
+    let digitando = 0
+    const d: DepsHandler = { repo, provider, resolverIa: async () => null, presenca: async () => { digitando++ }, enviarTexto: async () => ({ ok: true }), log: () => {}, dormir: async () => {} }
+    await tratarMensagemRecebida({ telefone: T, texto: "quero falar com um atendente", instanceName: "inst" }, d) // responde (transfere)
+    const aposResposta = digitando
+    expect(aposResposta).toBeGreaterThan(0)
+    await tratarMensagemRecebida({ telefone: T, texto: "ok", instanceName: "inst" }, d) // silêncio pós-transferência
+    expect(digitando).toBe(aposResposta) // nenhum "digitando" novo
+  })
+})
+
+describe("janela das mensagens seguidas", () => {
+  const agora = new Date("2026-11-23T01:20:00Z").getTime()
+  it("nunca olha além de 60 s, mesmo que a última resposta seja antiga (evita 'ok\noi\noi' grudado em conversa nova)", () => {
+    expect(janelaRajada("2026-11-23T01:08:05Z", agora)).toBe("2026-11-23T01:19:00.000Z")
+    expect(janelaRajada(undefined, agora)).toBe("2026-11-23T01:19:00.000Z")
+  })
+  it("se respondeu há poucos segundos, só considera o que veio depois da resposta", () => {
+    expect(janelaRajada("2026-11-23T01:19:45Z", agora)).toBe("2026-11-23T01:19:45.000Z")
   })
 })
