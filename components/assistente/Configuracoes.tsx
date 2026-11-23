@@ -8,7 +8,7 @@ import { CAPACIDADES, MAX_NAO_ENTENDIDAS, MAX_TENTATIVAS_IDENTIDADE, type Config
 import { FonteBadge } from "./FonteBadge"
 import { useApi } from "./use-api"
 
-type Resp = { fonte: string; config: ConfigAssistente; provedor: string; iaDisponivel: boolean; iaOrigem: string | null; iaModelo?: string | null; iaAgente?: string | null; instancias: string[]; agentesClaude: { id: string; nome: string }[] }
+type Resp = { fonte: string; config: ConfigAssistente; provedor: string; audio?: string | null; iaDisponivel: boolean; iaOrigem: string | null; iaModelo?: string | null; iaAgente?: string | null; instancias: string[]; agentesClaude: { id: string; nome: string }[] }
 
 const ROTULO_ORIGEM: Record<string, string> = { ambiente: "Chave do servidor (CLAUDE_API_KEY)", agente: "Chave guardada no agente", agente_auto: "Chave de um agente ativo" }
 
@@ -162,6 +162,7 @@ export function Configuracoes() {
                     </ul>
                   : <p className="text-xs text-red-700">Não conectou: {diag.motivo}</p>)}
               </div>
+              <p className="text-xs">{dados.audio ? <Badge variant="green">áudio: transcrição ativa ({dados.audio === "whisper" ? "Whisper" : "Gemini"})</Badge> : <Badge variant="amber">áudio: transcrição inativa, o cliente é orientado a escrever (falta OPENAI_API_KEY)</Badge>}</p>
               <p className="text-xs text-muted-foreground">Dica: crie na IA Conversacional um agente próprio para o assistente (prompt, tom de voz e base de conhecimento) e escolha-o aqui. Deixe-o pausado e sem instância vinculada, para não interferir nos leads.</p>
             </CardContent>
           </Card>

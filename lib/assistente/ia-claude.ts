@@ -6,6 +6,7 @@ import { decryptToken } from "@/lib/encryption"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import type { AgenteDeps, PersonaAgente } from "./agente"
 import { buscarFaq } from "./faq"
+import { departamentoDe, type GatilhoAgente, type MetaAgente } from "./gatilhos"
 import type { ChamadaIa } from "./ia"
 import { normalizar } from "./intencoes"
 
@@ -40,7 +41,19 @@ export async function candidatasClaude(aiAgentId?: string): Promise<ResolucaoCla
       const { data: a } = await db().from("ai_agents").select(COLUNAS).eq("id", aiAgentId).maybeSingle()
       if (a && providerFromModel(a.model_name) === "claude") {
         const { data: kb } = await db().from("knowledge_bases").select("id").eq("ai_id", a.id).maybeSingle()
-        persona = { id: a.id, nome: a.name, system: a.system_prompt ?? undefined, instrucoes: a.additional_instructions ?? undefined, voz: a.brand_voice ?? undefined, kbId: kb?.id }
+        const [{ data: gs }, { data: ts }] = await Promise.all([
+          db().from("goals").select("name,type,description,prompt,questions,config").eq("ai_id", a.id).eq("is_active", true).order("created_at", { ascending: true }).limit(10),
+          db().from("escalation_triggers").select("name,condition,detection_keywords,action,assign_to").eq("ai_id", a.id).order("created_at", { ascending: true }).limit(20),
+        ])
+        const metas: MetaAgente[] = (gs ?? [])
+          .filter((g: { prompt?: string }) => String(g.prompt ?? "").trim().length >= 10)
+          .map((g: { name: string; type: string; description?: string; prompt: string; questions?: string[]; config?: { next_step?: string; fallback?: string } | null }) => ({
+            nome: g.name, tipo: g.type, descricao: g.description ?? "", prompt: g.prompt, perguntas: Array.isArray(g.questions) ? g.questions : [], proximoPasso: g.config?.next_step ?? undefined, planoB: g.config?.fallback ?? undefined,
+          }))
+        const gatilhos: GatilhoAgente[] = (ts ?? []).map((t: { name: string; condition: string; detection_keywords?: string[]; action: string; assign_to?: string | null }) => ({
+          nome: t.name, condicao: t.condition as GatilhoAgente["condicao"], palavras: Array.isArray(t.detection_keywords) ? t.detection_keywords : [], acao: t.action, departamento: departamentoDe(t.assign_to),
+        }))
+        persona = { id: a.id, nome: a.name, system: a.system_prompt ?? undefined, instrucoes: a.additional_instructions ?? undefined, voz: a.brand_voice ?? undefined, kbId: kb?.id, metas, gatilhos }
         modeloAgente = a.model_name
         chaveAgente = chaveDoAgente(a)
       }
