@@ -36,7 +36,7 @@ export function WhatsappOficialTestes({ canais }: { canais: Canal[] }) {
   }, [])
   useEffect(() => { void carregarEventos() }, [carregarEventos])
 
-  async function rodar(acao: "config" | "webhook" | "receber" | "enviar", titulo: string, extra: Record<string, unknown> = {}) {
+  async function rodar(acao: "config" | "webhook" | "receber" | "enviar" | "modelos", titulo: string, extra: Record<string, unknown> = {}) {
     setRodando(acao)
     try {
       const r = await fetch("/api/whatsapp/oficial/testes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, canalId, telefone, texto, ...extra }) })
@@ -86,6 +86,7 @@ export function WhatsappOficialTestes({ canais }: { canais: Canal[] }) {
         <div className="flex items-end gap-1">
           <div className="flex flex-col gap-1"><Label htmlFor="t-mod">Modelo</Label><Input id="t-mod" value={modelo} onChange={(e) => setModelo(e.target.value)} className="h-8 w-40 text-xs" /></div>
           <div className="flex flex-col gap-1"><Label htmlFor="t-idi">Idioma</Label><Input id="t-idi" value={idioma} onChange={(e) => setIdioma(e.target.value)} className="h-8 w-24 text-xs" /></div>
+          <Button type="button" size="sm" variant="outline" disabled={!!rodando || !canalId} onClick={() => rodar("modelos", "Modelos da conta")}>{rodando === "modelos" ? "Listando…" : "Listar modelos da conta"}</Button>
           <Button type="button" size="sm" disabled={!!rodando || precisaNumero || !modelo.trim()} onClick={() => rodar("enviar", "Envio de modelo", { modelo: modelo.trim(), idioma: idioma.trim() })}>Enviar modelo</Button>
         </div>
       </div>
