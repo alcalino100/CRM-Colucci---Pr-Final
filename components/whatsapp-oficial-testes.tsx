@@ -1,15 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { CheckCircle2, RefreshCw, XCircle } from "lucide-react"
+import { useEffect, useState } from "react"
+import { CheckCircle2, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input, Label, Select, useToast } from "@/components/ui/primitives"
 
 type Canal = { id: string; nome: string; phone_number_id: string }
 type Passo = { nome: string; ok: boolean; detalhe: string }
-type Evento = { id: string; recebido_em: string; tipo: string; phone_number_id: string | null; resumo: string | null; assinatura_ok: boolean | null }
-
-const hora = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
 
 /** Painel de testes da API oficial: configuração, webhook, recebimento simulado, envio real e log de eventos. */
 export function WhatsappOficialTestes({ canais }: { canais: Canal[] }) {
@@ -21,20 +18,9 @@ export function WhatsappOficialTestes({ canais }: { canais: Canal[] }) {
   const [idioma, setIdioma] = useState("en_US")
   const [rodando, setRodando] = useState<string | null>(null)
   const [passos, setPassos] = useState<{ titulo: string; lista: Passo[] } | null>(null)
-  const [eventos, setEventos] = useState<Evento[]>([])
-  const [aviso, setAviso] = useState("")
 
   useEffect(() => { if (!canalId && canais[0]) setCanalId(canais[0].id) }, [canais, canalId])
 
-  const carregarEventos = useCallback(async () => {
-    try {
-      const r = await fetch("/api/whatsapp/oficial/eventos")
-      const j = await r.json()
-      setEventos(j.eventos ?? [])
-      setAviso(j.aviso ?? "")
-    } catch { /* mantém lista atual */ }
-  }, [])
-  useEffect(() => { void carregarEventos() }, [carregarEventos])
 
   async function rodar(acao: "config" | "webhook" | "receber" | "enviar" | "modelos", titulo: string, extra: Record<string, unknown> = {}) {
     setRodando(acao)
@@ -47,7 +33,6 @@ export function WhatsappOficialTestes({ canais }: { canais: Canal[] }) {
       toast(e instanceof Error ? e.message : "Falha no teste", "error")
     } finally {
       setRodando(null)
-      void carregarEventos()
     }
   }
 
@@ -55,7 +40,7 @@ export function WhatsappOficialTestes({ canais }: { canais: Canal[] }) {
 
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
-      <h3 className="text-sm font-semibold">4. Testes da integração</h3>
+      <h3 className="text-sm font-semibold">Testes da integração</h3>
 
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="outline" disabled={!!rodando} onClick={() => rodar("config", "Configuração")}>{rodando === "config" ? "Testando…" : "Testar configuração"}</Button>
@@ -109,26 +94,6 @@ export function WhatsappOficialTestes({ canais }: { canais: Canal[] }) {
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold">Eventos recebidos da Meta (últimos 40)</h4>
-          <Button type="button" size="sm" variant="outline" onClick={carregarEventos}><RefreshCw className="size-3.5" /></Button>
-        </div>
-        {aviso && <p className="text-xs text-amber-700">{aviso}</p>}
-        {eventos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum evento ainda. Se a Meta estiver configurada e ninguém mandou mensagem, é normal.</p>
-        ) : (
-          <ul className="max-h-60 divide-y divide-border overflow-y-auto rounded-lg border border-border text-xs">
-            {eventos.map((e) => (
-              <li key={e.id} className="flex flex-wrap gap-x-3 gap-y-0.5 px-3 py-1.5">
-                <span className="font-mono text-muted-foreground">{hora(e.recebido_em)}</span>
-                <span className={e.tipo === "recusado" || e.tipo === "erro" ? "font-semibold text-destructive" : "font-semibold"}>{e.tipo}</span>
-                <span className="min-w-0 flex-1 truncate">{e.resumo}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </div>
   )
 }

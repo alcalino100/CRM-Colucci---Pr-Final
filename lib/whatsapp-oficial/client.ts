@@ -100,3 +100,33 @@ export async function enviarModeloOficial(phoneNumberId: string, para: string, n
     return { ok: false, erro: e instanceof Error ? e.message : "falha de rede" }
   }
 }
+
+export type NovoModelo = { nome: string; idioma: string; categoria: "UTILITY" | "MARKETING" | "AUTHENTICATION"; corpo: string; exemplos: string[] }
+
+/** Cria um modelo na conta (fica PENDING até a Meta aprovar). Cada variável {{n}} precisa de um exemplo. */
+export async function criarModelo(wabaId: string, m: NovoModelo): Promise<Resultado<{ id: string; status: string }>> {
+  if (!tokenCloud()) return { ok: false, erro: "WHATSAPP_CLOUD_TOKEN não configurado no servidor." }
+  try {
+    const body: Record<string, unknown> = { type: "BODY", text: m.corpo }
+    if (m.exemplos.length) body.example = { body_text: [m.exemplos] }
+    const r = await graph(`/${encodeURIComponent(wabaId)}/message_templates`, {
+      method: "POST",
+      body: JSON.stringify({ name: m.nome, language: m.idioma, category: m.categoria, components: [body] }),
+    })
+    if (!r.ok || !r.json?.id) return { ok: false, erro: erroGraph(r.json, r.status), status: r.status }
+    return { ok: true, id: String(r.json.id), status: String(r.json.status ?? "PENDING") }
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : "falha de rede" }
+  }
+}
+
+/** Exclui um modelo (todas as traduções com esse nome). */
+export async function excluirModelo(wabaId: string, nome: string): Promise<Resultado<object>> {
+  if (!tokenCloud()) return { ok: false, erro: "WHATSAPP_CLOUD_TOKEN não configurado no servidor." }
+  try {
+    const r = await graph(`/${encodeURIComponent(wabaId)}/message_templates?name=${encodeURIComponent(nome)}`, { method: "DELETE" })
+    return r.ok ? { ok: true } : { ok: false, erro: erroGraph(r.json, r.status), status: r.status }
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : "falha de rede" }
+  }
+}
