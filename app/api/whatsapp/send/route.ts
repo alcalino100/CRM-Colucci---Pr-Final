@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server"
-import { onlyDigits, sendWhatsAppText } from "@/lib/whatsapp/server"
+import { onlyDigits, sendWhatsAppText, wsupabase } from "@/lib/whatsapp/server"
+import { ehCanalOficial, phoneNumberIdDoCanal } from "@/lib/whatsapp-oficial/config"
+import { enviarTextoOficial } from "@/lib/whatsapp-oficial/client"
+import { dentroDaJanela, MSG_JANELA_EXPIRADA } from "@/lib/whatsapp-oficial/janela"
+import { registrarEnvioOficial } from "@/lib/whatsapp-oficial/envio"
 import { registrarEnvioManual } from "@/lib/whatsapp-webhook/registrar-envio"
 import { exigirSessao, negarAcesso } from "@/lib/auth/sessao"
 
@@ -26,6 +30,24 @@ export async function POST(request: Request) {
 
   if (!instanceName || !telefone || !texto) {
     return NextResponse.json({ ok: false, erro: "instanceName, telefone e texto são obrigatórios." }, { status: 400 })
+  }
+
+  // Canal da API oficial (Meta): texto livre só dentro da janela de 24h da última mensagem do cliente.
+  if (ehCanalOficial(instanceName)) {
+    const { data: ultima } = await wsupabase
+      .from("whatsapp_mensagens")
+      .select("criado_em")
+      .eq("instance_name", instanceName)
+      .eq("telefone", telefone)
+      .eq("de_mim", false)
+      .order("criado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!dentroDaJanela(ultima?.criado_em)) return NextResponse.json({ ok: false, codigo: "JANELA_EXPIRADA", erro: MSG_JANELA_EXPIRADA }, { status: 409 })
+    const r = await enviarTextoOficial(phoneNumberIdDoCanal(instanceName), telefone, texto)
+    if (!r.ok) return NextResponse.json({ ok: false, erro: r.erro }, { status: 502 })
+    await registrarEnvioOficial({ instanceName, telefone, texto, wamid: r.wamid })
+    return NextResponse.json({ ok: true })
   }
 
   const res = await sendWhatsAppText(instanceName, telefone, texto)

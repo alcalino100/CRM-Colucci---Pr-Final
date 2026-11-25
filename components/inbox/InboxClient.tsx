@@ -24,7 +24,7 @@ function InstanceSelector(){
     }catch{
       // localStorage inacessível em modo privado ou iframe
     }
-    fetch("/api/whatsapp/instancias").then(r=>r.json()).then(j=>{
+    fetch("/api/whatsapp/instancias?oficiais=1").then(r=>r.json()).then(j=>{
       const data = (j.data || []).filter((x:any)=> x.status==="conectado")
       setLista(data)
       // Auto-cura: seleção salva/default pode apontar para instância desconectada

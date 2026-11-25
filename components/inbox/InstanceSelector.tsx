@@ -19,7 +19,7 @@ export function InstanceSelector(){
     }catch{
       // localStorage indisponível
     }
-    fetch("/api/whatsapp/instancias")
+    fetch("/api/whatsapp/instancias?oficiais=1")
       .then(r=>r.json())
       .then(j=>{
         const data: Inst[] = (j.data || []).filter((x:any)=> x.status==="conectado")

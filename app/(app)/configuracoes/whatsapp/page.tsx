@@ -8,6 +8,7 @@ import { isGestorNivel } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { useWhatsAppStatus } from "@/lib/whatsapp-status-context"
 import { WhatsappConnectionCard } from "@/components/whatsapp-connection-card"
+import { WhatsappOficialCard } from "@/components/whatsapp-oficial-card"
 import { PageHeading } from "@/components/ui/page-heading"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui/primitives"
@@ -90,6 +91,9 @@ export default function WhatsappConfigPage() {
           />
         </CardContent>
       </Card>
+
+      {/* API Oficial (Meta): disparos em volume */}
+      <WhatsappOficialCard />
 
       {/* Seção 2: Conexões dos Corretores */}
       <div className="flex flex-col gap-4">

@@ -25,7 +25,17 @@ export async function GET(request: Request) {
     for (const u of users ?? []) nomes[u.id] = u.nome
   }
 
-  const data = (instancias ?? []).map((i) => ({ ...i, corretorNome: nomes[i.corretor_id] ?? "—" }))
+  const data: Record<string, unknown>[] = (instancias ?? []).map((i) => ({ ...i, corretorNome: nomes[i.corretor_id] ?? "—" }))
+
+  // Canais da API oficial (Meta) aparecem como instâncias "oficial:<phone_number_id>" — o Inbox os trata igual.
+  // Só quando pedido (?oficiais=1): as demais telas (status, relatórios) continuam vendo apenas instâncias Evolution.
+  const incluirOficiais = new URL(request.url).searchParams.get("oficiais") === "1"
+  const { data: canais } = incluirOficiais
+    ? await (wsupabase as unknown as { from: (t: string) => any }).from("whatsapp_oficial_canais").select("id, nome, phone_number_id, numero, ativo").eq("ativo", true)
+    : { data: [] }
+  for (const c of (canais ?? []) as { id: string; nome: string; phone_number_id: string; numero: string | null }[]) {
+    data.push({ id: c.id, instance_name: `oficial:${c.phone_number_id}`, numero: c.numero, status: "conectado", corretor_id: null, corretorNome: `${c.nome} (API oficial)`, oficial: true })
+  }
   return NextResponse.json({ data })
 }
 

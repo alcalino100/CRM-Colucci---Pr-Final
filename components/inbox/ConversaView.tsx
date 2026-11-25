@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
-import { ArrowLeft, CheckCheck, SendHorizontal } from "lucide-react"
+import { ArrowLeft, Check, CheckCheck, SendHorizontal } from "lucide-react"
 import { useInboxStore } from "@/lib/inbox-store"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/primitives"
@@ -10,6 +10,8 @@ import { logger } from "@/lib/logger"
 import { supabase } from "@/lib/supabase/client"
 import { MidiaBolha } from "./MidiaBolha"
 import { Avatar } from "./Avatar"
+import { ehCanalOficial } from "@/lib/whatsapp-oficial/config"
+import { dentroDaJanela, horasRestantes } from "@/lib/whatsapp-oficial/janela"
 
 function fmtHora(iso: string){
   return new Date(iso).toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
@@ -81,12 +83,14 @@ export function ConversaView(){
           nomeArquivo: m.nome_arquivo ?? null,
           viaAnuncio: !!m.veio_de_anuncio,
           anuncioTitulo: m.anuncio_titulo ?? null,
+          statusEntrega: m.status_entrega ?? null,
+          erroEntrega: m.erro_entrega ?? null,
         }))
         const store = useInboxStore.getState() as any
         const atual = (store.mensagens[chave] || []) as any[]
         const ultimaAtual = atual.length ? atual[atual.length-1]?.id : null
         const ultimaNova = mapped.length ? mapped[mapped.length-1]?.id : null
-        const midiaMudou = mapped.some((m, i) => atual[i] && (m as any).midiaUrl !== (atual[i] as any).midiaUrl)
+        const midiaMudou = mapped.some((m, i) => atual[i] && ((m as any).midiaUrl !== (atual[i] as any).midiaUrl || (m as any).statusEntrega !== (atual[i] as any).statusEntrega))
         if(mapped.length !== atual.length || ultimaNova !== ultimaAtual || midiaMudou){
           store.setMensagens({ ...store.mensagens, [chave]: mapped })
         }
@@ -147,6 +151,11 @@ export function ConversaView(){
     }
   }
 
+  // API oficial: texto livre só até 24h depois da última mensagem do cliente.
+  const oficial = ehCanalOficial(instanciaSelecionada)
+  const ultimaDoCliente = [...thread].reverse().find((m: any) => m.sender === "lead")?.timestamp as string | undefined
+  const janelaAberta = !oficial || dentroDaJanela(ultimaDoCliente)
+
   const aoDigitar = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); void handleEnviar() }
   }
@@ -188,6 +197,14 @@ export function ConversaView(){
         </div>
       )}
 
+      {oficial && (
+        <div className={cn("px-3 py-2 text-xs", janelaAberta ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300")}>
+          {janelaAberta
+            ? `API oficial · janela de resposta aberta (${horasRestantes(ultimaDoCliente)}h restantes)`
+            : "API oficial · janela de 24h expirada: só é possível enviar um modelo (template) aprovado até o cliente responder."}
+        </div>
+      )}
+
       {/* Mensagens */}
       <div ref={threadRef} className="flex-1 overflow-y-auto px-3 py-4 sm:px-[8%]">
         {thread.length===0 ? (
@@ -221,7 +238,11 @@ export function ConversaView(){
                       {m.content && !(m.tipoMidia && /^\[(m[ií]dia|[aá]udio|imagem)\]$/i.test(String(m.content).trim())) && <span className="whitespace-pre-wrap break-words">{m.content}</span>}
                       <span className={cn("float-right ml-3 mt-1 flex items-center gap-0.5 text-[11px] leading-none", minha ? "text-slate-500 dark:text-slate-300/80" : "text-slate-500 dark:text-slate-400")}>
                         {fmtHora(m.timestamp)}
-                        {minha && <CheckCheck className="size-3.5 text-sky-500" aria-label="Enviada" />}
+                        {minha && (m.statusEntrega === "failed"
+                          ? <span className="font-semibold text-red-600" title={m.erroEntrega || "Falha no envio"}>⚠ falhou</span>
+                          : m.statusEntrega === "sent"
+                            ? <Check className="size-3.5" aria-label="Enviada" />
+                            : <CheckCheck className={cn("size-3.5", m.statusEntrega === "delivered" ? "text-slate-500" : "text-sky-500")} aria-label={m.statusEntrega === "delivered" ? "Entregue" : "Lida"} />)}
                       </span>
                       <span className="clear-both block" />
                     </div>
@@ -235,8 +256,8 @@ export function ConversaView(){
 
       {/* Compositor */}
       <div className="flex items-end gap-2 bg-[#f0f2f5] px-3 py-2 dark:bg-[#202c33]">
-        <textarea value={texto} onChange={e=>setTexto(e.target.value)} onKeyDown={aoDigitar} placeholder="Digite uma mensagem" aria-label="Mensagem" rows={1} className="max-h-32 min-h-[42px] flex-1 resize-none rounded-3xl border-0 bg-white px-4 py-2.5 text-[15px] text-slate-900 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-[#00a884]/40 dark:bg-[#2a3942] dark:text-slate-100 dark:placeholder:text-slate-400" />
-        <button onClick={handleEnviar} disabled={!texto.trim()} aria-label="Enviar mensagem" className="flex size-[42px] shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white transition hover:bg-[#008f72] disabled:opacity-40">
+        <textarea value={texto} onChange={e=>setTexto(e.target.value)} onKeyDown={aoDigitar} placeholder={janelaAberta ? "Digite uma mensagem" : "Janela de 24h expirada"} disabled={!janelaAberta} aria-label="Mensagem" rows={1} className="max-h-32 min-h-[42px] flex-1 resize-none rounded-3xl border-0 bg-white px-4 py-2.5 text-[15px] text-slate-900 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-[#00a884]/40 dark:bg-[#2a3942] dark:text-slate-100 dark:placeholder:text-slate-400" />
+        <button onClick={handleEnviar} disabled={!texto.trim() || !janelaAberta} aria-label="Enviar mensagem" className="flex size-[42px] shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white transition hover:bg-[#008f72] disabled:opacity-40">
           <SendHorizontal className="size-5" />
         </button>
       </div>
