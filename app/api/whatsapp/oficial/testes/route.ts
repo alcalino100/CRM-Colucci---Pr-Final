@@ -2,7 +2,7 @@ import crypto from "crypto"
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
 import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
-import { consultarNumero, enviarModeloOficial, enviarTextoOficial } from "@/lib/whatsapp-oficial/client"
+import { consultarNumero, enviarModeloOficial, enviarTextoOficial, listarModelos } from "@/lib/whatsapp-oficial/client"
 import { instanceDoCanal, segredoApp, statusConfiguracao, tokenVerificacao } from "@/lib/whatsapp-oficial/config"
 import { registrarEnvioOficial } from "@/lib/whatsapp-oficial/envio"
 import { dentroDaJanela } from "@/lib/whatsapp-oficial/janela"
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       const ruim = await fetch(`${url}?hub.mode=subscribe&hub.verify_token=token-errado&hub.challenge=x`)
       passo("Token errado é recusado", ruim.status === 403, `HTTP ${ruim.status} (esperado 403)`)
       const corpoRuim = payloadDe("TESTE", { statuses: [] })
-      const semAss = await fetch(url, { method: "POST", body: corpoRuim, headers: { "content-type": "application/json", "x-hub-signature-256": "sha256=invalida" } })
+      const semAss = await fetch(url, { method: "POST", body: corpoRuim, headers: { "content-type": "application/json", "x-hub-signature-256": "sha256=invalida", "x-crm-autoteste": "1" } })
       passo("Assinatura inválida é recusada", semAss.status === 401, `HTTP ${semAss.status} (esperado 401)`)
       const corpoOk = payloadDe("TESTE", { statuses: [{ id: "wamid.TESTE.status", status: "sent", recipient_id: "0" }] })
       const comAss = await fetch(url, { method: "POST", body: corpoOk, headers: { "content-type": "application/json", "x-hub-signature-256": assinar(corpoOk) } })
@@ -75,6 +75,18 @@ export async function POST(request: Request) {
   if (!canal) return NextResponse.json({ ok: false, erro: "Escolha um número cadastrado." }, { status: 400 })
   if (!telefone) return NextResponse.json({ ok: false, erro: "Informe o telefone de teste (com DDI, ex.: 5518999999999)." }, { status: 400 })
   const instanceName = instanceDoCanal(canal.phone_number_id)
+
+  if (body.acao === "modelos") {
+    if (!canal.waba_id) {
+      passo("WABA ID do número", false, "Cadastre o WABA ID deste número (Configurações > WhatsApp > API Oficial) para listar os modelos.")
+    } else {
+      const r = await listarModelos(canal.waba_id)
+      if (!r.ok) passo("Listar modelos na Meta", false, r.erro)
+      else if (r.modelos.length === 0) passo("Modelos da conta", false, "Nenhum modelo encontrado nesta conta. Crie um no Gerenciador do WhatsApp (Meta).")
+      else for (const m of r.modelos) passo(`${m.nome} (${m.idioma})`, m.status === "APPROVED", `${m.status}${m.categoria ? ` · ${m.categoria.toLowerCase()}` : ""}${m.variaveis ? ` · ${m.variaveis} variável(is)` : ""}`)
+    }
+    return NextResponse.json({ ok: passos.every((p) => p.ok), passos })
+  }
 
   if (body.acao === "receber") {
     if (!segredoApp()) return NextResponse.json({ ok: false, erro: "META_APP_SECRET não configurado no servidor." }, { status: 422 })

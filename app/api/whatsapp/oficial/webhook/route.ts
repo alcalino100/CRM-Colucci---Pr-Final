@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const bruto = await request.text()
   if (!assinaturaValida(bruto, request.headers.get("x-hub-signature-256"), segredoApp())) {
     logger.warn("[whatsapp-oficial] webhook recusado: assinatura ausente ou inválida")
-    await registrarEvento({ tipo: "recusado", assinaturaOk: false, resumo: segredoApp() ? "Assinatura ausente ou inválida (confira META_APP_SECRET)" : "META_APP_SECRET não configurado no servidor" })
+    await registrarEvento({ tipo: "recusado", assinaturaOk: false, resumo: request.headers.get("x-crm-autoteste") ? "Assinatura inválida de propósito (auto-teste do CRM): era para ser recusada ✔" : segredoApp() ? "Assinatura ausente ou inválida (confira META_APP_SECRET)" : "META_APP_SECRET não configurado no servidor" })
     return NextResponse.json({ erro: "assinatura inválida" }, { status: 401 })
   }
   let payload: unknown
