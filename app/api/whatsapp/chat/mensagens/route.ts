@@ -20,16 +20,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "instanceName e leadId (ou telefone) são obrigatórios." }, { status: 400 })
   }
 
-  let query = wsupabase
-    .from("whatsapp_mensagens")
-    .select("id, corpo, de_mim, criado_em, veio_de_anuncio, anuncio_titulo, tipo_midia, midia_url, mime_type, nome_arquivo")
-    .eq("instance_name", instanceName)
-    .order("criado_em", { ascending: true })
-    .limit(1000)
-  if (leadId) query = query.eq("lead_id", leadId)
-  if (!leadId && telefone) query = query.eq("telefone", telefone)
-
-  const { data, error } = await query
+  const montar = (colunas: string) => {
+    let q = wsupabase.from("whatsapp_mensagens").select(colunas).eq("instance_name", instanceName).order("criado_em", { ascending: true }).limit(1000)
+    if (leadId) q = q.eq("lead_id", leadId)
+    if (!leadId && telefone) q = q.eq("telefone", telefone)
+    return q
+  }
+  const base = "id, corpo, de_mim, criado_em, veio_de_anuncio, anuncio_titulo, tipo_midia, midia_url, mime_type, nome_arquivo"
+  // status_entrega/erro_entrega vêm da migration da API oficial; sem ela, cai para as colunas de sempre.
+  let { data, error } = await montar(`${base}, status_entrega, erro_entrega`)
+  if (error) ({ data, error } = await montar(base))
   if (error) return NextResponse.json({ error: "Não foi possível carregar as mensagens." }, { status: 500 })
 
   return NextResponse.json({ mensagens: data ?? [] })
