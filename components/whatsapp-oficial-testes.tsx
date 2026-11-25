@@ -18,6 +18,7 @@ export function WhatsappOficialTestes({ canais }: { canais: Canal[] }) {
   const [telefone, setTelefone] = useState("")
   const [texto, setTexto] = useState("")
   const [modelo, setModelo] = useState("hello_world")
+  const [idioma, setIdioma] = useState("en_US")
   const [rodando, setRodando] = useState<string | null>(null)
   const [passos, setPassos] = useState<{ titulo: string; lista: Passo[] } | null>(null)
   const [eventos, setEventos] = useState<Evento[]>([])
@@ -84,12 +85,13 @@ export function WhatsappOficialTestes({ canais }: { canais: Canal[] }) {
         <Button type="button" size="sm" variant="outline" disabled={!!rodando || precisaNumero} onClick={() => rodar("enviar", "Envio de texto")}>{rodando === "enviar" ? "Enviando…" : "Enviar texto (janela 24h)"}</Button>
         <div className="flex items-end gap-1">
           <div className="flex flex-col gap-1"><Label htmlFor="t-mod">Modelo</Label><Input id="t-mod" value={modelo} onChange={(e) => setModelo(e.target.value)} className="h-8 w-40 text-xs" /></div>
-          <Button type="button" size="sm" disabled={!!rodando || precisaNumero || !modelo.trim()} onClick={() => rodar("enviar", "Envio de modelo", { modelo: modelo.trim() })}>Enviar modelo</Button>
+          <div className="flex flex-col gap-1"><Label htmlFor="t-idi">Idioma</Label><Input id="t-idi" value={idioma} onChange={(e) => setIdioma(e.target.value)} className="h-8 w-24 text-xs" /></div>
+          <Button type="button" size="sm" disabled={!!rodando || precisaNumero || !modelo.trim()} onClick={() => rodar("enviar", "Envio de modelo", { modelo: modelo.trim(), idioma: idioma.trim() })}>Enviar modelo</Button>
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
         “Simular recebida” grava uma mensagem de teste no Inbox (não aciona IA nem assistente). “Enviar” manda de verdade pela Meta: em número de teste,
-        o destino precisa estar na lista de destinatários permitidos do app. Fora da janela de 24h só funciona com modelo aprovado (o <b>hello_world</b> já vem pronto).
+        o destino precisa estar na lista de destinatários permitidos do app. Fora da janela de 24h só funciona com modelo aprovado (o <b>hello_world</b> já vem pronto, em <b>en_US</b>; modelos próprios costumam ser <b>pt_BR</b>).
       </p>
 
       {passos && (

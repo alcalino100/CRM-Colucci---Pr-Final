@@ -93,7 +93,9 @@ export async function POST(request: Request) {
 
   if (body.acao === "enviar") {
     if (body.modelo) {
-      const r = await enviarModeloOficial(canal.phone_number_id, telefone, body.modelo, body.idioma || "pt_BR")
+      // O modelo padrão da Meta (hello_world) só existe em en_US; modelos próprios costumam ser pt_BR.
+      const idioma = body.idioma?.trim() || (body.modelo === "hello_world" ? "en_US" : "pt_BR")
+      const r = await enviarModeloOficial(canal.phone_number_id, telefone, body.modelo, idioma)
       passo(`Modelo "${body.modelo}" enviado`, r.ok, r.ok ? `aceito pela Meta (${r.wamid})` : r.erro)
       if (r.ok) await registrarEnvioOficial({ instanceName, telefone, texto: `[modelo ${body.modelo}] enviado pelo painel de testes`, wamid: r.wamid })
     } else {
