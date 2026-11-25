@@ -206,7 +206,9 @@ export async function executeMcpTool(name: string, args: Record<string, any> = {
         }
       }
 
+      let usouSimulado = false
       if (campanhasMeta.length === 0) {
+        usouSimulado = true
         campanhasMeta = mockCampaigns("act_1000000001").data
         insightsMeta = mockInsights("act_1000000001", since, until, false, "campaign").data
       }
@@ -259,6 +261,7 @@ export async function executeMcpTool(name: string, args: Record<string, any> = {
       )
 
       return {
+        fonte: usouSimulado ? "simulado" : "meta",
         periodo: { since, until },
         resumoExecutivo: {
           gastoTotalMeta: resultado.totais.gastoTotalMeta,
