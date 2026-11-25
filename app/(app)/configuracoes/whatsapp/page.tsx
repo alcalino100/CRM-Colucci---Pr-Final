@@ -8,7 +8,6 @@ import { isGestorNivel } from "@/lib/roles"
 import { useLeads } from "@/lib/leads-store"
 import { useWhatsAppStatus } from "@/lib/whatsapp-status-context"
 import { WhatsappConnectionCard } from "@/components/whatsapp-connection-card"
-import { WhatsappOficialCard } from "@/components/whatsapp-oficial-card"
 import { PageHeading } from "@/components/ui/page-heading"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui/primitives"
@@ -93,7 +92,15 @@ export default function WhatsappConfigPage() {
       </Card>
 
       {/* API Oficial (Meta): disparos em volume */}
-      <WhatsappOficialCard />
+      <Card className="border-emerald-500/20 bg-emerald-500/5">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+          <div>
+            <p className="font-semibold">API Oficial do WhatsApp (Meta)</p>
+            <p className="text-sm text-muted-foreground">Números, modelos, webhook, testes e eventos agora têm uma tela própria.</p>
+          </div>
+          <Button onClick={() => router.push("/whatsapp-oficial")}>Abrir API Oficial</Button>
+        </CardContent>
+      </Card>
 
       {/* Seção 2: Conexões dos Corretores */}
       <div className="flex flex-col gap-4">

@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const auth = exigirGestor(request)
   if (!auth.ok) return negarAcesso(auth)
-  let body: { id?: string; ativo?: boolean; wabaId?: string; modo?: string; aiAgentId?: string }
+  let body: { id?: string; nome?: string; ativo?: boolean; wabaId?: string; modo?: string; aiAgentId?: string; revalidar?: boolean }
   try { body = await request.json() } catch { return NextResponse.json({ ok: false, erro: "Dados inválidos." }, { status: 400 }) }
   if (!body.id) return NextResponse.json({ ok: false, erro: "Informe o id do canal." }, { status: 400 })
 
@@ -64,6 +64,15 @@ export async function PATCH(request: Request) {
 
   const patch: Record<string, unknown> = { atualizado_em: new Date().toISOString() }
   if (typeof body.ativo === "boolean") patch.ativo = body.ativo
+  if (typeof body.nome === "string") {
+    if (!body.nome.trim()) return NextResponse.json({ ok: false, erro: "O nome não pode ficar vazio." }, { status: 400 })
+    patch.nome = body.nome.trim()
+  }
+  if (body.revalidar) {
+    const info = await consultarNumero(canal.phone_number_id)
+    if (!info.ok) return NextResponse.json({ ok: false, erro: `Não consegui validar na Meta: ${info.erro}` }, { status: 422 })
+    Object.assign(patch, { numero: info.numero, nome_verificado: info.nomeVerificado, qualidade: info.qualidade })
+  }
   if (typeof body.wabaId === "string") patch.waba_id = body.wabaId.replace(/\D/g, "") || null
   if (body.modo !== undefined) {
     if (!["manual", "assistente", "ia"].includes(body.modo)) return NextResponse.json({ ok: false, erro: "Modo inválido." }, { status: 400 })
@@ -85,5 +94,16 @@ export async function PATCH(request: Request) {
   }
   const { error } = await canaisDb.from("whatsapp_oficial_canais").update(patch).eq("id", body.id)
   if (error) return NextResponse.json({ ok: false, erro: "Não foi possível atualizar o canal (a migration da fase 2 foi aplicada?)." }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
+// Remove o canal do CRM (o histórico de mensagens fica guardado; o número só deixa de aparecer no Inbox).
+export async function DELETE(request: Request) {
+  const auth = exigirGestor(request)
+  if (!auth.ok) return negarAcesso(auth)
+  const id = new URL(request.url).searchParams.get("id")
+  if (!id) return NextResponse.json({ ok: false, erro: "Informe o id do canal." }, { status: 400 })
+  const { error } = await canaisDb.from("whatsapp_oficial_canais").delete().eq("id", id)
+  if (error) return NextResponse.json({ ok: false, erro: "Não foi possível remover o canal." }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

@@ -54,6 +54,7 @@ const NAV: { href: string; label: string; icon: any; roles: Role[] }[] = [
   { href: "/auditoria/registros", label: "Registros de Auditoria", icon: ScrollText, roles: ["gestor"] },
   { href: "/meta-ads", label: "Meta Ads", icon: BarChart3, roles: ["gestor"] },
   { href: "/configuracoes/whatsapp", label: "Conexões WhatsApp", icon: MessageCircle, roles: ["gestor"] },
+  { href: "/whatsapp-oficial", label: "API Oficial WhatsApp", icon: Shield, roles: ["gestor"] },
   { href: "/perfil", label: "Meu Perfil", icon: UserCircle, roles: ["corretor", "gestor"] },
 ]
 
