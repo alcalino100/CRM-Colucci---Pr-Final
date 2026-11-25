@@ -14,6 +14,6 @@ export async function GET(req: Request) {
   const dialog =
     `https://www.facebook.com/${process.env.META_API_VERSION || "v21.0"}/dialog/oauth` +
     `?client_id=${appId}&redirect_uri=${encodeURIComponent(redirect)}` +
-    `&scope=ads_read,business_management&response_type=code`
+    `&scope=ads_read,business_management,pages_show_list,pages_read_engagement,instagram_basic,instagram_manage_insights,read_insights&response_type=code`
   return NextResponse.redirect(dialog)
 }

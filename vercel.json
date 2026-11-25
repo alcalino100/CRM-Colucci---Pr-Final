@@ -1,15 +1,52 @@
 {
   "crons": [
-    { "path": "/api/whatsapp/refresh-all", "schedule": "*/15 * * * *" },
-    { "path": "/api/whatsapp/saude-instancias", "schedule": "*/30 * * * *" },
-    { "path": "/api/whatsapp/resumo-alertas", "schedule": "0 11,15,21 * * *" },
-    { "path": "/api/meta-sync", "schedule": "0 9 * * *" },
-    { "path": "/api/automation/regressao-inatividade", "schedule": "30 10 * * *" },
-    { "path": "/api/automation/worker", "schedule": "*/30 * * * *" },
-    { "path": "/api/relatorios/worker", "schedule": "0 11 * * *" },
-    { "path": "/api/relatorios/worker", "schedule": "0 13 * * *" },
-    { "path": "/api/leads/reativar-arquivados", "schedule": "0 11 * * *" },
-    { "path": "/api/automation/resumo-diario", "schedule": "0 21 * * 1-5" },
-    { "path": "/api/archive-leads", "schedule": "30 3 1 * *" }
+    {
+      "path": "/api/whatsapp/refresh-all",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/whatsapp/saude-instancias",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/whatsapp/resumo-alertas",
+      "schedule": "0 11,15,21 * * *"
+    },
+    {
+      "path": "/api/meta-sync",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/automation/regressao-inatividade",
+      "schedule": "30 10 * * *"
+    },
+    {
+      "path": "/api/automation/worker",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/relatorios/worker",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/relatorios/worker",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/leads/reativar-arquivados",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/automation/resumo-diario",
+      "schedule": "0 21 * * 1-5"
+    },
+    {
+      "path": "/api/archive-leads",
+      "schedule": "30 3 1 * *"
+    },
+    {
+      "path": "/api/meta/relatorios/mensal",
+      "schedule": "0 12 1 * *"
+    }
   ]
 }
