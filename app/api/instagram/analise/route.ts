@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   try { b = await request.json() } catch { /* usa padrões */ }
   const dias = Math.min(180, Math.max(7, Number(b.dias) || 30))
   try {
-    const { lista: _lista, ...dados } = await montarAnaliseInstagram(b.conta ?? null, iso(new Date(Date.now() - (dias - 1) * 864e5)), iso(new Date()))
+    const { lista: _lista, serie: _serie, stories: _stories, anterior: _ant, ...dados } = await montarAnaliseInstagram(b.conta ?? null, iso(new Date(Date.now() - (dias - 1) * 864e5)), iso(new Date()), { completo: true })
     const ia = await gerarAnaliseIA("instagram", dados)
     return ia.ok ? NextResponse.json({ ok: true, texto: ia.texto, modelo: ia.modelo }) : NextResponse.json({ ok: false, erro: ia.erro }, { status: 502 })
   } catch (e) {
