@@ -1,4 +1,7 @@
 import { GRAPH_URL, tokenCloud } from "./config"
+import type { ModeloOficial } from "./modelo"
+
+export { renderizarModelo, type ModeloOficial } from "./modelo"
 
 type Resultado<T> = ({ ok: true } & T) | { ok: false; erro: string; status?: number }
 
@@ -57,6 +60,42 @@ export async function consultarNumero(phoneNumberId: string): Promise<Resultado<
     const r = await graph(`/${encodeURIComponent(phoneNumberId)}?fields=display_phone_number,verified_name,quality_rating`)
     if (!r.ok) return { ok: false, erro: erroGraph(r.json, r.status), status: r.status }
     return { ok: true, numero: r.json?.display_phone_number ?? null, nomeVerificado: r.json?.verified_name ?? null, qualidade: r.json?.quality_rating ?? null }
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : "falha de rede" }
+  }
+}
+
+
+/** Lista os modelos (templates) da conta WhatsApp Business. Só os APPROVED podem ser enviados. */
+export async function listarModelos(wabaId: string): Promise<Resultado<{ modelos: ModeloOficial[] }>> {
+  if (!tokenCloud()) return { ok: false, erro: "WHATSAPP_CLOUD_TOKEN não configurado no servidor." }
+  try {
+    const r = await graph(`/${encodeURIComponent(wabaId)}/message_templates?fields=name,status,language,category,components&limit=100`)
+    if (!r.ok) return { ok: false, erro: erroGraph(r.json, r.status), status: r.status }
+    const modelos: ModeloOficial[] = (r.json?.data ?? []).map((t: any) => {
+      const corpo: string = (t.components ?? []).find((c: any) => c.type === "BODY")?.text ?? ""
+      const vars = new Set<string>(); for (const m of corpo.matchAll(/\{\{(\d+)\}\}/g)) vars.add(m[1])
+      return { nome: t.name, idioma: t.language, status: t.status, categoria: t.category ?? null, corpo, variaveis: vars.size }
+    })
+    return { ok: true, modelos }
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : "falha de rede" }
+  }
+}
+
+/** Envia um modelo aprovado (único tipo permitido fora da janela de 24h). Variáveis = parâmetros do corpo, em ordem. */
+export async function enviarModeloOficial(phoneNumberId: string, para: string, nome: string, idioma: string, variaveis: string[] = []): Promise<Resultado<{ wamid: string }>> {
+  if (!tokenCloud()) return { ok: false, erro: "WHATSAPP_CLOUD_TOKEN não configurado no servidor." }
+  try {
+    const template: Record<string, unknown> = { name: nome, language: { code: idioma } }
+    if (variaveis.length) template.components = [{ type: "body", parameters: variaveis.map((v) => ({ type: "text", text: v })) }]
+    const r = await graph(`/${encodeURIComponent(phoneNumberId)}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to: para, type: "template", template }),
+    })
+    const wamid = r.json?.messages?.[0]?.id
+    if (!r.ok || !wamid) return { ok: false, erro: erroGraph(r.json, r.status), status: r.status }
+    return { ok: true, wamid }
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : "falha de rede" }
   }

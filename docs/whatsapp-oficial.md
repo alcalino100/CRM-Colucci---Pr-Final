@@ -10,6 +10,17 @@ Conversas oficiais usam `instance_name = "oficial:<phone_number_id>"` em `whatsa
 - Status de entrega na conversa: enviada ✓, entregue ✓✓, lida ✓✓ azul, falhou ⚠ (com o motivo).
 - Tela Configurações > WhatsApp: checklist do servidor, URL do webhook e cadastro/validação de números.
 
+## Fase 2 (testes e atendimento)
+- **Painel de testes** (Configurações > WhatsApp > API Oficial > “4. Testes da integração”): testar configuração (token x número), testar webhook
+  (verificação, assinatura inválida recusada, assinatura válida aceita), simular mensagem recebida (gravada no Inbox, nunca aciona IA) e enviar
+  texto/modelo de verdade pela Meta. Mostra também os últimos 40 eventos recebidos da Meta (inclusive os recusados e o motivo).
+- **Modelos no Inbox**: botão “Modelo” no compositor lista os modelos APROVADOS da WABA (precisa do WABA ID no canal), preenche variáveis e envia.
+  Fora da janela de 24h é o único envio permitido.
+- **Modo por canal**: Manual (pessoas), Assistente Virtual (Betina) ou IA conversacional (escolhe o agente; ele passa a atender a instância
+  `oficial:<id>`). Cada camada mantém suas travas (ligado, números de teste, regra de ouro). Áudios são transcritos (Whisper) quando um modo automático lê o texto.
+- IA, assistente e automações enviam pelo mesmo `sendWhatsAppText`, que agora roteia `oficial:*` para a Meta (com checagem da janela de 24h).
+- Pendente: automações que iniciam conversa (cobrança D+1/5/10, campanhas) precisam usar **modelos** — fase 3.
+
 ## Próximas fases
 1. Modelos (templates): criar, enviar para aprovação e acompanhar status.
 2. Disparos em massa: campanhas, fila com limite por dia/tier, descadastro (opt-out), relatório de entrega.

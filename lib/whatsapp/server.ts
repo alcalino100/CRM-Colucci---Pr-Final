@@ -207,6 +207,7 @@ export async function resolveNotifyTarget(): Promise<NotifyTarget | null> {
 // Evolution v2: POST /chat/sendPresence/{instance} { number, presence, delay }.
 export async function sendPresence(instanceName: string, telefone: string, presence: "composing" | "recording" | "paused" = "composing"): Promise<void> {
   try {
+    if (instanceName.startsWith("oficial:")) return // a API oficial não tem "digitando" sem resposta associada
     const cfg = evolutionConfig()
     if (!cfg.ok || !instanceName || !telefone) return
     const ctrl = new AbortController()
@@ -226,6 +227,11 @@ export async function sendPresence(instanceName: string, telefone: string, prese
 
 // Envia um texto pela Evolution. number aceita telefone (só dígitos) ou JID de grupo (@g.us).
 export async function sendWhatsAppText(instanceName: string, number: string, text: string): Promise<{ ok: boolean; erro?: string; keyId?: string }> {
+  // Canal da API oficial (Meta): mesmo contrato de retorno, assim IA, assistente e automações funcionam nos dois canais.
+  if (instanceName.startsWith("oficial:")) {
+    const { enviarTextoPorCanalOficial } = await import("@/lib/whatsapp-oficial/despacho")
+    return enviarTextoPorCanalOficial(instanceName, onlyDigits(number), text)
+  }
   const cfg = evolutionConfig()
   if (!cfg.ok) return { ok: false, erro: "Integração WhatsApp não configurada." }
   try {

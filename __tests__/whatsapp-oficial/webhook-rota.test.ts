@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const registrar = vi.fn(async (..._a: unknown[]) => {})
 const status = vi.fn(async (..._a: unknown[]) => {})
-vi.mock("@/lib/whatsapp-oficial/recebimento", () => ({ registrarMensagemRecebida: (...a: unknown[]) => registrar(...a), registrarStatusOficial: (...a: unknown[]) => status(...a) }))
+vi.mock("@/lib/whatsapp-oficial/recebimento", () => ({ registrarEvento: vi.fn(async () => {}), registrarMensagemRecebida: (...a: unknown[]) => registrar(...a), registrarStatusOficial: (...a: unknown[]) => status(...a) }))
 
 import { GET, POST } from "@/app/api/whatsapp/oficial/webhook/route"
 
