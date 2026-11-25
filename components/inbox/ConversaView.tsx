@@ -10,6 +10,7 @@ import { logger } from "@/lib/logger"
 import { supabase } from "@/lib/supabase/client"
 import { MidiaBolha } from "./MidiaBolha"
 import { Avatar } from "./Avatar"
+import { ModeloPicker } from "./ModeloPicker"
 import { ehCanalOficial } from "@/lib/whatsapp-oficial/config"
 import { dentroDaJanela, horasRestantes } from "@/lib/whatsapp-oficial/janela"
 
@@ -46,6 +47,7 @@ export function ConversaView(){
   const [texto, setTexto] = useState("")
   const [carregandoReal, setCarregandoReal] = useState(false)
   const [recarga, setRecarga] = useState(0)
+  const [modeloAberto, setModeloAberto] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
   const conv = conversas.find((c: any) => c.id === selectedId) || null
   const thread = selectedId ? (mensagens[selectedId] || []) : []
@@ -254,8 +256,17 @@ export function ConversaView(){
         )}
       </div>
 
+      {oficial && (
+        <ModeloPicker open={modeloAberto} onClose={() => setModeloAberto(false)} instanceName={instanciaSelecionada} telefone={String((conv as any).telefone)} onEnviado={() => setTimeout(() => setRecarga(n => n + 1), 600)} />
+      )}
+
       {/* Compositor */}
       <div className="flex items-end gap-2 bg-[#f0f2f5] px-3 py-2 dark:bg-[#202c33]">
+        {oficial && (
+          <button type="button" onClick={() => setModeloAberto(true)} className={cn("h-[42px] shrink-0 rounded-full px-3 text-xs font-semibold", janelaAberta ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-transparent dark:text-slate-200" : "bg-[#00a884] text-white hover:bg-[#008f72]")}>
+            Modelo
+          </button>
+        )}
         <textarea value={texto} onChange={e=>setTexto(e.target.value)} onKeyDown={aoDigitar} placeholder={janelaAberta ? "Digite uma mensagem" : "Janela de 24h expirada"} disabled={!janelaAberta} aria-label="Mensagem" rows={1} className="max-h-32 min-h-[42px] flex-1 resize-none rounded-3xl border-0 bg-white px-4 py-2.5 text-[15px] text-slate-900 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-[#00a884]/40 dark:bg-[#2a3942] dark:text-slate-100 dark:placeholder:text-slate-400" />
         <button onClick={handleEnviar} disabled={!texto.trim() || !janelaAberta} aria-label="Enviar mensagem" className="flex size-[42px] shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white transition hover:bg-[#008f72] disabled:opacity-40">
           <SendHorizontal className="size-5" />

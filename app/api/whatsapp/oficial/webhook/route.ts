@@ -3,7 +3,7 @@ import { logger } from "@/lib/logger"
 import { assinaturaValida } from "@/lib/whatsapp-oficial/assinatura"
 import { segredoApp, tokenVerificacao } from "@/lib/whatsapp-oficial/config"
 import { parsearWebhook } from "@/lib/whatsapp-oficial/parse"
-import { registrarMensagemRecebida, registrarStatusOficial } from "@/lib/whatsapp-oficial/recebimento"
+import { registrarEvento, registrarMensagemRecebida, registrarStatusOficial } from "@/lib/whatsapp-oficial/recebimento"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,8 +14,10 @@ export async function GET(request: Request) {
   const p = new URL(request.url).searchParams
   const esperado = tokenVerificacao()
   if (p.get("hub.mode") === "subscribe" && esperado && p.get("hub.verify_token") === esperado) {
+    await registrarEvento({ tipo: "verificacao", resumo: "Verificação do webhook aceita" })
     return new Response(p.get("hub.challenge") ?? "", { status: 200 })
   }
+  await registrarEvento({ tipo: "verificacao", resumo: `Verificação recusada (${esperado ? "token diferente" : "WHATSAPP_CLOUD_VERIFY_TOKEN não configurado no servidor"})` })
   return NextResponse.json({ erro: "verificação recusada" }, { status: 403 })
 }
 
@@ -24,6 +26,7 @@ export async function POST(request: Request) {
   const bruto = await request.text()
   if (!assinaturaValida(bruto, request.headers.get("x-hub-signature-256"), segredoApp())) {
     logger.warn("[whatsapp-oficial] webhook recusado: assinatura ausente ou inválida")
+    await registrarEvento({ tipo: "recusado", assinaturaOk: false, resumo: segredoApp() ? "Assinatura ausente ou inválida (confira META_APP_SECRET)" : "META_APP_SECRET não configurado no servidor" })
     return NextResponse.json({ erro: "assinatura inválida" }, { status: 401 })
   }
   let payload: unknown
@@ -32,6 +35,10 @@ export async function POST(request: Request) {
   for (const ev of parsearWebhook(payload)) {
     // Um evento com problema não pode derrubar os demais; a Meta reentrega se respondermos erro, então sempre 200.
     try {
+      await registrarEvento({
+        tipo: ev.tipo, phoneNumberId: ev.phoneNumberId, wamid: ev.wamid, assinaturaOk: true,
+        resumo: ev.tipo === "mensagem" ? `${ev.telefone}: ${ev.midia ? `[${ev.midia.tipo}] ` : ""}${ev.corpo}` : `${ev.status}${ev.erro ? ` — ${ev.erro}` : ""}`,
+      })
       if (ev.tipo === "mensagem") await registrarMensagemRecebida(ev)
       else await registrarStatusOficial(ev)
     } catch (e) {

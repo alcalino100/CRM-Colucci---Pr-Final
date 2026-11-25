@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState } from "react"
 import { CheckCircle2, Copy, ShieldCheck, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, useToast } from "@/components/ui/primitives"
+import { Card, CardContent, CardHeader, CardTitle, Input, Label, Select, useToast } from "@/components/ui/primitives"
+import { WhatsappOficialTestes } from "@/components/whatsapp-oficial-testes"
 
-type Canal = { id: string; nome: string; phone_number_id: string; waba_id: string | null; numero: string | null; nome_verificado: string | null; qualidade: string | null; ativo: boolean }
-type Dados = { canais: Canal[]; configuracao: { token: boolean; appSecret: boolean; verifyToken: boolean }; webhookUrl: string; aviso?: string }
+type Canal = { id: string; nome: string; phone_number_id: string; waba_id: string | null; numero: string | null; nome_verificado: string | null; qualidade: string | null; ativo: boolean; modo?: string; ai_agent_id?: string | null }
+type Dados = { canais: Canal[]; agentes?: { id: string; name: string }[]; configuracao: { token: boolean; appSecret: boolean; verifyToken: boolean }; webhookUrl: string; aviso?: string }
 
 const Item = ({ ok, texto }: { ok: boolean; texto: string }) => (
   <li className="flex items-center gap-2 text-sm">
@@ -51,6 +52,18 @@ export function WhatsappOficialCard() {
   async function alternar(c: Canal) {
     await fetch("/api/whatsapp/oficial/canais", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: c.id, ativo: !c.ativo }) })
     await carregar()
+  }
+
+  async function mudarModo(c: Canal, modo: string, aiAgentId?: string) {
+    try {
+      const r = await fetch("/api/whatsapp/oficial/canais", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: c.id, modo, aiAgentId }) })
+      const j = await r.json()
+      if (!j.ok) throw new Error(j.erro || "Falha ao salvar")
+      toast("Modo de atendimento salvo.")
+      await carregar()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Falha ao salvar", "error")
+    }
   }
 
   const copiar = (t: string) => { void navigator.clipboard?.writeText(t); toast("Copiado.") }
@@ -98,7 +111,20 @@ export function WhatsappOficialCard() {
                     <b>{c.nome}</b> · {c.numero ?? "—"} {c.nome_verificado ? `· ${c.nome_verificado}` : ""} {c.qualidade ? `· qualidade ${c.qualidade}` : ""}
                     <span className="ml-2 text-xs text-muted-foreground">ID {c.phone_number_id}</span>
                   </span>
-                  <Button type="button" size="sm" variant="outline" onClick={() => alternar(c)}>{c.ativo ? "Desativar" : "Ativar"}</Button>
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Select value={c.modo ?? "manual"} onChange={(e) => (e.target.value === "ia" ? undefined : mudarModo(c, e.target.value))} className="h-8 w-52 text-xs" aria-label="Modo de atendimento">
+                      <option value="manual">Manual (pessoas no Inbox)</option>
+                      <option value="assistente">Assistente Virtual (Betina)</option>
+                      <option value="ia" disabled={(dados?.agentes ?? []).length === 0}>IA conversacional (escolha o agente →)</option>
+                    </Select>
+                    {(dados?.agentes ?? []).length > 0 && (
+                      <Select value={c.ai_agent_id ?? ""} onChange={(e) => e.target.value && mudarModo(c, "ia", e.target.value)} className="h-8 w-44 text-xs" aria-label="Agente de IA">
+                        <option value="">Agente de IA…</option>
+                        {dados!.agentes!.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </Select>
+                    )}
+                    <Button type="button" size="sm" variant="outline" onClick={() => alternar(c)}>{c.ativo ? "Desativar" : "Ativar"}</Button>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -109,8 +135,10 @@ export function WhatsappOficialCard() {
             <div className="flex flex-col gap-1"><Label htmlFor="of-waba">WABA ID (opcional)</Label><Input id="of-waba" value={wabaId} onChange={(e) => setWabaId(e.target.value)} inputMode="numeric" /></div>
             <div className="flex items-end"><Button type="submit" disabled={salvando || !nome.trim() || !phoneId.trim()}>{salvando ? "Validando…" : "Cadastrar e validar"}</Button></div>
           </form>
-          <p className="text-xs text-muted-foreground">As conversas deste número aparecem no Inbox, no seletor de instância, como “(API oficial)”.</p>
+          <p className="text-xs text-muted-foreground">As conversas deste número aparecem no Inbox, no seletor de instância, como “(API oficial)”. O modo decide quem responde: pessoas, o Assistente Virtual ou um agente de IA (cada um com as próprias travas de segurança).</p>
         </div>
+
+        <WhatsappOficialTestes canais={dados?.canais ?? []} />
       </CardContent>
     </Card>
   )
