@@ -14,6 +14,8 @@ export type PostIG = {
   salvamentos: number
   compartilhamentos: number
   visualizacoes: number | null
+  /** Reels: tempo médio assistido, em segundos. */
+  tempoMedioSeg?: number | null
 }
 
 export type PostAnalisado = PostIG & { interacoes: number; taxaEngajamento: number | null }
@@ -107,6 +109,8 @@ export function ranking(posts: PostAnalisado[], quantos = 5): { melhores: PostAn
 }
 
 export type AnaliseInstagram = {
+  hashtags: HashtagDesempenho[]
+  mapaCalor: CelulaCalor[]
   resumo: ResumoPosts
   porFormato: GrupoDesempenho[]
   porDiaSemana: GrupoDesempenho[]
@@ -118,11 +122,48 @@ export type AnaliseInstagram = {
 export function analisarInstagram(posts: PostIG[], dias: number): AnaliseInstagram {
   const analisados = posts.map(analisarPost)
   const { melhores, piores } = ranking(analisados)
-  return { resumo: resumirPosts(analisados, dias), porFormato: porFormato(analisados), porDiaSemana: porDiaSemana(analisados), porFaixaHorario: porFaixaHorario(analisados), melhores, piores }
+  return { hashtags: hashtagsTop(analisados), mapaCalor: mapaCalor(analisados), resumo: resumirPosts(analisados, dias), porFormato: porFormato(analisados), porDiaSemana: porDiaSemana(analisados), porFaixaHorario: porFaixaHorario(analisados), melhores, piores }
 }
 
 /** Variação percentual entre dois períodos (null quando não há base de comparação). */
 export function variacaoPct(atual: number, anterior: number): number | null {
   if (!anterior) return null
   return arred(((atual - anterior) / anterior) * 100, 1)
+}
+
+export type HashtagDesempenho = { tag: string; posts: number; alcanceMedio: number; taxaEngajamentoMedia: number }
+
+/** Hashtags mais usadas nas legendas, com o desempenho médio dos posts em que aparecem. */
+export function hashtagsTop(posts: PostAnalisado[], quantas = 12): HashtagDesempenho[] {
+  const mapa = new Map<string, PostAnalisado[]>()
+  for (const p of posts) {
+    for (const tag of new Set((p.legenda.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((t) => t.toLowerCase()))) mapa.set(tag, [...(mapa.get(tag) ?? []), p])
+  }
+  return Array.from(mapa, ([tag, ps]) => ({
+    tag,
+    posts: ps.length,
+    alcanceMedio: Math.round(media(ps.filter((p) => p.alcance).map((p) => p.alcance as number))),
+    taxaEngajamentoMedia: arred(media(ps.map((p) => p.taxaEngajamento).filter((t): t is number => t !== null))),
+  })).sort((a, b) => b.posts - a.posts || b.taxaEngajamentoMedia - a.taxaEngajamentoMedia).slice(0, quantas)
+}
+
+export type CelulaCalor = { dia: number; faixa: number; posts: number; taxa: number | null }
+export const NOMES_DIAS = DIAS
+export const NOMES_FAIXAS = ["Madrugada", "Manhã", "Tarde", "Noite"]
+
+/** Matriz dia da semana × faixa do dia com o engajamento médio (null onde não houve post). */
+export function mapaCalor(posts: PostAnalisado[]): CelulaCalor[] {
+  const celulas = new Map<string, PostAnalisado[]>()
+  for (const p of posts) {
+    const { diaSemana, hora } = partesBRT(p.publicadoEm)
+    const k = `${diaSemana}|${Math.floor(hora / 6)}`
+    celulas.set(k, [...(celulas.get(k) ?? []), p])
+  }
+  const out: CelulaCalor[] = []
+  for (let dia = 0; dia < 7; dia++) for (let faixa = 0; faixa < 4; faixa++) {
+    const ps = celulas.get(`${dia}|${faixa}`) ?? []
+    const taxas = ps.map((p) => p.taxaEngajamento).filter((t): t is number => t !== null)
+    out.push({ dia, faixa, posts: ps.length, taxa: taxas.length ? arred(media(taxas)) : null })
+  }
+  return out
 }

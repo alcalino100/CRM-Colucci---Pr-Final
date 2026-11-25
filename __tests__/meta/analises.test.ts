@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { analisarInstagram, analisarPost, formatoDe, partesBRT, porDiaSemana, ranking, variacaoPct, type PostIG } from "@/lib/instagram/analise"
+import { analisarInstagram, analisarPost, hashtagsTop, mapaCalor, formatoDe, partesBRT, porDiaSemana, ranking, variacaoPct, type PostIG } from "@/lib/instagram/analise"
 import { classificarCampanha, classificarCampanhas, limitesDoMes, mesAnterior, periodoAnterior, type CampanhaAuditada } from "@/lib/meta/analise-campanhas"
 
 const post = (o: Partial<PostIG> = {}): PostIG => ({ id: "1", permalink: "https://i/x", legenda: "", miniatura: null, formato: "Reels", publicadoEm: "2026-11-02T15:00:00Z", curtidas: 80, comentarios: 10, alcance: 1000, salvamentos: 8, compartilhamentos: 2, visualizacoes: 3000, ...o })
@@ -40,6 +40,22 @@ describe("instagram", () => {
     expect(a.resumo.postsPorSemana).toBe(0.5)
     expect(variacaoPct(120, 100)).toBe(20)
     expect(variacaoPct(5, 0)).toBeNull()
+  })
+})
+
+describe("instagram: hashtags e mapa de calor", () => {
+  it("conta hashtags sem repetir por post e ordena por uso", () => {
+    const ps = [post({ id: "a", legenda: "Casa #Imoveis #imoveis #Luxo" }), post({ id: "b", legenda: "Apê #imoveis" })].map(analisarPost)
+    const h = hashtagsTop(ps)
+    expect(h[0]).toMatchObject({ tag: "#imoveis", posts: 2 })
+    expect(h.find((x) => x.tag === "#luxo")?.posts).toBe(1)
+  })
+  it("mapa de calor tem 28 células e preenche a do post (Brasília)", () => {
+    // 02/11/2026 15:00 UTC = segunda 12:00 em Brasília → faixa Tarde (índice 2)
+    const m = mapaCalor([analisarPost(post())])
+    expect(m).toHaveLength(28)
+    expect(m.find((c) => c.dia === 1 && c.faixa === 2)).toMatchObject({ posts: 1, taxa: 10 })
+    expect(m.filter((c) => c.posts > 0)).toHaveLength(1)
   })
 })
 
