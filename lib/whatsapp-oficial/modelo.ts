@@ -1,5 +1,5 @@
 /** Utilidades puras de modelos (templates) — seguras para uso no navegador. */
-export type ModeloOficial = { nome: string; idioma: string; status: string; categoria: string | null; corpo: string; variaveis: number }
+export type ModeloOficial = { nome: string; idioma: string; status: string; categoria: string | null; corpo: string; variaveis: number; motivoRejeicao?: string | null }
 
 /** Texto do corpo do modelo com as variáveis aplicadas (é o que aparece na conversa). */
 export function renderizarModelo(corpo: string, variaveis: string[]): string {
