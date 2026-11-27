@@ -2,8 +2,9 @@ import crypto from "crypto"
 import { NextResponse } from "next/server"
 import { wsupabase } from "@/lib/whatsapp/server"
 import { exigirGestor, negarAcesso } from "@/lib/auth/sessao"
-import { consultarNumero, enviarModeloOficial, enviarTextoOficial, listarModelos } from "@/lib/whatsapp-oficial/client"
+import { enviarModeloOficial, enviarTextoOficial, listarModelos, statusDoNumero } from "@/lib/whatsapp-oficial/client"
 import { instanceDoCanal, segredoApp, statusConfiguracao, tokenVerificacao } from "@/lib/whatsapp-oficial/config"
+import { explicarNomeExibicao, explicarStatusNumero, LIMITE_LEGIVEL } from "@/lib/whatsapp-oficial/status-texto"
 import { registrarEnvioOficial } from "@/lib/whatsapp-oficial/envio"
 import { dentroDaJanela } from "@/lib/whatsapp-oficial/janela"
 
@@ -44,8 +45,13 @@ export async function POST(request: Request) {
     passo("WHATSAPP_CLOUD_VERIFY_TOKEN", c.verifyToken, c.verifyToken ? "configurado" : "faltando na Vercel")
     passo("Números cadastrados", (canais ?? []).length > 0, `${(canais ?? []).length} número(s)`)
     if (c.token) for (const cn of canais ?? []) {
-      const r = await consultarNumero(cn.phone_number_id)
-      passo(`Token x número "${cn.nome}"`, r.ok, r.ok ? `${r.numero ?? ""} · ${r.nomeVerificado ?? ""} · qualidade ${r.qualidade ?? "?"}` : r.erro)
+      const r = await statusDoNumero(cn.phone_number_id)
+      if (!r.ok) { passo(`Token x número "${cn.nome}"`, false, r.erro); continue }
+      passo(`Token x número "${cn.nome}"`, true, `${r.numero ?? ""} · ${r.nomeVerificado ?? ""}`)
+      const nome = explicarNomeExibicao(r.statusNome, r.novoNome, r.statusNovoNome)
+      passo(`Nome de exibição de "${cn.nome}"`, nome.gravidade === "ok", `${nome.titulo}. ${nome.ajuda}`)
+      const st = explicarStatusNumero(r.statusNumero)
+      passo(`Status do número "${cn.nome}"`, st.gravidade === "ok", `${st.titulo} · qualidade ${r.qualidade ?? "?"}${r.limite ? ` · limite ${LIMITE_LEGIVEL[r.limite] ?? r.limite}` : ""}${r.modoConta ? ` · modo ${r.modoConta}` : ""}`)
     }
     return NextResponse.json({ ok: passos.every((p) => p.ok), passos })
   }
@@ -111,6 +117,15 @@ export async function POST(request: Request) {
       const variaveis = (body.variaveis ?? []).map((v) => String(v).trim()).filter(Boolean)
       const r = await enviarModeloOficial(canal.phone_number_id, telefone, body.modelo, idioma, variaveis)
       passo(`Modelo "${body.modelo}" (${idioma}) enviado`, r.ok, r.ok ? `aceito pela Meta (${r.wamid})` : r.erro)
+      // 131037 = nome de exibição do número ainda não aprovado: mostra o estado real consultado na Meta.
+      if (!r.ok && /131037/.test(r.erro)) {
+        const st = await statusDoNumero(canal.phone_number_id)
+        if (!st.ok) passo("Diagnóstico", false, `Não consegui consultar o número na Meta: ${st.erro}`)
+        else {
+          const nome = explicarNomeExibicao(st.statusNome, st.novoNome, st.statusNovoNome)
+          passo("Diagnóstico do nome de exibição", false, `${nome.titulo}${st.nomeVerificado ? ` (atual: "${st.nomeVerificado}")` : ""}. ${nome.ajuda}`)
+        }
+      }
       // 132001 = nome/idioma não existe na conta: consulta a conta e diz exatamente o que existe.
       if (!r.ok && /132001/.test(r.erro)) {
         if (!canal.waba_id) {
