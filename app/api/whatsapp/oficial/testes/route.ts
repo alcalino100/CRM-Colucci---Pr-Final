@@ -26,10 +26,11 @@ const payloadDe = (phoneNumberId: string, value: Record<string, unknown>) => JSO
 export async function POST(request: Request) {
   const auth = exigirGestor(request)
   if (!auth.ok) return negarAcesso(auth)
-  let body: { acao?: string; canalId?: string; telefone?: string; texto?: string; modelo?: string; idioma?: string }
+  let body: { acao?: string; canalId?: string; telefone?: string; texto?: string; modelo?: string; idioma?: string; variaveis?: string[] }
   try { body = await request.json() } catch { return NextResponse.json({ ok: false, erro: "Dados inválidos." }, { status: 400 }) }
   const origem = new URL(request.url).origin
   const passos: Passo[] = []
+  let wamidEnviado: string | undefined
   const passo = (nome: string, ok: boolean, detalhe: string) => passos.push({ nome, ok, detalhe })
 
   const { data: canais } = await db.from("whatsapp_oficial_canais").select("id, nome, phone_number_id, waba_id, ativo")
@@ -107,7 +108,8 @@ export async function POST(request: Request) {
     if (body.modelo) {
       // O modelo padrão da Meta (hello_world) só existe em en_US; modelos próprios costumam ser pt_BR.
       const idioma = body.idioma?.trim() || (body.modelo === "hello_world" ? "en_US" : "pt_BR")
-      const r = await enviarModeloOficial(canal.phone_number_id, telefone, body.modelo, idioma)
+      const variaveis = (body.variaveis ?? []).map((v) => String(v).trim()).filter(Boolean)
+      const r = await enviarModeloOficial(canal.phone_number_id, telefone, body.modelo, idioma, variaveis)
       passo(`Modelo "${body.modelo}" (${idioma}) enviado`, r.ok, r.ok ? `aceito pela Meta (${r.wamid})` : r.erro)
       // 132001 = nome/idioma não existe na conta: consulta a conta e diz exatamente o que existe.
       if (!r.ok && /132001/.test(r.erro)) {
@@ -125,7 +127,7 @@ export async function POST(request: Request) {
           }
         }
       }
-      if (r.ok) await registrarEnvioOficial({ instanceName, telefone, texto: `[modelo ${body.modelo}] enviado pelo painel de testes`, wamid: r.wamid })
+      if (r.ok) { wamidEnviado = r.wamid; await registrarEnvioOficial({ instanceName, telefone, texto: `[modelo ${body.modelo}] enviado pelo painel de testes`, wamid: r.wamid }) }
     } else {
       const { data: ultima } = await wsupabase.from("whatsapp_mensagens").select("criado_em").eq("instance_name", instanceName).eq("telefone", telefone).eq("de_mim", false).order("criado_em", { ascending: false }).limit(1).maybeSingle()
       const aberta = dentroDaJanela(ultima?.criado_em)
@@ -133,10 +135,10 @@ export async function POST(request: Request) {
       if (aberta) {
         const r = await enviarTextoOficial(canal.phone_number_id, telefone, body.texto?.trim() || "Teste do CRM: mensagem de texto pela API oficial ✅")
         passo("Texto enviado", r.ok, r.ok ? `aceito pela Meta (${r.wamid})` : r.erro)
-        if (r.ok) await registrarEnvioOficial({ instanceName, telefone, texto: body.texto?.trim() || "Teste do CRM: mensagem de texto pela API oficial ✅", wamid: r.wamid })
+        if (r.ok) { wamidEnviado = r.wamid; await registrarEnvioOficial({ instanceName, telefone, texto: body.texto?.trim() || "Teste do CRM: mensagem de texto pela API oficial ✅", wamid: r.wamid }) }
       }
     }
-    return NextResponse.json({ ok: passos.every((p) => p.ok), passos })
+    return NextResponse.json({ ok: passos.every((p) => p.ok), passos, wamid: wamidEnviado })
   }
 
   return NextResponse.json({ ok: false, erro: "Ação desconhecida." }, { status: 400 })
