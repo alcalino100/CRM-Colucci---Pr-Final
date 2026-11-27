@@ -108,7 +108,23 @@ export async function POST(request: Request) {
       // O modelo padrão da Meta (hello_world) só existe em en_US; modelos próprios costumam ser pt_BR.
       const idioma = body.idioma?.trim() || (body.modelo === "hello_world" ? "en_US" : "pt_BR")
       const r = await enviarModeloOficial(canal.phone_number_id, telefone, body.modelo, idioma)
-      passo(`Modelo "${body.modelo}" enviado`, r.ok, r.ok ? `aceito pela Meta (${r.wamid})` : r.erro)
+      passo(`Modelo "${body.modelo}" (${idioma}) enviado`, r.ok, r.ok ? `aceito pela Meta (${r.wamid})` : r.erro)
+      // 132001 = nome/idioma não existe na conta: consulta a conta e diz exatamente o que existe.
+      if (!r.ok && /132001/.test(r.erro)) {
+        if (!canal.waba_id) {
+          passo("Diagnóstico", false, "Cadastre o WABA ID deste número (aba Números › Editar) para eu consultar quais modelos existem na conta.")
+        } else {
+          const l = await listarModelos(canal.waba_id)
+          if (!l.ok) passo("Diagnóstico", false, `Não consegui listar os modelos da conta: ${l.erro}`)
+          else {
+            const mesmoNome = l.modelos.filter((m) => m.nome === body.modelo)
+            const aprovados = l.modelos.filter((m) => m.status === "APPROVED")
+            if (mesmoNome.length) passo("Diagnóstico", false, `O modelo "${body.modelo}" existe nesta conta em: ${mesmoNome.map((m) => `${m.idioma} (${m.status})`).join(", ")}. Use um desses idiomas no campo Idioma.`)
+            else if (aprovados.length) passo("Diagnóstico", false, `O modelo "${body.modelo}" NÃO existe nesta conta. Aprovados disponíveis: ${aprovados.map((m) => `${m.nome} (${m.idioma})`).join(", ")}.`)
+            else passo("Diagnóstico", false, `Esta conta não tem nenhum modelo aprovado (o "hello_world" só vem pronto na conta de teste da Meta). Crie um na aba Modelos — há um botão “Criar modelo de teste”.`)
+          }
+        }
+      }
       if (r.ok) await registrarEnvioOficial({ instanceName, telefone, texto: `[modelo ${body.modelo}] enviado pelo painel de testes`, wamid: r.wamid })
     } else {
       const { data: ultima } = await wsupabase.from("whatsapp_mensagens").select("criado_em").eq("instance_name", instanceName).eq("telefone", telefone).eq("de_mim", false).order("criado_em", { ascending: false }).limit(1).maybeSingle()
