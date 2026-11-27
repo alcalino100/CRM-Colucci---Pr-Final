@@ -1,9 +1,35 @@
 "use client"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Pencil, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Dialog, Input, Label, Select, useToast } from "@/components/ui/primitives"
+import { explicarNomeExibicao, explicarStatusNumero, LIMITE_LEGIVEL } from "@/lib/whatsapp-oficial/status-texto"
 import { chamar, type Canal, type DadosOficial } from "./use-oficial"
+
+type Vivo = { statusNome: string | null; novoNome: string | null; statusNovoNome: string | null; statusNumero: string | null; qualidade: string | null; limite: string | null; modoConta: string | null }
+const COR_G: Record<string, string> = { ok: "green", atencao: "amber", erro: "red" }
+
+/** Estado do número consultado ao vivo na Meta: nome de exibição, status, qualidade e limite diário. */
+function StatusVivo({ canalId }: { canalId: string }) {
+  const [v, setV] = useState<Vivo | null>(null)
+  const [erro, setErro] = useState("")
+  useEffect(() => { chamar(`/api/whatsapp/oficial/status?canalId=${encodeURIComponent(canalId)}`, "GET").then((j) => (j.ok ? setV(j as unknown as Vivo) : setErro(j.erro || "Não foi possível consultar a Meta."))) }, [canalId])
+  if (erro) return <p className="text-xs text-destructive">Status na Meta: {erro}</p>
+  if (!v) return <p className="text-xs text-muted-foreground">Consultando a Meta…</p>
+  const nome = explicarNomeExibicao(v.statusNome, v.novoNome, v.statusNovoNome)
+  const st = explicarStatusNumero(v.statusNumero)
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg bg-muted/40 p-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge variant={COR_G[nome.gravidade]}>{nome.titulo}</Badge>
+        <Badge variant={COR_G[st.gravidade]}>{st.titulo}</Badge>
+        {v.limite && <Badge variant="gray">Limite: {LIMITE_LEGIVEL[v.limite] ?? v.limite}</Badge>}
+        {v.modoConta && <Badge variant="gray">Modo {v.modoConta}</Badge>}
+      </div>
+      {nome.gravidade !== "ok" && <p className="text-xs text-muted-foreground">{nome.ajuda}</p>}
+    </div>
+  )
+}
 
 const MODOS: Record<string, string> = { manual: "Manual (pessoas no Inbox)", assistente: "Assistente Virtual (Betina)", ia: "IA conversacional" }
 
@@ -74,6 +100,7 @@ export function Numeros({ dados, recarregar }: { dados: DadosOficial; recarregar
                   <Button size="sm" variant="outline" onClick={() => setRemovendo(c)} aria-label="Remover número"><Trash2 className="size-3.5 text-destructive" /></Button>
                 </div>
               </div>
+              <StatusVivo canalId={c.id} />
               <dl className="grid gap-x-6 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                 <div><dt className="inline font-medium">Telefone: </dt><dd className="inline">{c.numero ?? "—"}</dd></div>
                 <div><dt className="inline font-medium">Nome verificado: </dt><dd className="inline">{c.nome_verificado ?? "—"}</dd></div>

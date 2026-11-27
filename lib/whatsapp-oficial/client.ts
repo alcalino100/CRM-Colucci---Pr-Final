@@ -130,3 +130,30 @@ export async function excluirModelo(wabaId: string, nome: string): Promise<Resul
     return { ok: false, erro: e instanceof Error ? e.message : "falha de rede" }
   }
 }
+
+export type StatusNumero = {
+  numero: string | null
+  nomeVerificado: string | null
+  statusNome: string | null        // APPROVED | PENDING_REVIEW | DECLINED | NONE | EXPIRED ...
+  novoNome: string | null
+  statusNovoNome: string | null
+  statusNumero: string | null      // CONNECTED | PENDING | FLAGGED | RESTRICTED ...
+  qualidade: string | null         // GREEN | YELLOW | RED | UNKNOWN
+  limite: string | null            // TIER_250 | TIER_1K | ...
+  modoConta: string | null         // SANDBOX | LIVE
+}
+
+/** Estado completo do número na Meta (nome de exibição, status, qualidade, limite). Tenta o conjunto completo e cai para o básico. */
+export async function statusDoNumero(phoneNumberId: string): Promise<Resultado<StatusNumero>> {
+  if (!tokenCloud()) return { ok: false, erro: "WHATSAPP_CLOUD_TOKEN não configurado no servidor." }
+  try {
+    const id = encodeURIComponent(phoneNumberId)
+    let r = await graph(`/${id}?fields=display_phone_number,verified_name,name_status,new_display_name,new_name_status,status,quality_rating,messaging_limit_tier,account_mode`)
+    if (!r.ok) r = await graph(`/${id}?fields=display_phone_number,verified_name,name_status,status,quality_rating`)
+    if (!r.ok) return { ok: false, erro: erroGraph(r.json, r.status), status: r.status }
+    const j = r.json ?? {}
+    return { ok: true, numero: j.display_phone_number ?? null, nomeVerificado: j.verified_name ?? null, statusNome: j.name_status ?? null, novoNome: j.new_display_name ?? null, statusNovoNome: j.new_name_status ?? null, statusNumero: j.status ?? null, qualidade: j.quality_rating ?? null, limite: j.messaging_limit_tier ?? null, modoConta: j.account_mode ?? null }
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : "falha de rede" }
+  }
+}
