@@ -41,6 +41,13 @@ export function Modelos({ dados }: { dados: DadosOficial }) {
     if (!j.ok) return toast(j.erro || "Falha ao criar o modelo", "error")
     toast(`Modelo enviado para aprovação (${j.status}).`); setF({ nome: "", idioma: "pt_BR", categoria: "UTILITY", corpo: "", exemplos: [] }); await carregar()
   }
+  async function criarDeTeste() {
+    setCriando(true)
+    const j = await chamar("/api/whatsapp/oficial/modelos/gerenciar", "POST", { canalId, nome: "teste_crm", idioma: "pt_BR", categoria: "UTILITY", corpo: "Olá! Esta é uma mensagem de teste do CRM da Colucci Imóveis. Se você recebeu, está tudo certo.", exemplos: [] })
+    setCriando(false)
+    if (!j.ok) return toast(j.erro || "Falha ao criar o modelo de teste", "error")
+    toast(`Modelo teste_crm enviado para aprovação (${j.status}). Quando ficar Aprovado, use-o na aba Testes (idioma pt_BR).`); await carregar()
+  }
   async function excluir(m: Modelo) {
     if (!window.confirm(`Excluir o modelo "${m.nome}" (todas as traduções)?`)) return
     const j = await chamar(`/api/whatsapp/oficial/modelos/gerenciar?canalId=${encodeURIComponent(canalId)}&nome=${encodeURIComponent(m.nome)}`, "DELETE")
@@ -64,7 +71,12 @@ export function Modelos({ dados }: { dados: DadosOficial }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {erro && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{erro}</p>}
-          {!erro && !carregando && modelos.length === 0 && <p className="text-sm text-muted-foreground">Nenhum modelo nesta conta.</p>}
+          {!erro && !carregando && modelos.length === 0 && (
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border p-4">
+              <p className="text-sm text-muted-foreground">Nenhum modelo nesta conta. Sem modelo aprovado não é possível iniciar conversas nem enviar o primeiro teste fora da janela de 24h.</p>
+              <Button size="sm" onClick={criarDeTeste} disabled={criando}>{criando ? "Criando…" : "Criar modelo de teste (teste_crm)"}</Button>
+            </div>
+          )}
           {modelos.map((m) => (
             <div key={`${m.nome}|${m.idioma}`} className="flex flex-col gap-1 rounded-lg border border-border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
