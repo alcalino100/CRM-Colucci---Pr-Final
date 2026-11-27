@@ -70,12 +70,12 @@ export async function consultarNumero(phoneNumberId: string): Promise<Resultado<
 export async function listarModelos(wabaId: string): Promise<Resultado<{ modelos: ModeloOficial[] }>> {
   if (!tokenCloud()) return { ok: false, erro: "WHATSAPP_CLOUD_TOKEN não configurado no servidor." }
   try {
-    const r = await graph(`/${encodeURIComponent(wabaId)}/message_templates?fields=name,status,language,category,components&limit=100`)
+    const r = await graph(`/${encodeURIComponent(wabaId)}/message_templates?fields=name,status,language,category,components,rejected_reason&limit=100`)
     if (!r.ok) return { ok: false, erro: erroGraph(r.json, r.status), status: r.status }
     const modelos: ModeloOficial[] = (r.json?.data ?? []).map((t: any) => {
       const corpo: string = (t.components ?? []).find((c: any) => c.type === "BODY")?.text ?? ""
       const vars = new Set<string>(); for (const m of corpo.matchAll(/\{\{(\d+)\}\}/g)) vars.add(m[1])
-      return { nome: t.name, idioma: t.language, status: t.status, categoria: t.category ?? null, corpo, variaveis: vars.size }
+      return { nome: t.name, idioma: t.language, status: t.status, categoria: t.category ?? null, corpo, variaveis: vars.size, motivoRejeicao: t.rejected_reason && t.rejected_reason !== "NONE" ? String(t.rejected_reason) : null }
     })
     return { ok: true, modelos }
   } catch (e) {

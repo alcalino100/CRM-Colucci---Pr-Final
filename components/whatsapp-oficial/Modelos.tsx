@@ -5,7 +5,15 @@ import { Button } from "@/components/ui/button"
 import { Badge, Card, CardContent, CardHeader, CardTitle, Input, Label, Select, useToast } from "@/components/ui/primitives"
 import { chamar, type DadosOficial } from "./use-oficial"
 
-type Modelo = { nome: string; idioma: string; status: string; categoria: string | null; corpo: string; variaveis: number }
+type Modelo = { nome: string; idioma: string; status: string; categoria: string | null; corpo: string; variaveis: number; motivoRejeicao?: string | null }
+
+const MOTIVOS: Record<string, string> = {
+  INVALID_FORMAT: "Formato inválido (variáveis mal formadas, texto com quebras ou símbolos não permitidos).",
+  TAG_CONTENT_MISMATCH: "A categoria não combina com o conteúdo (ex.: texto promocional marcado como Utilidade). Use Marketing ou reescreva.",
+  ABUSIVE_CONTENT: "Conteúdo considerado abusivo ou ameaçador.",
+  PROMOTIONAL: "Conteúdo promocional em categoria que não permite (use Marketing).",
+  SCAM: "Parece golpe/phishing.",
+}
 const COR: Record<string, string> = { APPROVED: "green", PENDING: "gray", REJECTED: "red", PAUSED: "gray", DISABLED: "red" }
 const ROTULO: Record<string, string> = { APPROVED: "Aprovado", PENDING: "Em análise", REJECTED: "Rejeitado", PAUSED: "Pausado", DISABLED: "Desativado" }
 
@@ -41,12 +49,11 @@ export function Modelos({ dados }: { dados: DadosOficial }) {
     if (!j.ok) return toast(j.erro || "Falha ao criar o modelo", "error")
     toast(`Modelo enviado para aprovação (${j.status}).`); setF({ nome: "", idioma: "pt_BR", categoria: "UTILITY", corpo: "", exemplos: [] }); await carregar()
   }
-  async function criarDeTeste() {
-    setCriando(true)
-    const j = await chamar("/api/whatsapp/oficial/modelos/gerenciar", "POST", { canalId, nome: "teste_crm", idioma: "pt_BR", categoria: "UTILITY", corpo: "Olá! Esta é uma mensagem de teste do CRM da Colucci Imóveis. Se você recebeu, está tudo certo.", exemplos: [] })
-    setCriando(false)
-    if (!j.ok) return toast(j.erro || "Falha ao criar o modelo de teste", "error")
-    toast(`Modelo teste_crm enviado para aprovação (${j.status}). Quando ficar Aprovado, use-o na aba Testes (idioma pt_BR).`); await carregar()
+  /** Preenche o formulário com um modelo que a Meta costuma aprovar (utilidade, com variável e exemplo). */
+  function usarExemplo() {
+    const sufixo = Math.random().toString(36).slice(2, 6)
+    setF({ nome: `confirmacao_atendimento_${sufixo}`, idioma: "pt_BR", categoria: "UTILITY", corpo: "Olá {{1}}, recebemos a sua solicitação e a equipe da Colucci Imóveis entrará em contato em breve para dar andamento ao seu atendimento.", exemplos: ["Maria"] })
+    document.getElementById("m-nome")?.scrollIntoView({ behavior: "smooth", block: "center" })
   }
   async function excluir(m: Modelo) {
     if (!window.confirm(`Excluir o modelo "${m.nome}" (todas as traduções)?`)) return
@@ -74,7 +81,7 @@ export function Modelos({ dados }: { dados: DadosOficial }) {
           {!erro && !carregando && modelos.length === 0 && (
             <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border p-4">
               <p className="text-sm text-muted-foreground">Nenhum modelo nesta conta. Sem modelo aprovado não é possível iniciar conversas nem enviar o primeiro teste fora da janela de 24h.</p>
-              <Button size="sm" onClick={criarDeTeste} disabled={criando}>{criando ? "Criando…" : "Criar modelo de teste (teste_crm)"}</Button>
+              <Button size="sm" onClick={usarExemplo}>Preencher com um modelo de exemplo</Button>
             </div>
           )}
           {modelos.map((m) => (
@@ -84,6 +91,11 @@ export function Modelos({ dados }: { dados: DadosOficial }) {
                 <Button size="sm" variant="outline" onClick={() => excluir(m)} aria-label={`Excluir ${m.nome}`}><Trash2 className="size-3.5 text-destructive" /></Button>
               </div>
               <p className="whitespace-pre-wrap text-sm text-muted-foreground">{m.corpo || "(sem texto)"}</p>
+              {m.status === "REJECTED" && (
+                <p className="rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-800">
+                  <b>Motivo da rejeição:</b> {m.motivoRejeicao ? (MOTIVOS[m.motivoRejeicao] ?? m.motivoRejeicao) : "a Meta não informou o motivo."} Crie outro modelo com um nome diferente, ajustando o texto{m.categoria === "UTILITY" ? " (em Utilidade, evite linguagem de teste ou promoção e use uma variável com exemplo)" : ""}.
+                </p>
+              )}
             </div>
           ))}
         </CardContent>
@@ -102,7 +114,8 @@ export function Modelos({ dados }: { dados: DadosOficial }) {
             {exemplos.map((ex, i) => (
               <div key={i} className="flex flex-col gap-1"><Label htmlFor={`m-ex${i}`}>Exemplo para {`{{${i + 1}}}`} (exigido pela Meta)</Label><Input id={`m-ex${i}`} value={ex} onChange={(e) => setF({ ...f, exemplos: exemplos.map((x, j) => (j === i ? e.target.value : x)) })} /></div>
             ))}
-            <div><Button type="submit" disabled={criando || !f.nome || !f.corpo.trim() || exemplos.some((x) => !x.trim())}>{criando ? "Enviando…" : "Enviar para aprovação"}</Button></div>
+            <div className="flex flex-wrap items-center gap-2"><Button type="submit" disabled={criando || !f.nome || !f.corpo.trim() || exemplos.some((x) => !x.trim())}>{criando ? "Enviando…" : "Enviar para aprovação"}</Button><Button type="button" variant="outline" onClick={usarExemplo}>Preencher com exemplo aprovável</Button></div>
+            <p className="text-xs text-muted-foreground">Dicas para aprovar: use <b>Utilidade</b> só para avisos sobre algo que o cliente pediu ou contratou (sem promoção); não escreva “teste”; inclua pelo menos uma variável com exemplo real; um nome já usado por modelo rejeitado ou excluído precisa de outro nome.</p>
           </form>
         </CardContent>
       </Card>
